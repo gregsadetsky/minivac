@@ -5,6 +5,7 @@ interface CableProps {
   endY: number;
   color?: string;
   droop?: number; // How much the cable droops (default: auto-calculated)
+  onClick?: () => void;
 }
 
 export default function Cable({
@@ -13,12 +14,24 @@ export default function Cable({
   endX,
   endY,
   color = '#d4af37', // Gold/brass color for classic wire
-  droop
+  droop,
+  onClick
 }: CableProps) {
+  // Validate inputs
+  if (isNaN(startX) || isNaN(startY) || isNaN(endX) || isNaN(endY)) {
+    console.error('Cable received NaN coordinates:', { startX, startY, endX, endY });
+    return null;
+  }
+
   // Calculate cable path with natural droop
   const dx = endX - startX;
   const dy = endY - startY;
   const distance = Math.sqrt(dx * dx + dy * dy);
+
+  // Don't render cables with zero or near-zero distance (prevents division by zero)
+  if (distance < 0.1) {
+    return null;
+  }
 
   // Auto-calculate droop based on distance if not provided
   const droopAmount = droop ?? Math.min(distance * 0.3, 80);
@@ -84,6 +97,8 @@ export default function Cable({
         stroke={color}
         strokeWidth="4"
         strokeLinecap="round"
+        className="transition-opacity"
+        style={{ opacity: 0.7 }}
       />
 
       {/* Highlight on cable for 3D effect */}
@@ -93,10 +108,44 @@ export default function Cable({
         stroke="rgba(255,255,255,0.3)"
         strokeWidth="2"
         strokeLinecap="round"
+        className="transition-opacity"
         style={{
-          transform: 'translate(-0.5px, -0.5px)'
+          transform: 'translate(-0.5px, -0.5px)',
+          opacity: 0.7
         }}
       />
+
+      {/* Clickable wider path for easier clicking - hover brightens */}
+      {onClick && (
+        <path
+          d={pathD}
+          fill="none"
+          stroke="transparent"
+          strokeWidth="20"
+          strokeLinecap="round"
+          className="cursor-pointer"
+          style={{ pointerEvents: 'stroke' }}
+          onClick={onClick}
+          onMouseEnter={(e) => {
+            const svg = e.currentTarget.parentElement;
+            if (svg) {
+              const paths = svg.querySelectorAll('path[stroke]:not([stroke="transparent"])');
+              paths.forEach(path => {
+                (path as SVGPathElement).style.opacity = '1';
+              });
+            }
+          }}
+          onMouseLeave={(e) => {
+            const svg = e.currentTarget.parentElement;
+            if (svg) {
+              const paths = svg.querySelectorAll('path[stroke]:not([stroke="transparent"])');
+              paths.forEach(path => {
+                (path as SVGPathElement).style.opacity = '0.7';
+              });
+            }
+          }}
+        />
+      )}
     </svg>
   );
 }

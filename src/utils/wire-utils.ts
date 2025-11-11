@@ -7,6 +7,7 @@ export interface CableData {
   end: { x: number; y: number };
   color: string;
   droop: number;
+  holeIds?: string[]; // Track which holes this cable connects
 }
 
 export interface Position {
