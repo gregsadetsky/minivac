@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minivac Components - CSS 3D</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: #2a2d35;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            gap: 80px;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .component-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        label {
+            color: #8a9ba8;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* PUSHBUTTON */
+        .pushbutton-container {
+            position: relative;
+            width: 60px;
+            height: 60px;
+        }
+
+        .pushbutton {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            cursor: pointer;
+            transform-style: preserve-3d;
+            perspective: 1000px;
+        }
+
+        .button-base {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: #1a1d24;
+            border-radius: 50%;
+            box-shadow: 
+                inset 0 2px 4px rgba(0,0,0,0.8),
+                inset 0 -1px 2px rgba(255,255,255,0.1);
+        }
+
+        .button-cap {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 54px;
+            height: 54px;
+            background: radial-gradient(
+                circle at 30% 30%, 
+                #e85d5d 0%,
+                #d24444 40%,
+                #b92e2e 70%,
+                #8b1f1f 100%
+            );
+            border-radius: 50%;
+            transition: all 0.1s ease;
+            box-shadow: 
+                0 6px 12px rgba(0,0,0,0.5),
+                0 2px 4px rgba(0,0,0,0.3),
+                inset 0 1px 0 rgba(255,255,255,0.3),
+                inset 0 -2px 8px rgba(0,0,0,0.3);
+        }
+
+        /* Highlight on top */
+        .button-cap::before {
+            content: '';
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            width: 18px;
+            height: 12px;
+            background: radial-gradient(
+                ellipse at center,
+                rgba(255,255,255,0.6) 0%,
+                rgba(255,255,255,0) 70%
+            );
+            border-radius: 50%;
+            transform: rotate(-25deg);
+        }
+
+        .pushbutton:active .button-cap {
+            top: 5px;
+            box-shadow: 
+                0 2px 4px rgba(0,0,0,0.5),
+                0 1px 2px rgba(0,0,0,0.3),
+                inset 0 1px 0 rgba(255,255,255,0.2),
+                inset 0 -1px 4px rgba(0,0,0,0.4);
+        }
+
+        /* INDICATOR LIGHT */
+        .light-container {
+            position: relative;
+            width: 40px;
+            height: 40px;
+        }
+
+        /* The housing/bezel */
+        .light-housing {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: #1a1d24;
+            border-radius: 50%;
+            box-shadow: 
+                inset 0 2px 4px rgba(0,0,0,0.9),
+                inset 0 -1px 2px rgba(255,255,255,0.1),
+                0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* Inner ring that gives depth */
+        .light-housing::before {
+            content: '';
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            width: 28px;
+            height: 28px;
+            background: #0d0f13;
+            border-radius: 50%;
+            box-shadow: 
+                inset 0 1px 3px rgba(0,0,0,0.9);
+        }
+
+        /* The light element itself */
+        .light-bulb {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: radial-gradient(
+                circle at 35% 35%,
+                #4a3838 0%,
+                #2d2020 50%,
+                #1a1414 100%
+            );
+            transition: all 0.2s ease;
+            box-shadow: 
+                inset 0 1px 2px rgba(0,0,0,0.8),
+                inset 0 -1px 1px rgba(255,255,255,0.05);
+        }
+
+        /* Highlight on the glass */
+        .light-bulb::before {
+            content: '';
+            position: absolute;
+            top: 4px;
+            right: 7px;
+            width: 8px;
+            height: 6px;
+            background: radial-gradient(
+                ellipse at center,
+                rgba(255,255,255,0.2) 0%,
+                rgba(255,255,255,0) 70%
+            );
+            border-radius: 50%;
+            transform: rotate(-25deg);
+        }
+
+        /* Light ON state */
+        .light-on .light-bulb {
+            background: radial-gradient(
+                circle at 35% 35%,
+                #fff5f0 0%,
+                #ffe4d0 15%,
+                #ffb088 40%,
+                #ff8855 60%,
+                #ee6633 80%,
+                #cc4422 100%
+            );
+            box-shadow: 
+                0 0 10px rgba(255,100,50,0.6),
+                0 0 20px rgba(255,100,50,0.3),
+                inset 0 1px 2px rgba(255,255,255,0.4),
+                inset 0 -1px 3px rgba(200,50,20,0.4);
+        }
+
+        /* Stronger highlight when on */
+        .light-on .light-bulb::before {
+            background: radial-gradient(
+                ellipse at center,
+                rgba(255,255,255,0.9) 0%,
+                rgba(255,255,255,0.3) 50%,
+                rgba(255,255,255,0) 70%
+            );
+            width: 12px;
+            height: 8px;
+        }
+
+        /* Glow effect */
+        .light-on .light-bulb::after {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            right: -8px;
+            bottom: -8px;
+            background: radial-gradient(
+                circle at center,
+                rgba(255,120,80,0.3) 0%,
+                rgba(255,120,80,0) 70%
+            );
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* Toggle switch for demo */
+        .toggle {
+            margin-top: 20px;
+            padding: 8px 16px;
+            background: #3a3d45;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .toggle:hover {
+            background: #4a4d55;
+        }
+
+        .connection-holes {
+            display: flex;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        /* Connection holes above components */
+        .hole {
+            width: 12px;
+            height: 12px;
+            background: radial-gradient(
+                circle at 35% 35%,
+                #0a0c10 0%,
+                #1a1d24 60%,
+                #2a2d35 100%
+            );
+            border-radius: 50%;
+            box-shadow: 
+                inset 0 2px 4px rgba(0,0,0,0.9),
+                inset 0 1px 2px rgba(0,0,0,0.8),
+                0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        .hole-label {
+            font-size: 10px;
+            color: #6a7580;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="component-group">
+        <label>Pushbutton</label>
+        <div class="connection-holes">
+            <div style="text-align: center;">
+                <div class="hole"></div>
+                <div class="hole-label">N.O.</div>
+            </div>
+            <div style="text-align: center;">
+                <div class="hole"></div>
+                <div class="hole-label">COM</div>
+            </div>
+            <div style="text-align: center;">
+                <div class="hole"></div>
+                <div class="hole-label">N.C.</div>
+            </div>
+        </div>
+        <div class="pushbutton-container">
+            <div class="pushbutton">
+                <div class="button-base"></div>
+                <div class="button-cap"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="component-group">
+        <label>Indicator Light</label>
+        <div class="connection-holes">
+            <div style="text-align: center;">
+                <div class="hole"></div>
+                <div class="hole-label">+</div>
+            </div>
+            <div style="text-align: center;">
+                <div class="hole"></div>
+                <div class="hole-label">−</div>
+            </div>
+        </div>
+        <div class="light-container" id="light">
+            <div class="light-housing"></div>
+            <div class="light-bulb"></div>
+        </div>
+        <button class="toggle" onclick="toggleLight()">Toggle Light</button>
+    </div>
+
+    <script>
+        function toggleLight() {
+            const light = document.getElementById('light');
+            light.classList.toggle('light-on');
+        }
+
+        // Demo: automatically turn on after 1 second
+        setTimeout(() => {
+            document.getElementById('light').classList.add('light-on');
+        }, 1000);
+    </script>
+</body>
+</html>
