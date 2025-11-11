@@ -69,6 +69,7 @@ export interface MinivacState {
     running: boolean;
     direction: string;
   };
+  alerts: string[];
 }
 
 /**
@@ -245,6 +246,16 @@ export class MinIVACSimulator {
         return false;
       }
 
+      // Check for short circuit (excessive power supply current)
+      const powerCurrent = Math.abs(results['I(V_POWER)'] || 0);
+      if (powerCurrent > 1.0) {  // More than 1 amp indicates likely short circuit
+        const message = 'SHORT CIRCUIT DETECTED!';
+        if (!alerts.includes(message)) {
+          alerts.push(message);
+        }
+        console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <0.5A)`);
+      }
+
       // Extract new relay states
       const newRelayStates: boolean[] = [];
       for (let i = 1; i <= 6; i++) {
@@ -399,6 +410,7 @@ export class MinIVACSimulator {
         running: this.motorRunning,
         direction: this.motorDirection > 0 ? 'CW' : 'CCW',
       },
+      alerts: [...alerts],
     };
   }
 

@@ -1,20 +1,12 @@
-import { useState } from 'react';
-
 interface LightProps {
   size?: number;
   isOn?: boolean;
-  onChange?: (isOn: boolean) => void;
 }
 
 export default function Light({
   size = 40,
-  isOn: controlledIsOn,
-  onChange
+  isOn = false
 }: LightProps) {
-  const [internalIsOn, setInternalIsOn] = useState(false);
-
-  // Use controlled if provided, otherwise use internal state
-  const isOn = controlledIsOn !== undefined ? controlledIsOn : internalIsOn;
 
   return (
     <div

@@ -50,9 +50,6 @@ describe('MinIVAC Simulator - 3-Bit Binary Counter', () => {
     const minivac = new MinIVACSimulator(circuit);
     minivac.initialize();
 
-    // Expected sequence after each press/release cycle
-    const expectedSequence = [0, 1, 2, 3, 4, 5, 6, 7];
-
     // Initial state should be 0
     let state = minivac.getState();
     expect(getBinaryValue(state.lights)).toBe(0);
@@ -140,8 +137,6 @@ describe('MinIVAC Simulator - 3-Bit Binary Counter', () => {
 
     // Press button but don't release yet
     minivac.pressButton(6);
-    state = minivac.getState();
-    const duringPress = getBinaryValue(state.lights);
 
     // Release button
     minivac.releaseButton(6);

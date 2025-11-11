@@ -1,22 +1,14 @@
-import { useState } from 'react';
-
 interface RelayProps {
   width?: number;
   height?: number;
   isEnergized?: boolean;
-  onChange?: (isEnergized: boolean) => void;
 }
 
 export default function Relay({
   width = 90,
   height = 80,
-  isEnergized: controlledIsEnergized,
-  onChange
+  isEnergized = false
 }: RelayProps) {
-  const [internalIsEnergized, setInternalIsEnergized] = useState(false);
-
-  // Use controlled if provided, otherwise use internal state
-  const isEnergized = controlledIsEnergized !== undefined ? controlledIsEnergized : internalIsEnergized;
 
   return (
     <div

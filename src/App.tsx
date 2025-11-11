@@ -14,8 +14,7 @@ import Relay from './components/primitives/Relay';
 import RotaryKnob from './components/primitives/RotaryKnob';
 import SlideSwitch from './components/primitives/SlideSwitch';
 import SlideSwitchVertical from './components/primitives/SlideSwitchVertical';
-import { generateCablesFromCircuit, type CableData } from './utils/wire-utils';
-import { parseMinivacNotationForUI } from './simulator/circuit-notation-parser';
+import { type CableData } from './utils/wire-utils';
 import { MinIVACSimulator, type MinivacState } from './simulator/minivac-simulator';
 
 function App() {
@@ -28,16 +27,17 @@ function App() {
   const previousRelayStates = React.useRef<boolean[]>([]);
   const relayClickSound = React.useRef<Howl | null>(null);
 
+  // Slide switch states (false = left, true = right)
+  const [slideStates, setSlideStates] = React.useState<boolean[]>([false, false, false, false, false, false]);
+
   // Interactive wiring state
   const [isDraggingWire, setIsDraggingWire] = React.useState(false);
   const isDraggingWireRef = React.useRef(false);
-  const [dragStartHoleId, setDragStartHoleId] = React.useState<string | null>(null);
   const dragStartHoleIdRef = React.useRef<string | null>(null);
   const dragStartHoleElement = React.useRef<Element | null>(null);
   const dragEndHoleElement = React.useRef<Element | null>(null);
   const [dragCurrentPos, setDragCurrentPos] = React.useState<{ x: number; y: number } | null>(null);
   const [dragStartPos, setDragStartPos] = React.useState<{ x: number; y: number } | null>(null);
-  const [hoveredHoleId, setHoveredHoleId] = React.useState<string | null>(null);
   const hoveredHoleIdRef = React.useRef<string | null>(null);
   const [cableToDelete, setCableToDelete] = React.useState<number | null>(null);
 
@@ -69,11 +69,20 @@ function App() {
     // Create new simulator with updated circuit
     const minivac = new MinIVACSimulator(circuitNotation);
     minivac.initialize();
+
+    // Restore slide switch states (captures current slideStates via closure)
+    // Note: slideStates is NOT in dependency array - we only recreate on cable changes
+    // Slide changes use setSlide() API directly without recreation
+    slideStates.forEach((isRight, index) => {
+      minivac.setSlide(index + 1, isRight ? 'right' : 'left');
+    });
+
     setSimulator(minivac);
     setSimState(minivac.getState());
 
     console.log('Simulator initialized with', circuitNotation.length, 'wires');
-  }, [cables]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cables]); // Only recreate when cables change
 
   // Set up event delegation for holes
   React.useEffect(() => {
@@ -202,7 +211,6 @@ function App() {
 
     setIsDraggingWire(true);
     isDraggingWireRef.current = true;
-    setDragStartHoleId(holeId);
     dragStartHoleIdRef.current = holeId;
     dragStartHoleElement.current = hole;
     setDragStartPos(startPos);
@@ -245,7 +253,6 @@ function App() {
       prevHole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)';
     }
 
-    setHoveredHoleId(holeId);
     hoveredHoleIdRef.current = holeId;
     dragEndHoleElement.current = holeElement;
 
@@ -263,7 +270,6 @@ function App() {
     hole.style.borderColor = '#737373';
     hole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)';
 
-    setHoveredHoleId(null);
     hoveredHoleIdRef.current = null;
     dragEndHoleElement.current = null;
   };
@@ -333,13 +339,11 @@ function App() {
     // Reset dragging state
     setIsDraggingWire(false);
     isDraggingWireRef.current = false;
-    setDragStartHoleId(null);
     dragStartHoleIdRef.current = null;
     dragStartHoleElement.current = null;
     dragEndHoleElement.current = null;
     setDragStartPos(null);
     setDragCurrentPos(null);
-    setHoveredHoleId(null);
     hoveredHoleIdRef.current = null;
   };
 
@@ -630,7 +634,22 @@ function App() {
             <div className="flex gap-9">
               {columns.map(num => (
                 <div key={`switch-${num}`} className="flex justify-center" style={{ width: '120px' }}>
-                  <SlideSwitch />
+                  <SlideSwitch
+                    isRight={slideStates[num - 1]}
+                    onChange={(isRight) => {
+                      // Update local state for visual
+                      setSlideStates(prev => {
+                        const newStates = [...prev];
+                        newStates[num - 1] = isRight;
+                        return newStates;
+                      });
+                      // Update simulator directly without recreation
+                      if (simulator) {
+                        simulator.setSlide(num, isRight ? 'right' : 'left');
+                        setSimState(simulator.getState());
+                      }
+                    }}
+                  />
                 </div>
               ))}
             </div>
@@ -867,6 +886,28 @@ function App() {
                 >
                   Delete
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Circuit alerts (short circuits, etc.) */}
+        {simState?.alerts && simState.alerts.length > 0 && (
+          <div
+            className="absolute top-4 left-1/2 transform -translate-x-1/2"
+            style={{ zIndex: 999 }}
+          >
+            <div className="bg-red-900 border-2 border-red-500 p-4 rounded-lg shadow-xl max-w-md">
+              <div className="flex items-start gap-3">
+                <div className="text-red-400 text-2xl">⚠️</div>
+                <div className="flex-1">
+                  <h3 className="text-white text-sm font-sans font-bold mb-2">Circuit Alert</h3>
+                  {simState.alerts.map((alert, idx) => (
+                    <p key={idx} className="text-red-200 text-xs mb-1 font-mono">
+                      {alert}
+                    </p>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

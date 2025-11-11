@@ -8,8 +8,7 @@ interface DecimalWheelProps {
 
 export default function DecimalWheel({
   diameter = 240,
-  holeSize = 10,
-  currentValue = 0
+  holeSize = 10
 }: DecimalWheelProps) {
   const centerX = diameter / 2;
   const centerY = diameter / 2;
