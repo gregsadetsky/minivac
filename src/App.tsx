@@ -1,4 +1,5 @@
 import React from 'react';
+import { Howl } from 'howler';
 import MatrixConnector from './components/connectors/MatrixConnector';
 import MatrixConnector6 from './components/connectors/MatrixConnector6';
 import PortPair from './components/connectors/PortPair';
@@ -23,6 +24,17 @@ function App() {
   const [cables, setCables] = React.useState<CableData[]>([]);
   const [simulator, setSimulator] = React.useState<MinIVACSimulator | null>(null);
   const [simState, setSimState] = React.useState<MinivacState | null>(null);
+  const [cumulativeRotation, setCumulativeRotation] = React.useState(0);
+  const previousRelayStates = React.useRef<boolean[]>([]);
+  const relayClickSound = React.useRef<Howl | null>(null);
+
+  // Initialize relay click sound
+  React.useEffect(() => {
+    relayClickSound.current = new Howl({
+      src: ['/relay-click.mp3'],
+      volume: 0.5
+    });
+  }, []);
 
   React.useEffect(() => {
     if (!containerRef.current) return;
@@ -75,11 +87,47 @@ function App() {
     if (!simulator) return;
 
     const interval = setInterval(() => {
-      setSimState(simulator.getState());
+      const newState = simulator.getState();
+
+      // Detect relay state changes and play sound
+      if (previousRelayStates.current.length > 0) {
+        for (let i = 0; i < newState.relays.length; i++) {
+          if (newState.relays[i] !== previousRelayStates.current[i]) {
+            relayClickSound.current?.play();
+            break; // Only play once per update even if multiple relays change
+          }
+        }
+      }
+      previousRelayStates.current = [...newState.relays];
+
+      // Handle cumulative rotation to avoid 15→0 snap
+      if (simState) {
+        const currentPos = simState.motor.position;
+        const newPos = newState.motor.position;
+
+        // Detect wrap-around from 15 to 0 (forward rotation)
+        if (currentPos === 15 && newPos === 0) {
+          setCumulativeRotation(prev => prev + (360 / 16));
+        }
+        // Detect wrap-around from 0 to 15 (backward rotation)
+        else if (currentPos === 0 && newPos === 15) {
+          setCumulativeRotation(prev => prev - (360 / 16));
+        }
+        // Normal position change
+        else if (newPos !== currentPos) {
+          const positionDiff = newPos - currentPos;
+          setCumulativeRotation(prev => prev + positionDiff * (360 / 16));
+        }
+      } else {
+        // First time initialization
+        setCumulativeRotation(newState.motor.position * (360 / 16));
+      }
+
+      setSimState(newState);
     }, 50); // Poll every 50ms
 
     return () => clearInterval(interval);
-  }, [simulator]);
+  }, [simulator, simState]);
 
   return (
     <div className="min-h-screen bg-neutral-800 overflow-auto p-8">
@@ -444,9 +492,12 @@ function App() {
               {/* Decimal wheel with rotary knob in center */}
               <div className="relative flex-1 flex items-center justify-center">
                 <DecimalWheel diameter={320} currentValue={simState?.motor.position || 0} />
-                {/* Rotary knob centered */}
+                {/* Rotary knob centered - rotates to point at current motor position */}
                 <div className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                  <RotaryKnob size={100} />
+                  <RotaryKnob
+                    size={100}
+                    angle={cumulativeRotation}
+                  />
                 </div>
               </div>
             </div>
