@@ -191,11 +191,11 @@ export function generateCablesFromCircuit(
     const verticalRatio = distance > 0 ? dy / distance : 0;
 
     // More vertical cables get more droop, horizontal cables get less
-    // verticalRatio of 1.0 (vertical) -> use droopMax
-    // verticalRatio of 0.0 (horizontal) -> use droopMin * 0.3
+    // verticalRatio of 1.0 (vertical) -> use droopMax * 1.5 (droopy!)
+    // verticalRatio of 0.0 (horizontal) -> use droopMin * 0.3 (subtle droop)
     const minDroop = droopMin * 0.3;
     const adjustedDroopMin = minDroop + verticalRatio * (droopMin - minDroop);
-    const adjustedDroopMax = droopMin + verticalRatio * (droopMax - droopMin);
+    const adjustedDroopMax = droopMin + verticalRatio * (droopMax * 1.5 - droopMin);
 
     const droop = adjustedDroopMin + Math.random() * (adjustedDroopMax - adjustedDroopMin);
 

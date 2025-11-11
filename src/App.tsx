@@ -61,9 +61,9 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-neutral-800 flex items-center justify-center p-8">
+    <div className="min-h-screen bg-neutral-800 overflow-auto p-8">
       {/* Minivac frame */}
-      <div ref={containerRef} className="relative bg-[#1a1a1a] p-3 border-[5px] border-[#84B6C7] select-none overflow-hidden">
+      <div ref={containerRef} className="relative bg-[#1a1a1a] p-3 border-[5px] border-[#84B6C7] select-none overflow-hidden mx-auto" style={{ minWidth: '1200px', width: 'fit-content' }}>
         <div className="flex gap-0">
           {/* LEFT PANEL - 6 columns */}
           <div className="flex flex-col gap-3">
@@ -304,12 +304,12 @@ function App() {
           <div className="flex flex-col" style={{ width: '450px' }}>
             {/* Title section */}
             <div className="flex flex-col items-center gap-1">
-              <div className="text-white font-sans text-7xl font-bold tracking-wider" style={{ marginTop: '27px' }}>Minivac 601</div>
+              <div className="text-white font-sans text-6xl font-bold tracking-wider" style={{ marginTop: '27px' }}>Minivac 601</div>
               <div className="text-neutral-400 font-mono text-xs">Simulator by Greg Technology</div>
             </div>
 
             {/* Spacer to align with left panel */}
-            <div style={{ height: '37px' }} />
+            <div style={{ height: '25px' }} />
 
             {/* Power divider with +/- ports */}
             <div className="relative bg-[#84B6C7] p-2 flex">
