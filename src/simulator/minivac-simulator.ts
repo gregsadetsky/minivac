@@ -3,7 +3,7 @@
  * Maintains relay state between button presses
  */
 
-import { loadSimulator, T_VOLTAGE, alerts, type Circuit } from './simulator-loader';
+import { loadSimulator, T_VOLTAGE, alerts, type Circuit } from './simulator-loader-universal';
 import { parseMinivacNotation } from './circuit-notation-parser';
 
 // MinIVAC component specifications
@@ -81,16 +81,20 @@ export class MinIVACSimulator {
   private lightStates: boolean[] = [false, false, false, false, false, false];
   private relayIndicatorLightStates: boolean[] = [false, false, false, false, false, false];
   private slideStates: boolean[] = [false, false, false, false, false, false];
-  private motorPosition: number = 0;
+  public motorPosition: number = 0;
   private motorRunning: boolean = false;
   private motorDirection: number = 1;
   private lastMotorUpdateTime: number | null = null;
   private motorAccumulatedTime: number = 0;
   private lastResults: Record<string, number> | null = null;
+  public verbose: boolean = false;
 
-  constructor(circuitNotation: string[]) {
+  constructor(circuitNotation: string[], verbose = false) {
     this.wires = parseMinivacNotation(circuitNotation);
-    console.log(`MinIVAC initialized with ${this.wires.length} wires`);
+    this.verbose = verbose;
+    if (this.verbose) {
+      console.log(`MinIVAC initialized with ${this.wires.length} wires`);
+    }
   }
 
   private _buildCircuit(): { circuit: Circuit; builder: CircuitBuilder } {
@@ -208,18 +212,18 @@ export class MinIVACSimulator {
     return { circuit: ckt, builder };
   }
 
-  private _simulate(verbose = false): boolean {
+  private _simulate(): boolean {
     alerts.length = 0;
 
     let iteration = 0;
     const maxIterations = 10;
 
     while (iteration < maxIterations) {
-      if (verbose) console.log(`\n=== Iteration ${iteration + 1} ===`);
+      if (this.verbose) console.log(`\n=== Iteration ${iteration + 1} ===`);
 
       const { circuit } = this._buildCircuit();
 
-      if (verbose) console.log('Finalizing circuit...');
+      if (this.verbose) console.log('Finalizing circuit...');
       const finalized = circuit.finalize();
 
       if (!finalized) {
@@ -230,7 +234,7 @@ export class MinIVACSimulator {
         return false;
       }
 
-      if (verbose) console.log('Running DC analysis...');
+      if (this.verbose) console.log('Running DC analysis...');
       const results = circuit.dc();
 
       if (!results) {
@@ -255,7 +259,7 @@ export class MinIVACSimulator {
         if (this.relayStates[i] !== newRelayStates[i]) {
           changed = true;
           const current = Math.abs(results[`I(RELAY${i+1}_COIL_PROBE)`] || 0);
-          if (verbose) {
+          if (this.verbose) {
             console.log(`  Relay ${i + 1}: ${this.relayStates[i] ? 'ON' : 'OFF'} -> ${newRelayStates[i] ? 'ON' : 'OFF'} (${(current * 1000).toFixed(3)} mA)`);
           }
         }
@@ -290,12 +294,12 @@ export class MinIVACSimulator {
           this.motorAccumulatedTime = 0;
         }
 
-        if (verbose) {
+        if (this.verbose) {
           const direction = this.motorDirection > 0 ? 'CW' : 'CCW';
           console.log(`  Motor: RUNNING ${direction} (${(motorCurrentAbs * 1000).toFixed(3)} mA)`);
         }
       } else {
-        if (this.motorRunning && verbose) {
+        if (this.motorRunning && this.verbose) {
           console.log(`  Motor: STOPPED (${(motorCurrentAbs * 1000).toFixed(3)} mA)`);
         }
         this.motorRunning = false;
@@ -306,14 +310,14 @@ export class MinIVACSimulator {
       this.lastResults = results;
 
       if (!changed) {
-        if (verbose) console.log('  Relay states stable!');
+        if (this.verbose) console.log('  Relay states stable!');
         return true;
       }
 
       iteration++;
     }
 
-    console.log('⚠️  Maximum iterations reached');
+    if (this.verbose) console.log('⚠️  Maximum iterations reached');
     return false;
   }
 
@@ -321,20 +325,20 @@ export class MinIVACSimulator {
     if (buttonNum < 1 || buttonNum > 6) {
       throw new Error(`Invalid button number: ${buttonNum}`);
     }
-    console.log(`\n🔘 Press button ${buttonNum}`);
+    if (this.verbose) console.log(`\n🔘 Press button ${buttonNum}`);
     this.buttonStates[buttonNum - 1] = true;
-    this._simulate(true);
-    this._printState();
+    this._simulate();
+    if (this.verbose) this._printState();
   }
 
   releaseButton(buttonNum: number): void {
     if (buttonNum < 1 || buttonNum > 6) {
       throw new Error(`Invalid button number: ${buttonNum}`);
     }
-    console.log(`\n🔘 Release button ${buttonNum}`);
+    if (this.verbose) console.log(`\n🔘 Release button ${buttonNum}`);
     this.buttonStates[buttonNum - 1] = false;
-    this._simulate(true);
-    this._printState();
+    this._simulate();
+    if (this.verbose) this._printState();
   }
 
   setSlide(slideNum: number, position: 'left' | 'right'): void {
@@ -345,10 +349,10 @@ export class MinIVACSimulator {
     const oldState = this.slideStates[slideNum - 1];
 
     if (oldState !== newState) {
-      console.log(`\n🔀 Slide switch ${slideNum} moved to ${position.toUpperCase()}`);
+      if (this.verbose) console.log(`\n🔀 Slide switch ${slideNum} moved to ${position.toUpperCase()}`);
       this.slideStates[slideNum - 1] = newState;
-      this._simulate(true);
-      this._printState();
+      this._simulate();
+      if (this.verbose) this._printState();
     }
   }
 
@@ -381,7 +385,7 @@ export class MinIVACSimulator {
     const needsResimulation = this._updateMotorPosition();
 
     if (needsResimulation) {
-      this._simulate(false);
+      this._simulate();
     }
 
     return {
@@ -399,6 +403,8 @@ export class MinIVACSimulator {
   }
 
   private _printState(): void {
+    if (!this.verbose) return;
+
     console.log('\n📊 STATE:');
     console.log('  Relays: ', this.relayStates.map((r, i) => `R${i+1}:${r?'ON':'OFF'}`).join(' '));
     console.log('  Lights: ', this.lightStates.map((l, i) => `L${i+1}:${l?'ON':'OFF'}`).join(' '));
@@ -412,8 +418,8 @@ export class MinIVACSimulator {
   }
 
   initialize(): void {
-    console.log('\n⚡ Initializing circuit...');
-    this._simulate(true);
-    this._printState();
+    if (this.verbose) console.log('\n⚡ Initializing circuit...');
+    this._simulate();
+    if (this.verbose) this._printState();
   }
 }

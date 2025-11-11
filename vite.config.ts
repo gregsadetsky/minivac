@@ -8,4 +8,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  resolve: {
+    alias: {
+      // Prevent bundling Node built-ins for browser
+      fs: false,
+      path: false,
+      vm: false,
+    },
+  },
+  optimizeDeps: {
+    exclude: ['fs', 'path', 'vm'],
+  },
 })

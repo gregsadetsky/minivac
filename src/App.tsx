@@ -15,11 +15,14 @@ import SlideSwitch from './components/primitives/SlideSwitch';
 import SlideSwitchVertical from './components/primitives/SlideSwitchVertical';
 import { generateCablesFromCircuit, type CableData } from './utils/wire-utils';
 import { parseMinivacNotationForUI } from './simulator/circuit-notation-parser';
+import { MinIVACSimulator, type MinivacState } from './simulator/minivac-simulator';
 
 function App() {
   const columns = [1, 2, 3, 4, 5, 6];
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [cables, setCables] = React.useState<CableData[]>([]);
+  const [simulator, setSimulator] = React.useState<MinIVACSimulator | null>(null);
+  const [simState, setSimState] = React.useState<MinivacState | null>(null);
 
   React.useEffect(() => {
     if (!containerRef.current) return;
@@ -51,14 +54,32 @@ function App() {
           droopMax: 250
         });
 
-        console.log('Generated cables:', newCables);
         setCables(newCables);
+
+        // Create and initialize the simulator
+        const minivac = new MinIVACSimulator(circuitArray);
+        minivac.initialize();
+        setSimulator(minivac);
+        setSimState(minivac.getState());
+
+        console.log('Simulator initialized:', minivac.getState());
       } catch (error) {
         alert(`Error parsing circuit: ${error instanceof Error ? error.message : String(error)}`);
         console.error('Circuit parsing error:', error);
       }
     }, 100);
   }, []);
+
+  // Polling loop to update simulation state
+  React.useEffect(() => {
+    if (!simulator) return;
+
+    const interval = setInterval(() => {
+      setSimState(simulator.getState());
+    }, 50); // Poll every 50ms
+
+    return () => clearInterval(interval);
+  }, [simulator]);
 
   return (
     <div className="min-h-screen bg-neutral-800 overflow-auto p-8">
@@ -84,7 +105,7 @@ function App() {
                     <PortPair holeIds={[`${num}A`, `${num}A`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">A</div>
                   </div>
-                  <Light />
+                  <Light isOn={simState?.lights[num - 1] || false} />
                   <div className="flex flex-col items-center gap-0.5">
                     <PortPair holeIds={[`${num}B`, `${num}B`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">B</div>
@@ -133,7 +154,7 @@ function App() {
               {columns.map(num => (
                 <div key={`relay-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <div style={{ marginLeft: '10px' }}>
-                    <Relay />
+                    <Relay isEnergized={simState?.relays[num - 1] || false} />
                   </div>
                 </div>
               ))}
@@ -143,7 +164,7 @@ function App() {
             <div className="flex gap-9 -mt-2">
               {columns.map(num => (
                 <div key={`indicator-${num}`} className="flex justify-center" style={{ width: '120px' }}>
-                  <Light />
+                  <Light isOn={simState?.relayIndicatorLights[num - 1] || false} />
                 </div>
               ))}
             </div>
@@ -291,7 +312,20 @@ function App() {
             <div className="flex gap-9">
               {columns.map(num => (
                 <div key={`button-${num}`} className="flex justify-center" style={{ width: '120px' }}>
-                  <PushButton />
+                  <PushButton
+                    onPress={() => {
+                      if (simulator) {
+                        simulator.pressButton(num);
+                        setSimState(simulator.getState());
+                      }
+                    }}
+                    onRelease={() => {
+                      if (simulator) {
+                        simulator.releaseButton(num);
+                        setSimState(simulator.getState());
+                      }
+                    }}
+                  />
                 </div>
               ))}
             </div>
@@ -409,7 +443,7 @@ function App() {
 
               {/* Decimal wheel with rotary knob in center */}
               <div className="relative flex-1 flex items-center justify-center">
-                <DecimalWheel diameter={320} />
+                <DecimalWheel diameter={320} currentValue={simState?.motor.position || 0} />
                 {/* Rotary knob centered */}
                 <div className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
                   <RotaryKnob size={100} />
