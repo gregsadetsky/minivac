@@ -16,19 +16,10 @@ export default function Light({
   // Use controlled if provided, otherwise use internal state
   const isOn = controlledIsOn !== undefined ? controlledIsOn : internalIsOn;
 
-  const handleClick = () => {
-    const newState = !isOn;
-    if (controlledIsOn === undefined) {
-      setInternalIsOn(newState);
-    }
-    onChange?.(newState);
-  };
-
   return (
     <div
-      className="relative cursor-pointer select-none"
+      className="relative select-none"
       style={{ width: `${size}px`, height: `${size}px` }}
-      onClick={handleClick}
     >
       {/* Housing/bezel */}
       <div

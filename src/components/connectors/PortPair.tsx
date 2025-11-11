@@ -7,6 +7,7 @@ interface PortPairProps {
   holeCount?: number;       // Number of holes (default 2)
   spacing?: number;         // Gap between holes
   holeSize?: number;
+  holeIds?: string[];       // Terminal IDs for each hole (e.g., ["6A", "6A"])
 }
 
 export default function PortPair({
@@ -15,7 +16,8 @@ export default function PortPair({
   sublabels = [],
   holeCount = 2,
   spacing = 6,
-  holeSize = 10
+  holeSize = 10,
+  holeIds = []
 }: PortPairProps) {
   return (
     <div className="flex flex-col items-center gap-1">
@@ -28,7 +30,7 @@ export default function PortPair({
         {sublabels.length > 0 ? (
           sublabels.map((sublabel, i) => (
             <div key={i} className="flex flex-col items-center gap-1.5">
-              <Hole size={holeSize} />
+              <Hole size={holeSize} dataHoleId={holeIds[i]} />
               {sublabel && (
                 <div className="text-neutral-300 font-mono text-[10px] font-bold">
                   {sublabel}
@@ -39,7 +41,7 @@ export default function PortPair({
         ) : (
           <>
             {Array.from({ length: holeCount }).map((_, i) => (
-              <Hole key={i} size={holeSize} />
+              <Hole key={i} size={holeSize} dataHoleId={holeIds[i]} />
             ))}
           </>
         )}

@@ -13,11 +13,13 @@ import Relay from './components/primitives/Relay';
 import RotaryKnob from './components/primitives/RotaryKnob';
 import SlideSwitch from './components/primitives/SlideSwitch';
 import SlideSwitchVertical from './components/primitives/SlideSwitchVertical';
+import { generateCablesFromCircuit, type CableData } from './utils/wire-utils';
+import { parseMinivacNotationForUI } from './simulator/circuit-notation-parser';
 
 function App() {
   const columns = [1, 2, 3, 4, 5, 6];
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const [cables, setCables] = React.useState<Array<{start: {x: number, y: number}, end: {x: number, y: number}, color: string, droop: number}>>([]);
+  const [cables, setCables] = React.useState<CableData[]>([]);
 
   React.useEffect(() => {
     if (!containerRef.current) return;
@@ -26,73 +28,42 @@ function App() {
     setTimeout(() => {
       if (!containerRef.current) return;
 
-      const container = containerRef.current;
-      const rect = container.getBoundingClientRect();
+      // Prompt user for circuit notation
+      const circuitInput = prompt(
+        'Enter circuit notation (space-separated wire pairs):\n\nExample: 6A/6com D4/D5 3J/6com 5A/5com 6B/6-'
+      );
 
-      // Find all Hole divs (they have rounded-full class and specific bg/border)
-      const holes = Array.from(container.querySelectorAll('.rounded-full')).filter(el => {
-        const classes = el.className;
-        return classes.includes('bg-neutral-900') && classes.includes('border-neutral-500');
-      });
-
-      console.log('Found holes:', holes.length);
-
-      const newCables = [];
-
-      // Connect 30 random holes with nice cables
-      if (holes.length > 30) {
-        const getPos = (hole: Element) => getRelativePosition(hole, container, rect);
-
-        // Cable colors
-        const colors = ['#cc3333', '#3366cc', '#33cc66', '#dd8833', '#d4af37', '#9933cc', '#cc3399', '#33cccc'];
-
-        // Generate 30 random cables
-        const usedPairs = new Set<string>();
-        let attempts = 0;
-
-        while (newCables.length < 30 && attempts < 150) {
-          attempts++;
-
-          // Pick two random holes
-          const idx1 = Math.floor(Math.random() * holes.length);
-          const idx2 = Math.floor(Math.random() * holes.length);
-
-          // Make sure they're different and we haven't used this pair
-          if (idx1 === idx2) continue;
-          const pairKey = idx1 < idx2 ? `${idx1}-${idx2}` : `${idx2}-${idx1}`;
-          if (usedPairs.has(pairKey)) continue;
-
-          usedPairs.add(pairKey);
-
-          const p1 = getPos(holes[idx1]);
-          const p2 = getPos(holes[idx2]);
-
-          if (p1 && p2) {
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            const droop = 150 + Math.random() * 100; // Random droop between 150-250
-            newCables.push({ start: p1, end: p2, color, droop });
-          }
-        }
+      if (!circuitInput || circuitInput.trim() === '') {
+        console.log('No circuit entered');
+        return;
       }
 
-      console.log('Setting cables:', newCables);
-      setCables(newCables);
+      try {
+        // Parse the circuit notation
+        const circuitArray = circuitInput.trim().split(/\s+/);
+        const wirePairs = parseMinivacNotationForUI(circuitArray);
+
+        console.log('Parsed circuit:', wirePairs);
+
+        // Generate cables from circuit
+        const newCables = generateCablesFromCircuit(containerRef.current, wirePairs, {
+          droopMin: 150,
+          droopMax: 250
+        });
+
+        console.log('Generated cables:', newCables);
+        setCables(newCables);
+      } catch (error) {
+        alert(`Error parsing circuit: ${error instanceof Error ? error.message : String(error)}`);
+        console.error('Circuit parsing error:', error);
+      }
     }, 100);
   }, []);
-
-  // Helper function
-  const getRelativePosition = (element: Element, container: HTMLDivElement, containerRect: DOMRect) => {
-    const elemRect = element.getBoundingClientRect();
-    return {
-      x: elemRect.left - containerRect.left + elemRect.width / 2 - 5,
-      y: elemRect.top - containerRect.top + elemRect.height / 2 - 4
-    };
-  };
 
   return (
     <div className="min-h-screen bg-neutral-800 flex items-center justify-center p-8">
       {/* Minivac frame */}
-      <div ref={containerRef} className="relative bg-[#1a1a1a] p-3 border-[5px] border-[#84B6C7] select-none">
+      <div ref={containerRef} className="relative bg-[#1a1a1a] p-3 border-[5px] border-[#84B6C7] select-none overflow-hidden">
         <div className="flex gap-0">
           {/* LEFT PANEL - 6 columns */}
           <div className="flex flex-col gap-3">
@@ -110,12 +81,12 @@ function App() {
               {columns.map(num => (
                 <div key={`light-${num}`} className="flex items-center justify-center gap-2" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
-                    <PortPair />
+                    <PortPair holeIds={[`${num}A`, `${num}A`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">A</div>
                   </div>
                   <Light />
                   <div className="flex flex-col items-center gap-0.5">
-                    <PortPair />
+                    <PortPair holeIds={[`${num}B`, `${num}B`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">B</div>
                   </div>
                 </div>
@@ -123,7 +94,7 @@ function App() {
             </div>
 
             {/* BINARY OUTPUT label */}
-            <div className="text-white font-mono text-base tracking-wider text-center">BINARY OUTPUT</div>
+            <div className="text-white font-sans font-bold text-base tracking-wider text-center">BINARY OUTPUT</div>
 
             {/* Blue section with + and - ports - full width */}
             <div className="bg-[#84B6C7] p-2 flex gap-9">
@@ -131,11 +102,11 @@ function App() {
                 <div key={`power-${num}`} className="flex justify-center gap-9" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-white font-mono text-sm font-bold">+</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}+`, `${num}+`]} />
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-white font-mono text-sm font-bold">−</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}-`, `${num}-`]} />
                   </div>
                 </div>
               ))}
@@ -146,7 +117,7 @@ function App() {
               {columns.map(num => (
                 <div key={`coil-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
-                    <TriplePortGroup topRow={<LightCoilDecorations />} />
+                    <TriplePortGroup topRow={<LightCoilDecorations />} holeIds={[`${num}C`, `${num}C`, `${num}E`, `${num}E`, `${num}F`, `${num}F`]} />
                     <div className="flex justify-between w-full">
                       <div className="text-neutral-300 font-mono text-[10px] font-bold" style={{ marginLeft: '10px' }}>C</div>
                       <div className="text-neutral-300 font-mono text-[10px] font-bold">E</div>
@@ -178,7 +149,7 @@ function App() {
             </div>
 
             {/* STORAGE/PROCESSING label */}
-            <div className="text-white font-mono text-base tracking-wider text-center">STORAGE/PROCESSING</div>
+            <div className="text-white font-sans font-bold text-base tracking-wider text-center">STORAGE/PROCESSING</div>
 
             {/* Row: N.O. ARM N.C. with G H J */}
             <div className="flex gap-9">
@@ -186,17 +157,17 @@ function App() {
                 <div key={`ghj-${num}`} className="flex justify-center gap-5" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">N.O.</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}G`, `${num}G`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">G</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">ARM</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}H`, `${num}H`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">H</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">N.C.</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}J`, `${num}J`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">J</div>
                   </div>
                 </div>
@@ -208,15 +179,15 @@ function App() {
               {columns.map(num => (
                 <div key={`kln-${num}`} className="flex justify-center gap-5" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
-                    <PortPair />
+                    <PortPair holeIds={[`${num}K`, `${num}K`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">K</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
-                    <PortPair />
+                    <PortPair holeIds={[`${num}L`, `${num}L`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">L</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
-                    <PortPair />
+                    <PortPair holeIds={[`${num}N`, `${num}N`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">N</div>
                   </div>
                 </div>
@@ -227,13 +198,13 @@ function App() {
             <div className="bg-[#84B6C7] p-2 flex gap-9">
               {columns.map(num => (
                 <div key={`common-${num}`} className="flex justify-center" style={{ width: '120px' }}>
-                  <PortPair label="COMMON" holeCount={4} />
+                  <PortPair label="COMMON" holeCount={4} holeIds={[`${num}com`, `${num}com`, `${num}com`, `${num}com`]} />
                 </div>
               ))}
             </div>
 
             {/* SECONDARY STORAGE label */}
-            <div className="text-white font-mono text-base tracking-wider text-center">SECONDARY STORAGE</div>
+            <div className="text-white font-sans font-bold text-base tracking-wider text-center">SECONDARY STORAGE</div>
 
             {/* Row: R S T with arrows */}
             <div className="flex gap-9">
@@ -241,17 +212,17 @@ function App() {
                 <div key={`rst-${num}`} className="flex justify-center gap-5" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">←</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}R`, `${num}R`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">R</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">ARM</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}S`, `${num}S`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">S</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">→</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}T`, `${num}T`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">T</div>
                   </div>
                 </div>
@@ -263,15 +234,15 @@ function App() {
               {columns.map(num => (
                 <div key={`uvw-${num}`} className="flex justify-center gap-5" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
-                    <PortPair />
+                    <PortPair holeIds={[`${num}U`, `${num}U`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">U</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
-                    <PortPair />
+                    <PortPair holeIds={[`${num}V`, `${num}V`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">V</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
-                    <PortPair />
+                    <PortPair holeIds={[`${num}W`, `${num}W`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">W</div>
                   </div>
                 </div>
@@ -291,7 +262,7 @@ function App() {
             <div className="bg-[#84B6C7] p-2 h-3" />
 
             {/* BINARY INPUT label */}
-            <div className="text-white font-mono text-base tracking-wider text-center">BINARY INPUT</div>
+            <div className="text-white font-sans font-bold text-base tracking-wider text-center">BINARY INPUT</div>
 
             {/* Row: X Y Z with N.O. ARM N.C. */}
             <div className="flex gap-9">
@@ -299,17 +270,17 @@ function App() {
                 <div key={`xyz-${num}`} className="flex justify-center gap-5" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">N.O.</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}X`, `${num}X`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">X</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">ARM</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}Y`, `${num}Y`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">Y</div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">N.C.</div>
-                    <PortPair />
+                    <PortPair holeIds={[`${num}Z`, `${num}Z`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">Z</div>
                   </div>
                 </div>
@@ -332,8 +303,8 @@ function App() {
           {/* RIGHT PANEL */}
           <div className="flex flex-col" style={{ width: '450px' }}>
             {/* Title section */}
-            <div className="flex flex-col items-center gap-3">
-              <div className="text-white font-mono text-4xl font-bold tracking-wider" style={{ marginTop: '27px' }}>Minivac 601</div>
+            <div className="flex flex-col items-center gap-1">
+              <div className="text-white font-sans text-7xl font-bold tracking-wider" style={{ marginTop: '27px' }}>Minivac 601</div>
               <div className="text-neutral-400 font-mono text-xs">Simulator by Greg Technology</div>
             </div>
 
@@ -346,11 +317,11 @@ function App() {
               <div className="flex justify-center items-center gap-16" style={{ width: '78%' }}>
                 <div className="flex flex-col items-center gap-0.5">
                   <div className="text-white font-mono text-sm font-bold">+</div>
-                  <PortPair />
+                  <PortPair holeIds={['M+', 'M+']} />
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
                   <div className="text-white font-mono text-sm font-bold">−</div>
-                  <PortPair />
+                  <PortPair holeIds={['M-', 'M-']} />
                 </div>
               </div>
               {/* Power label - right 22% */}
@@ -365,14 +336,14 @@ function App() {
               <div className="flex items-center justify-center" style={{ width: '78%' }}>
                 <div className="flex items-center justify-center" style={{ gap: '24px' }}>
                   {/* Group 10 - 6 holes */}
-                  <MatrixConnector6 label="10" />
+                  <MatrixConnector6 label="10" holeIds={['M10', 'M10', 'M10', 'M10', 'M10', 'M10']} />
 
                   {/* 3x3 Matrix grid with tic-tac-toe lines */}
                   <div className="relative flex items-center justify-center">
                     <div className="relative">
                       <div className="grid grid-cols-3 gap-8">
                         {[1, 2, 3, 8, 9, 4, 7, 6, 5].map((num) => (
-                          <MatrixConnector key={num} label={num.toString()} />
+                          <MatrixConnector key={num} label={num.toString()} holeIds={[`M${num}t`, `M${num}t`, `M${num}b`, `M${num}b`]} />
                         ))}
                       </div>
                       {/* Vertical tic-tac-toe lines */}
@@ -385,7 +356,7 @@ function App() {
                   </div>
 
                   {/* Group 11 - 6 holes */}
-                  <MatrixConnector6 label="11" />
+                  <MatrixConnector6 label="11" holeIds={['M11', 'M11', 'M11', 'M11', 'M11', 'M11']} />
                 </div>
               </div>
 
@@ -404,7 +375,7 @@ function App() {
               </div>
 
               {/* MATRIX label at bottom left */}
-              <div className="absolute text-white font-mono text-base tracking-wider" style={{ bottom: '4px', left: '16px' }}>MATRIX</div>
+              <div className="absolute text-white font-sans font-bold text-base tracking-wider" style={{ bottom: '4px', left: '16px' }}>MATRIX</div>
             </div>
 
             {/* Blue separator */}
@@ -419,8 +390,8 @@ function App() {
                   <div className="text-neutral-300 font-mono text-[10px] font-bold w-4 text-right">16</div>
                   <div className="flex flex-col items-center gap-1">
                     <div className="flex" style={{ gap: '6px' }}>
-                      <Hole size={10} />
-                      <Hole size={10} />
+                      <Hole size={10} dataHoleId="D16" />
+                      <Hole size={10} dataHoleId="D16" />
                     </div>
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">ARM</div>
                   </div>
@@ -429,9 +400,9 @@ function App() {
                 {/* 17/18/19 with RUN/STOP */}
                 <VerticalPortStack
                   rows={[
-                    { leftLabel: '17', labelAfter: 'RUN' },
-                    { leftLabel: '18', labelAfter: 'STOP' },
-                    { leftLabel: '19' }
+                    { leftLabel: '17', labelAfter: 'RUN', holeIds: ['D17', 'D17'] },
+                    { leftLabel: '18', labelAfter: 'STOP', holeIds: ['D18', 'D18'] },
+                    { leftLabel: '19', holeIds: ['D19', 'D19'] }
                   ]}
                 />
               </div>
@@ -447,7 +418,7 @@ function App() {
             </div>
 
             {/* DECIMAL INPUT-OUTPUT label */}
-            <div className="text-white font-mono text-base tracking-wider text-center pb-2">DECIMAL INPUT-OUTPUT</div>
+            <div className="text-white font-sans font-bold text-base tracking-wider text-center pb-2">DECIMAL INPUT-OUTPUT</div>
           </div>
         </div>
 

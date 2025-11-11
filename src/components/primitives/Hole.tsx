@@ -1,8 +1,9 @@
 interface HoleProps {
   size?: number;
+  dataHoleId?: string;
 }
 
-export default function Hole({ size = 10 }: HoleProps) {
+export default function Hole({ size = 10, dataHoleId }: HoleProps) {
   return (
     <div
       className="
@@ -21,6 +22,7 @@ export default function Hole({ size = 10 }: HoleProps) {
         width: `${size}px`,
         height: `${size}px`,
       }}
+      data-hole-id={dataHoleId}
     />
   );
 }

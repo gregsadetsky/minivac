@@ -132,7 +132,7 @@ export default function DecimalWheel({
             top: `${hole.y - holeSize / 2}px`
           }}
         >
-          <Hole size={holeSize} />
+          <Hole size={holeSize} dataHoleId={`D${hole.segment}`} />
         </div>
       ))}
     </div>

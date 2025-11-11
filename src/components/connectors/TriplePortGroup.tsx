@@ -6,6 +6,7 @@ interface TriplePortGroupProps {
   holeSize?: number;
   pairSpacing?: number;    // Spacing within each pair (between 2 holes)
   groupGap?: number;       // Spacing between the 3 pairs
+  holeIds?: string[];      // Terminal IDs for all 6 holes (2 per pair)
 }
 
 export default function TriplePortGroup({
@@ -13,7 +14,8 @@ export default function TriplePortGroup({
   bottomLabels,
   holeSize = 10,
   pairSpacing = 6,
-  groupGap = 24
+  groupGap = 24,
+  holeIds = []
 }: TriplePortGroupProps) {
   return (
     <div className="flex flex-col gap-2">
@@ -29,8 +31,8 @@ export default function TriplePortGroup({
         {/* Pair 1 */}
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center" style={{ gap: `${pairSpacing}px` }}>
-            <Hole size={holeSize} />
-            <Hole size={holeSize} />
+            <Hole size={holeSize} dataHoleId={holeIds[0]} />
+            <Hole size={holeSize} dataHoleId={holeIds[1]} />
           </div>
           {bottomLabels?.[0] && (
             <div className="text-neutral-300 font-mono text-[10px] font-bold">
@@ -42,8 +44,8 @@ export default function TriplePortGroup({
         {/* Pair 2 */}
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center" style={{ gap: `${pairSpacing}px` }}>
-            <Hole size={holeSize} />
-            <Hole size={holeSize} />
+            <Hole size={holeSize} dataHoleId={holeIds[2]} />
+            <Hole size={holeSize} dataHoleId={holeIds[3]} />
           </div>
           {bottomLabels?.[1] && (
             <div className="text-neutral-300 font-mono text-[10px] font-bold">
@@ -55,8 +57,8 @@ export default function TriplePortGroup({
         {/* Pair 3 */}
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center" style={{ gap: `${pairSpacing}px` }}>
-            <Hole size={holeSize} />
-            <Hole size={holeSize} />
+            <Hole size={holeSize} dataHoleId={holeIds[4]} />
+            <Hole size={holeSize} dataHoleId={holeIds[5]} />
           </div>
           {bottomLabels?.[2] && (
             <div className="text-neutral-300 font-mono text-[10px] font-bold">

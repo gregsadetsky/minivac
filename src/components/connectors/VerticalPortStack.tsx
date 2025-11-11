@@ -3,6 +3,7 @@ import Hole from '../primitives/Hole';
 interface PortRow {
   leftLabel?: string;      // Label on left side (like "16", "17")
   labelAfter?: string;     // Label that appears AFTER this row (like "RUN", "STOP")
+  holeIds?: [string?, string?];  // Terminal IDs for the 2 holes in this row
 }
 
 interface VerticalPortStackProps {
@@ -32,8 +33,8 @@ export default function VerticalPortStack({
 
             {/* Two holes */}
             <div className="flex items-center" style={{ gap: `${holeSpacing}px` }}>
-              <Hole size={holeSize} />
-              <Hole size={holeSize} />
+              <Hole size={holeSize} dataHoleId={row.holeIds?.[0]} />
+              <Hole size={holeSize} dataHoleId={row.holeIds?.[1]} />
             </div>
 
             {/* Top bracket if there's a label after this row */}

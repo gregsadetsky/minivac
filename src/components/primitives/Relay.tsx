@@ -18,19 +18,10 @@ export default function Relay({
   // Use controlled if provided, otherwise use internal state
   const isEnergized = controlledIsEnergized !== undefined ? controlledIsEnergized : internalIsEnergized;
 
-  const handleClick = () => {
-    const newState = !isEnergized;
-    if (controlledIsEnergized === undefined) {
-      setInternalIsEnergized(newState);
-    }
-    onChange?.(newState);
-  };
-
   return (
     <div
-      className="relative cursor-pointer select-none"
+      className="relative select-none"
       style={{ width: `${width}px`, height: `${height}px` }}
-      onClick={handleClick}
     >
       {/* Vertical cylindrical coil on the left */}
       <div
