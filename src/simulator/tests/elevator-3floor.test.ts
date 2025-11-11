@@ -79,8 +79,9 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     minivac.motorPosition = 0;
     minivac.initialize();
 
-    // Press button 3 to call to floor 3
+    // Press and immediately release button 3 to call to floor 3
     minivac.pressButton(3);
+    minivac.releaseButton(3);
     await sleep(200);
 
     const stateAfterPress = minivac.getState();
@@ -93,8 +94,6 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     const finalState = minivac.getState();
     expect(getFloorFromPosition(finalState.motor.position)).toBe(3);
     expect(finalState.lights[2]).toBe(true); // Floor 3 light ON
-
-    minivac.releaseButton(3);
   });
 
   it('should travel from floor 3 to floor 2', async () => {
@@ -102,8 +101,9 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     minivac.motorPosition = 12; // Start at floor 3
     minivac.initialize();
 
-    // Press button 2 to call to floor 2
+    // Press and immediately release button 2 to call to floor 2
     minivac.pressButton(2);
+    minivac.releaseButton(2);
     await sleep(200);
 
     // Wait for arrival at floor 2
@@ -113,8 +113,6 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     const finalState = minivac.getState();
     expect(getFloorFromPosition(finalState.motor.position)).toBe(2);
     expect(finalState.lights[1]).toBe(true); // Floor 2 light ON
-
-    minivac.releaseButton(2);
   });
 
   it('should travel from floor 2 to floor 1', async () => {
@@ -122,8 +120,9 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     minivac.motorPosition = 6; // Start at floor 2
     minivac.initialize();
 
-    // Press button 1 to call to floor 1
+    // Press and immediately release button 1 to call to floor 1
     minivac.pressButton(1);
+    minivac.releaseButton(1);
     await sleep(200);
 
     // Wait for arrival at floor 1
@@ -133,8 +132,6 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     const finalState = minivac.getState();
     expect(getFloorFromPosition(finalState.motor.position)).toBe(1);
     expect(finalState.lights[0]).toBe(true); // Floor 1 light ON
-
-    minivac.releaseButton(1);
   });
 
   it('should not move when calling current floor', async () => {
@@ -144,16 +141,15 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
 
     const positionBefore = minivac.getState().motor.position;
 
-    // Press button 1 (already at floor 1)
+    // Press and immediately release button 1 (already at floor 1)
     minivac.pressButton(1);
+    minivac.releaseButton(1);
     await sleep(500);
 
     const state = minivac.getState();
     expect(state.motor.position).toBe(positionBefore);
     expect(state.motor.running).toBe(false);
     expect(state.lights[0]).toBe(true); // Floor 1 light still ON
-
-    minivac.releaseButton(1);
   });
 
   it('should handle interlock during motion', async () => {
@@ -161,8 +157,9 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     minivac.motorPosition = 0;
     minivac.initialize();
 
-    // Start moving to floor 3
+    // Start moving to floor 3 (press and release)
     minivac.pressButton(3);
+    minivac.releaseButton(3);
     await sleep(300);
 
     const stateWhileMoving = minivac.getState();
@@ -170,19 +167,16 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
 
     // Try to press button 2 while moving (should be ignored by interlock)
     minivac.pressButton(2);
+    minivac.releaseButton(2);
     await sleep(100);
 
     const stateAfterInterrupt = minivac.getState();
     // Motor should still be running toward floor 3
     expect(stateAfterInterrupt.motor.running).toBe(true);
 
-    minivac.releaseButton(2);
-
     // Wait for arrival at floor 3
     const arrived = await waitForFloor(minivac, 3);
     expect(arrived).toBe(true);
-
-    minivac.releaseButton(3);
   });
 
   it('should handle long trip from floor 1 to floor 3', async () => {
@@ -190,7 +184,9 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     minivac.motorPosition = 0;
     minivac.initialize();
 
+    // Press and immediately release button 3
     minivac.pressButton(3);
+    minivac.releaseButton(3);
     await sleep(100);
 
     const tripStart = Date.now();
@@ -203,7 +199,5 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
     const finalState = minivac.getState();
     expect(getFloorFromPosition(finalState.motor.position)).toBe(3);
     expect(finalState.lights[2]).toBe(true); // Floor 3 light ON
-
-    minivac.releaseButton(3);
   });
 });

@@ -365,15 +365,9 @@ function App() {
                       if (simulator) {
                         simulator.pressButton(num);
                         setSimState(simulator.getState());
-                        // Auto-release after a short delay (momentary button)
-                        setTimeout(() => {
-                          simulator.releaseButton(num);
-                          setSimState(simulator.getState());
-                        }, 100);
                       }
                     }}
                     onRelease={() => {
-                      // Still handle manual release for user interaction
                       if (simulator) {
                         simulator.releaseButton(num);
                         setSimState(simulator.getState());
