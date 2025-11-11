@@ -1,9 +1,11 @@
+import React from 'react';
 import MatrixConnector from './components/connectors/MatrixConnector';
 import MatrixConnector6 from './components/connectors/MatrixConnector6';
 import PortPair from './components/connectors/PortPair';
 import TriplePortGroup, { LightCoilDecorations } from './components/connectors/TriplePortGroup';
 import VerticalPortStack from './components/connectors/VerticalPortStack';
 import DecimalWheel from './components/modules/DecimalWheel';
+import Cable from './components/primitives/Cable';
 import Hole from './components/primitives/Hole';
 import Light from './components/primitives/Light';
 import PushButton from './components/primitives/PushButton';
@@ -14,11 +16,83 @@ import SlideSwitchVertical from './components/primitives/SlideSwitchVertical';
 
 function App() {
   const columns = [1, 2, 3, 4, 5, 6];
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [cables, setCables] = React.useState<Array<{start: {x: number, y: number}, end: {x: number, y: number}, color: string, droop: number}>>([]);
+
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Wait a bit for the DOM to fully render
+    setTimeout(() => {
+      if (!containerRef.current) return;
+
+      const container = containerRef.current;
+      const rect = container.getBoundingClientRect();
+
+      // Find all Hole divs (they have rounded-full class and specific bg/border)
+      const holes = Array.from(container.querySelectorAll('.rounded-full')).filter(el => {
+        const classes = el.className;
+        return classes.includes('bg-neutral-900') && classes.includes('border-neutral-500');
+      });
+
+      console.log('Found holes:', holes.length);
+
+      const newCables = [];
+
+      // Connect 30 random holes with nice cables
+      if (holes.length > 30) {
+        const getPos = (hole: Element) => getRelativePosition(hole, container, rect);
+
+        // Cable colors
+        const colors = ['#cc3333', '#3366cc', '#33cc66', '#dd8833', '#d4af37', '#9933cc', '#cc3399', '#33cccc'];
+
+        // Generate 30 random cables
+        const usedPairs = new Set<string>();
+        let attempts = 0;
+
+        while (newCables.length < 30 && attempts < 150) {
+          attempts++;
+
+          // Pick two random holes
+          const idx1 = Math.floor(Math.random() * holes.length);
+          const idx2 = Math.floor(Math.random() * holes.length);
+
+          // Make sure they're different and we haven't used this pair
+          if (idx1 === idx2) continue;
+          const pairKey = idx1 < idx2 ? `${idx1}-${idx2}` : `${idx2}-${idx1}`;
+          if (usedPairs.has(pairKey)) continue;
+
+          usedPairs.add(pairKey);
+
+          const p1 = getPos(holes[idx1]);
+          const p2 = getPos(holes[idx2]);
+
+          if (p1 && p2) {
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const droop = 150 + Math.random() * 100; // Random droop between 150-250
+            newCables.push({ start: p1, end: p2, color, droop });
+          }
+        }
+      }
+
+      console.log('Setting cables:', newCables);
+      setCables(newCables);
+    }, 100);
+  }, []);
+
+  // Helper function
+  const getRelativePosition = (element: Element, container: HTMLDivElement, containerRect: DOMRect) => {
+    const elemRect = element.getBoundingClientRect();
+    return {
+      x: elemRect.left - containerRect.left + elemRect.width / 2 - 5,
+      y: elemRect.top - containerRect.top + elemRect.height / 2 - 4
+    };
+  };
 
   return (
     <div className="min-h-screen bg-neutral-800 flex items-center justify-center p-8">
       {/* Minivac frame */}
-      <div className="bg-[#1a1a1a] p-3 border-[5px] border-[#84B6C7] select-none">
+      <div ref={containerRef} className="relative bg-[#1a1a1a] p-3 border-[5px] border-[#84B6C7] select-none">
         <div className="flex gap-0">
           {/* LEFT PANEL - 6 columns */}
           <div className="flex flex-col gap-3">
@@ -376,6 +450,19 @@ function App() {
             <div className="text-white font-mono text-base tracking-wider text-center pb-2">DECIMAL INPUT-OUTPUT</div>
           </div>
         </div>
+
+        {/* Cables connecting actual holes - positioned dynamically */}
+        {cables.map((cable, idx) => (
+          <Cable
+            key={idx}
+            startX={cable.start.x}
+            startY={cable.start.y}
+            endX={cable.end.x}
+            endY={cable.end.y}
+            color={cable.color}
+            droop={cable.droop}
+          />
+        ))}
       </div>
     </div>
   );
