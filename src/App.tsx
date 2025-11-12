@@ -39,21 +39,32 @@ function App() {
 
   // Track if we're currently loading from URL to prevent update loops
   const isLoadingFromUrl = React.useRef(false);
+  // Track if we've attempted initial URL load (don't clear URL before this)
+  const hasAttemptedUrlLoad = React.useRef(false);
 
-  // Load circuit from URL when panel is ready or hash changes
+  // Load circuit from URL when panel is ready
   React.useEffect(() => {
+    console.log('[URL Loading Effect] Running, isPanelReady:', isPanelReady);
+    console.log('[URL Loading Effect] window.location.href:', window.location.href);
+    console.log('[URL Loading Effect] window.location.hash:', window.location.hash);
+
     if (!isPanelReady) {
       console.log('[URL Loading] Panel not ready yet');
       return;
     }
 
+    console.log('[URL Loading] Panel is ready, getting circuit from URL...');
     const connections = getCircuitFromUrl();
+
+    // Mark that we've attempted to load from URL (even if no connections found)
+    hasAttemptedUrlLoad.current = true;
 
     if (connections.length === 0) {
       console.log('[URL Loading] No connections in URL');
       return;
     }
 
+    console.log('[URL Loading] Found', connections.length, 'connections, loading...');
     if (containerRef.current) {
       isLoadingFromUrl.current = true;
       cableManagement.loadCircuitFromNotation(connections);
@@ -65,7 +76,7 @@ function App() {
       console.warn('[URL Loading] Container not ready for circuit loading');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPanelReady, window.location.hash]);
+  }, [isPanelReady]);
 
   // Listen for hash changes (when user manually changes URL)
   React.useEffect(() => {
@@ -90,6 +101,14 @@ function App() {
   React.useEffect(() => {
     // Skip update if we're currently loading from URL
     if (isLoadingFromUrl.current) {
+      console.log('[URL Update] Skipping update - currently loading from URL');
+      return;
+    }
+
+    // Skip update if we haven't attempted initial URL load yet
+    // (prevents clearing hash before we've had a chance to load it)
+    if (!hasAttemptedUrlLoad.current) {
+      console.log('[URL Update] Skipping update - haven\'t attempted URL load yet');
       return;
     }
 

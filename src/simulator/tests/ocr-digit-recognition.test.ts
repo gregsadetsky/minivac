@@ -22,14 +22,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { MinivacSimulator } from '../minivac-simulator';
+import { ocrDigitRecognitionCircuit } from '../../circuits/ocr-digit-recognition';
 
-const baseCircuit = [
-  '1C/2C', '3C/4C', '4H/5J', '6H/6-', '1F/M9t', '3F/M6t', '4L/5K', '6X/M10',
-  '1G/6com', '3G/D6', '5C/6C', '6X/D17', '1H/4K', '3H/4N', '5F/M4t', '6Y/6+',
-  '1J/D0', '3J/D9', '5G/D5', '6com/D4', '2C/3C', '3K/D8', '5H/6G', 'M10/M11',
-  '2F/M5t', '3L/4J', '5L/6J', 'D16/D19', '2G/D2', '3N/D7', '5N/D1', 'D18/M-',
-  '2H/4G', '4C/5C', '6C/6-', '2J/D3', '4F/M8t', '6F/M7t',
-];
+const baseCircuit = ocrDigitRecognitionCircuit.circuit;
 
 // Digit patterns - which matrix terminals to connect to M10
 const digitPatterns = [
