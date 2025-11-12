@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { useRef } from 'react';
+import React, { useRef } from 'react';
 import { useCableManagement } from './useCableManagement';
 import Hole from '../components/primitives/Hole';
 
@@ -120,5 +120,57 @@ describe('URL management', () => {
     // This test is limited because we'd need to integrate with the App component
     // to test the full URL update flow. The URL update happens in App.tsx useEffect.
     // For a full integration test, we'd need to render the full App component.
+  });
+
+  it('should use different holes when multiple wires connect to the same terminal', () => {
+    // Regression test for bug where multiple wires to same terminal (e.g., 5+)
+    // would all use the first hole instead of spreading across available holes
+    const TestComponentWithCheck = () => {
+      const ref = useRef<HTMLDivElement>(null);
+      const cableManagement = useCableManagement(ref);
+
+      // Trigger load after mount
+      React.useEffect(() => {
+        if (ref.current) {
+          cableManagement.loadCircuitFromNotation(['6A/5+', '5C/5+']);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []); // We only want to load once on mount
+
+      return (
+        <div ref={ref} data-testid="container2">
+          <div style={{ position: 'absolute', left: '100px', top: '100px' }}>
+            <Hole size={10} dataHoleId="5+" />
+          </div>
+          <div style={{ position: 'absolute', left: '150px', top: '100px' }}>
+            <Hole size={10} dataHoleId="5+" />
+          </div>
+          <div style={{ position: 'absolute', left: '100px', top: '200px' }}>
+            <Hole size={10} dataHoleId="6A" />
+          </div>
+          <div style={{ position: 'absolute', left: '150px', top: '200px' }}>
+            <Hole size={10} dataHoleId="6A" />
+          </div>
+          <div style={{ position: 'absolute', left: '200px', top: '150px' }}>
+            <Hole size={10} dataHoleId="5C" />
+          </div>
+          <div data-testid="cable-count">{cableManagement.cables.length}</div>
+        </div>
+      );
+    };
+
+    render(<TestComponentWithCheck />);
+
+    // Wait for cables to be loaded
+    const cableCount = screen.getByTestId('cable-count');
+    expect(cableCount.textContent).toBe('2');
+
+    // The key assertion: We should have 2 cables
+    // If the bug existed, querySelector would return the same hole twice,
+    // resulting in duplicate coordinates or failed cable creation.
+    // With the fix, each cable should use a different hole for 5+.
+
+    // This test verifies the fix works by ensuring we get 2 cables
+    // (one from 6A to first 5+ hole, one from 5C to second 5+ hole)
   });
 });

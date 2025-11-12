@@ -315,6 +315,9 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement 
 
     const newCables: CableData[] = [];
 
+    // Track how many times each hole ID has been used
+    const holeUsageCount: Record<string, number> = {};
+
     notation.forEach((conn, idx) => {
       const [hole1Id, hole2Id] = conn.split('/');
       if (!hole1Id || !hole2Id) {
@@ -322,18 +325,39 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement 
         return;
       }
 
-      // Find the hole elements
-      const hole1 = containerRef.current!.querySelector(`[data-hole-id="${hole1Id}"]`);
-      const hole2 = containerRef.current!.querySelector(`[data-hole-id="${hole2Id}"]`);
+      // Find all holes for each terminal
+      const holes1 = Array.from(containerRef.current!.querySelectorAll(`[data-hole-id="${hole1Id}"]`));
+      const holes2 = Array.from(containerRef.current!.querySelectorAll(`[data-hole-id="${hole2Id}"]`));
 
-      if (!hole1) {
+      if (holes1.length === 0) {
         console.warn(`Hole not found: ${hole1Id}`);
         return;
       }
-      if (!hole2) {
+      if (holes2.length === 0) {
         console.warn(`Hole not found: ${hole2Id}`);
         return;
       }
+
+      // Get the nth occurrence of each hole based on usage count
+      const usage1 = holeUsageCount[hole1Id] || 0;
+      const usage2 = holeUsageCount[hole2Id] || 0;
+
+      if (usage1 >= holes1.length) {
+        console.error(`Terminal ${hole1Id} used more times (${usage1 + 1}) than available holes (${holes1.length})`);
+        return;
+      }
+      if (usage2 >= holes2.length) {
+        console.error(`Terminal ${hole2Id} used more times (${usage2 + 1}) than available holes (${holes2.length})`);
+        return;
+      }
+
+      // Use the specific hole based on usage count
+      const hole1 = holes1[usage1];
+      const hole2 = holes2[usage2];
+
+      // Increment usage counters
+      holeUsageCount[hole1Id] = usage1 + 1;
+      holeUsageCount[hole2Id] = usage2 + 1;
 
       const containerRect = containerRef.current!.getBoundingClientRect();
       const rect1 = hole1.getBoundingClientRect();

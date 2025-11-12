@@ -21,7 +21,7 @@ import { morseTransmitterCircuit } from '../../circuits/morse-transmitter';
 describe('MinIVAC Simulator - Morse Code Transmitter', () => {
   const circuit = morseTransmitterCircuit.circuit;
 
-  it.skip('should have break-before-make gaps between symbols', { timeout: 5000 }, () => {
+  it('should have break-before-make gaps between symbols', { timeout: 10000 }, () => {
     // This test verifies that when the motor moves between positions,
     // there's a brief moment where no contact is made (break-before-make).
     // This is critical for morse code - without it, consecutive dots or dashes
@@ -36,7 +36,7 @@ describe('MinIVAC Simulator - Morse Code Transmitter', () => {
     // Sample at high frequency to catch the brief OFF periods
     const samples: Array<{ pos: number; L5: boolean; L6: boolean; angle: number }> = [];
     const stepDelay = 10; // Sample every 10ms (much faster than position changes)
-    const maxSamples = 800; // Increased to catch more of the transmission
+    const maxSamples = 300; // Just need enough to find a few gaps
 
     for (let i = 0; i < maxSamples; i++) {
       const state = minivac.getState();
@@ -59,14 +59,6 @@ describe('MinIVAC Simulator - Morse Code Transmitter', () => {
 
     minivac.releaseButton(6);
 
-    // Debug: print samples to understand what's happening
-    console.log('\n=== Morse Code Samples (first 50) ===');
-    for (let i = 0; i < Math.min(50, samples.length); i++) {
-      const s = samples[i];
-      const light = s.L5 ? 'DASH' : s.L6 ? 'DOT' : 'OFF';
-      console.log(`${i}: pos=${s.pos} angle=${s.angle.toFixed(2)}° ${light}`);
-    }
-
     // Find sequences where we transition from one position to the next
     // and verify there's a gap where both lights are OFF
     let foundBreakGap = false;
@@ -84,12 +76,9 @@ describe('MinIVAC Simulator - Morse Code Transmitter', () => {
       if (prevLightOn && currLightOff && nextLightOn) {
         foundBreakGap = true;
         gapCount++;
-        console.log(`\nFound gap at sample ${i}: pos ${prev.pos}→${curr.pos}→${next.pos}`);
         if (gapCount >= 3) break; // Found enough examples
       }
     }
-
-    console.log(`\nTotal gaps found: ${gapCount}`);
 
     // Should find at least one break gap in the morse transmission
     expect(foundBreakGap).toBe(true);

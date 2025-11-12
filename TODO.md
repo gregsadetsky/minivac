@@ -19,7 +19,8 @@
 - have links/show ads from minivac era? maybe separate sub-about page?
 - present/write narrative? why do i care? why is this interesting?
 - ability to have mp3 related to relays or light? for morse example (short/long beep) and for musical examples using the relays? can example labels+sounds be something "on top" of the react app state and that can be easily cleared...? how do you clear that example? can you still change circuits when an example like that is loaded?
-- abilith to slow down or speed up the motor wheel..?
+- ability to slow down or speed up the motor wheel..?
+- retest automatic toll to see if it passes (with break before make?)
 
 
 ### no
