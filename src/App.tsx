@@ -181,7 +181,7 @@ function App() {
       previousRelayStates.current = [...newState.relays];
 
       setSimState(newState);
-    }, 50); // Poll every 50ms
+    }, 10); // Poll every 10ms (fast enough to catch ~21ms break-before-make gaps)
 
     return () => clearInterval(interval);
   }, [simulator, simState, isPowerOn]);

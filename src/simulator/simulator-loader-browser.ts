@@ -9,7 +9,6 @@ declare global {
       ckt_alert2: string;
     };
     cktsim: CircuitSimulator;
-    alert: (msg: string) => void;
   }
 }
 

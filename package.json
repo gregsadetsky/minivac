@@ -1,15 +1,16 @@
 {
-  "name": "ui-repo",
+  "name": "minivac-601-simulator",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
     "test": "vitest",
-    "check": "npm run lint && npm run test -- --run"
+    "check": "npm run lint && npm run typecheck && npm run test -- --run"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
@@ -23,6 +24,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/howler": "^2.2.12",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",

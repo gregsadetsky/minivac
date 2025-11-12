@@ -88,7 +88,7 @@ export class MinivacSimulator {
   private motorRunning: boolean = false;
   private motorDirection: number = 1;
   private lastMotorUpdateTime: number | null = null;
-  private lastResults: Record<string, number> | null = null;
+  private lastMotorContactState: boolean = true;  // Track if motor arm was making contact
   public verbose: boolean = false;
 
   constructor(circuitNotation: string[], verbose = false) {
@@ -200,10 +200,13 @@ export class MinivacSimulator {
     builder.addCurrentProbe(junction, motorProbe, 'MOTOR_PROBE');
     builder.addResistor(motorProbe, d18, MOTOR_RESISTANCE, 'MOTOR');
 
-    // Motor rotary selector
-    const d16 = 'Motor_D16';
-    const currentContact = `Motor_D${this.motorPosition}`;
-    builder.addWire(d16, currentContact, 'MOTOR_SELECTOR_ARM');
+    // Motor rotary selector (with break-before-make)
+    // Only connect when motor arm is making contact (not in dead zone)
+    if (this._isMotorMakingContact()) {
+      const d16 = 'Motor_D16';
+      const currentContact = `Motor_D${this.motorPosition}`;
+      builder.addWire(d16, currentContact, 'MOTOR_SELECTOR_ARM');
+    }
 
     // Add user-defined wires
     for (let i = 0; i < this.wires.length; i++) {
@@ -303,7 +306,6 @@ export class MinivacSimulator {
 
         if (!wasRunning) {
           this.lastMotorUpdateTime = Date.now();
-          this.motorAccumulatedTime = 0;
         }
 
         if (this.verbose) {
@@ -316,10 +318,7 @@ export class MinivacSimulator {
         }
         this.motorRunning = false;
         this.lastMotorUpdateTime = null;
-        this.motorAccumulatedTime = 0;
       }
-
-      this.lastResults = results;
 
       if (!changed) {
         if (this.verbose) console.log('  Relay states stable!');
@@ -378,6 +377,20 @@ export class MinivacSimulator {
     this.motorPosition = Math.floor(adjustedAngle / 22.5) % 16;
   }
 
+  // Check if motor arm is making contact (break-before-make logic)
+  // Each position occupies 20° of contact out of 22.5° total per position
+  // This leaves ~2.5° dead zones between positions where no contact is made
+  private _isMotorMakingContact(): boolean {
+    const normalizedAngle = ((this.motorAngle % 360) + 360) % 360;
+    // Each position is centered at multiples of 22.5° (0°, 22.5°, 45°, etc.)
+    // Contact is made for 20° (from -10° to +10° relative to center)
+    // No contact for remaining 2.5° on each side
+    const adjustedAngle = (normalizedAngle + 11.25) % 360;
+    const withinSection = adjustedAngle % 22.5;
+    // Dead zone: first 1.25° and last 1.25° of each 22.5° section
+    return withinSection >= 1.25 && withinSection <= 21.25;
+  }
+
   private _updateMotorPosition(): boolean {
     if (!this.motorRunning || !this.lastMotorUpdateTime) {
       return false;
@@ -394,10 +407,13 @@ export class MinivacSimulator {
     this.motorAngle += angleDelta;
 
     const oldPosition = this.motorPosition;
+    const oldContactState = this.lastMotorContactState;
     this._calculatePositionFromAngle();
+    const newContactState = this._isMotorMakingContact();
+    this.lastMotorContactState = newContactState;
 
-    // Return true if position changed (circuit needs resimulation)
-    return oldPosition !== this.motorPosition;
+    // Return true if position OR contact state changed (circuit needs resimulation)
+    return oldPosition !== this.motorPosition || oldContactState !== newContactState;
   }
 
   getState(): MinivacState {
@@ -444,10 +460,16 @@ export class MinivacSimulator {
     if (this.verbose) this._printState();
   }
 
+  // Force resimulation (for testing - doesn't update motor based on time)
+  resimulate(): void {
+    this._simulate();
+  }
+
   // Update motor angle and recalculate position
   // Use this instead of directly setting motorAngle to ensure position stays in sync
   updateMotorAngle(angle: number): void {
     this.motorAngle = angle;
     this._calculatePositionFromAngle();
+    this.lastMotorContactState = this._isMotorMakingContact();
   }
 }

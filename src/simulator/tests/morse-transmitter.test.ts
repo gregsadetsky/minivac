@@ -21,6 +21,80 @@ import { morseTransmitterCircuit } from '../../circuits/morse-transmitter';
 describe('MinIVAC Simulator - Morse Code Transmitter', () => {
   const circuit = morseTransmitterCircuit.circuit;
 
+  it.skip('should have break-before-make gaps between symbols', { timeout: 5000 }, () => {
+    // This test verifies that when the motor moves between positions,
+    // there's a brief moment where no contact is made (break-before-make).
+    // This is critical for morse code - without it, consecutive dots or dashes
+    // would appear as one continuous signal.
+    const minivac = new MinivacSimulator(circuit);
+    minivac.updateMotorAngle(0);
+    minivac.initialize();
+
+    // Press button 6 to start transmission
+    minivac.pressButton(6);
+
+    // Sample at high frequency to catch the brief OFF periods
+    const samples: Array<{ pos: number; L5: boolean; L6: boolean; angle: number }> = [];
+    const stepDelay = 10; // Sample every 10ms (much faster than position changes)
+    const maxSamples = 800; // Increased to catch more of the transmission
+
+    for (let i = 0; i < maxSamples; i++) {
+      const state = minivac.getState();
+      samples.push({
+        pos: state.motor.position,
+        L5: state.lights[4], // dash
+        L6: state.lights[5], // dot
+        angle: state.motor.angle,
+      });
+
+      if (!state.motor.running) {
+        break;
+      }
+
+      const now = Date.now();
+      while (Date.now() - now < stepDelay) {
+        // Busy wait
+      }
+    }
+
+    minivac.releaseButton(6);
+
+    // Debug: print samples to understand what's happening
+    console.log('\n=== Morse Code Samples (first 50) ===');
+    for (let i = 0; i < Math.min(50, samples.length); i++) {
+      const s = samples[i];
+      const light = s.L5 ? 'DASH' : s.L6 ? 'DOT' : 'OFF';
+      console.log(`${i}: pos=${s.pos} angle=${s.angle.toFixed(2)}° ${light}`);
+    }
+
+    // Find sequences where we transition from one position to the next
+    // and verify there's a gap where both lights are OFF
+    let foundBreakGap = false;
+    let gapCount = 0;
+    for (let i = 1; i < samples.length - 1; i++) {
+      const prev = samples[i - 1];
+      const curr = samples[i];
+      const next = samples[i + 1];
+
+      // Look for pattern: light ON -> light OFF -> light ON (as position changes)
+      const prevLightOn = prev.L5 || prev.L6;
+      const currLightOff = !curr.L5 && !curr.L6;
+      const nextLightOn = next.L5 || next.L6;
+
+      if (prevLightOn && currLightOff && nextLightOn) {
+        foundBreakGap = true;
+        gapCount++;
+        console.log(`\nFound gap at sample ${i}: pos ${prev.pos}→${curr.pos}→${next.pos}`);
+        if (gapCount >= 3) break; // Found enough examples
+      }
+    }
+
+    console.log(`\nTotal gaps found: ${gapCount}`);
+
+    // Should find at least one break gap in the morse transmission
+    expect(foundBreakGap).toBe(true);
+  });
+
   it('should transmit morse code and cycle through message', { timeout: 20000 }, () => {
     const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 0;

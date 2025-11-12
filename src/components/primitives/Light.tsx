@@ -43,7 +43,7 @@ export default function Light({
 
       {/* The light bulb */}
       <div
-        className="absolute rounded-full transition-all duration-200"
+        className="absolute rounded-full"
         style={{
           top: '10px',
           left: '10px',
@@ -76,7 +76,7 @@ export default function Light({
       >
         {/* Glass highlight */}
         <div
-          className="absolute rounded-full transition-all duration-200"
+          className="absolute rounded-full"
           style={{
             top: '4px',
             right: '6px',

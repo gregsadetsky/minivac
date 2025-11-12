@@ -18,13 +18,11 @@ export interface Position {
 /**
  * Calculate relative position of an element within a container
  * @param element - The DOM element to position
- * @param container - The container element
  * @param containerRect - Pre-calculated container bounding rect (for performance)
  * @returns Position relative to container
  */
 export function getRelativePosition(
   element: Element,
-  container: HTMLDivElement,
   containerRect: DOMRect
 ): Position {
   const elemRect = element.getBoundingClientRect();
@@ -107,8 +105,8 @@ export function generateRandomCables(
 
     usedPairs.add(pairKey);
 
-    const p1 = getRelativePosition(holes[idx1], container, rect);
-    const p2 = getRelativePosition(holes[idx2], container, rect);
+    const p1 = getRelativePosition(holes[idx1], rect);
+    const p2 = getRelativePosition(holes[idx2], rect);
 
     if (p1 && p2) {
       const color = colors[Math.floor(Math.random() * colors.length)];
@@ -176,8 +174,8 @@ export function generateCablesFromCircuit(
     }
 
     // Get positions
-    const p1 = getRelativePosition(holes1[usage1], container, rect);
-    const p2 = getRelativePosition(holes2[usage2], container, rect);
+    const p1 = getRelativePosition(holes1[usage1], rect);
+    const p2 = getRelativePosition(holes2[usage2], rect);
 
     // Increment usage counters
     holeUsageCount[term1] = usage1 + 1;

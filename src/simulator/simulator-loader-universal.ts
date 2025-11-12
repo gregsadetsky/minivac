@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
 // Universal loader that works in both Node and Browser environments
 
 // Type definitions

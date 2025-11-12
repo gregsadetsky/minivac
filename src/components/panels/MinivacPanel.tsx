@@ -17,7 +17,7 @@ import { type CableData } from '../../utils/wire-utils';
 import { MinivacSimulator, type MinivacState } from '../../simulator/minivac-simulator';
 
 interface MinivacPanelProps {
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
   onPanelReady: () => void;
   simState: MinivacState | null;
   simulator: MinivacSimulator | null;
