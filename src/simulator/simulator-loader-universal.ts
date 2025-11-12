@@ -33,18 +33,22 @@ if (isBrowser && !window.alert.toString().includes('alerts.push')) {
 export function loadSimulator(): CircuitSimulator {
   // Browser environment - access globally loaded cktsim
   if (isBrowser) {
-    if (!(window as any).cktsim) {
+    const globalWindow = window as typeof window & { cktsim?: CircuitSimulator };
+    if (!globalWindow.cktsim) {
       throw new Error('Circuit simulator not loaded. Make sure cktsimvsp_sn.js is loaded via script tag.');
     }
-    return (window as any).cktsim;
+    return globalWindow.cktsim;
   }
 
   // Node environment - load via fs
   // Wrapped in try-catch for bundler compatibility
   try {
     // These will only be available in Node environment
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const vm = require('vm');
 
     // Path to cktsimvsp_sn.js in public directory

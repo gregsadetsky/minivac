@@ -14,19 +14,21 @@ import RotaryKnob from '../primitives/RotaryKnob';
 import SlideSwitch from '../primitives/SlideSwitch';
 import SlideSwitchVertical from '../primitives/SlideSwitchVertical';
 import { type CableData } from '../../utils/wire-utils';
-import { MinIVACSimulator, type MinivacState } from '../../simulator/minivac-simulator';
+import { MinivacSimulator, type MinivacState } from '../../simulator/minivac-simulator';
 
 interface MinivacPanelProps {
   containerRef: React.RefObject<HTMLDivElement>;
+  onPanelReady: () => void;
   simState: MinivacState | null;
-  simulator: MinIVACSimulator | null;
-  setSimulator: (sim: MinIVACSimulator) => void;
+  simulator: MinivacSimulator | null;
+  setSimulator: (sim: MinivacSimulator) => void;
   setSimState: (state: MinivacState) => void;
   isPowerOn: boolean;
   setIsPowerOn: (on: boolean) => void;
   slideStates: boolean[];
   setSlideStates: React.Dispatch<React.SetStateAction<boolean[]>>;
   previousRelayStatesRef: React.MutableRefObject<boolean[]>;
+  hasShortCircuit: boolean;
   cables: CableData[];
   isDraggingWire: boolean;
   dragStartPos: { x: number; y: number } | null;
@@ -42,6 +44,7 @@ interface MinivacPanelProps {
 
 export default function MinivacPanel({
   containerRef,
+  onPanelReady,
   simState,
   simulator,
   setSimulator,
@@ -51,6 +54,7 @@ export default function MinivacPanel({
   slideStates,
   setSlideStates,
   previousRelayStatesRef,
+  hasShortCircuit,
   cables,
   isDraggingWire,
   dragStartPos,
@@ -64,6 +68,11 @@ export default function MinivacPanel({
   previewCableRef
 }: MinivacPanelProps) {
   const columns = [1, 2, 3, 4, 5, 6];
+
+  // Signal when panel is mounted and ready
+  React.useLayoutEffect(() => {
+    onPanelReady();
+  }, [onPanelReady]);
 
   return (
     <div className="min-h-screen bg-neutral-800 overflow-auto p-8">
@@ -410,6 +419,7 @@ export default function MinivacPanel({
                 <div style={{ height: '2px' }} />
                 <SlideSwitchVertical
                   isBottom={!isPowerOn}
+                  disabled={hasShortCircuit}
                   onChange={(isBottom) => {
                     setIsPowerOn(!isBottom);
                     if (!isBottom) {
@@ -420,7 +430,7 @@ export default function MinivacPanel({
                       const circuitNotation = cables
                         .filter(cable => cable.holeIds && cable.holeIds.length === 2)
                         .map(cable => `${cable.holeIds![0]}/${cable.holeIds![1]}`);
-                      const minivac = new MinIVACSimulator(circuitNotation);
+                      const minivac = new MinivacSimulator(circuitNotation);
 
                       // Restore motor angle BEFORE initialization so the circuit simulates with correct position
                       minivac.updateMotorAngle(oldMotorAngle);

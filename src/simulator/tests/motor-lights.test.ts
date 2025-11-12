@@ -1,10 +1,9 @@
 /**
  * Test motor with rotating light sequence
- * Circuit: 6+/D16 D2/6A 6-/6B D1/5A 5B/6B 6+/5Y 5X/D17 5-/D18 6-/6Y 6X/D19
  */
 
-import { describe, it, expect } from 'vitest';
-import { MinIVACSimulator } from '../minivac-simulator';
+import { describe, expect, it } from 'vitest';
+import { MinivacSimulator } from '../minivac-simulator';
 
 describe('MinIVAC Simulator - Motor Lights', () => {
   const circuit = [
@@ -21,7 +20,7 @@ describe('MinIVAC Simulator - Motor Lights', () => {
   ];
 
   it('should initialize with motor stopped and lights off', () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.initialize();
 
     const state = minivac.getState();
@@ -31,7 +30,7 @@ describe('MinIVAC Simulator - Motor Lights', () => {
   });
 
   it('should run motor and light sequence when button 5 is pressed', async () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.initialize();
 
     // Press button 5 - motor should start
@@ -81,7 +80,7 @@ describe('MinIVAC Simulator - Motor Lights', () => {
   });
 
   it('should stop motor when button 6 is pressed while button 5 is held', () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.initialize();
 
     // Press button 5 - motor starts

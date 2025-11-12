@@ -1,12 +1,15 @@
 import React from 'react';
 import { Howl } from 'howler';
-import { MinIVACSimulator, type MinivacState } from './simulator/minivac-simulator';
+import { MinivacSimulator, type MinivacState } from './simulator/minivac-simulator';
 import { useCableManagement } from './hooks/useCableManagement';
 import MinivacPanel from './components/panels/MinivacPanel';
+import Sidebar from './components/Sidebar';
+import LoadCircuitDialog from './components/dialogs/LoadCircuitDialog';
+import { updateUrlWithCircuit, getCircuitFromUrl } from './utils/circuit-url';
 
 function App() {
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const [simulator, setSimulator] = React.useState<MinIVACSimulator | null>(null);
+  const [simulator, setSimulator] = React.useState<MinivacSimulator | null>(null);
   const [simState, setSimState] = React.useState<MinivacState | null>(null);
   const previousRelayStates = React.useRef<boolean[]>([]);
   const relayClickSound = React.useRef<Howl | null>(null);
@@ -16,6 +19,12 @@ function App() {
 
   // Slide switch states (false = left, true = right)
   const [slideStates, setSlideStates] = React.useState<boolean[]>([false, false, false, false, false, false]);
+
+  // Load circuit dialog state
+  const [showLoadDialog, setShowLoadDialog] = React.useState(false);
+
+  // Track when panel is ready for circuit loading
+  const [isPanelReady, setIsPanelReady] = React.useState(false);
 
   // Use cable management hook
   const cableManagement = useCableManagement(containerRef);
@@ -28,6 +37,66 @@ function App() {
     });
   }, []);
 
+  // Track if we're currently loading from URL to prevent update loops
+  const isLoadingFromUrl = React.useRef(false);
+
+  // Load circuit from URL when panel is ready or hash changes
+  React.useEffect(() => {
+    if (!isPanelReady) {
+      console.log('[URL Loading] Panel not ready yet');
+      return;
+    }
+
+    const connections = getCircuitFromUrl();
+
+    if (connections.length === 0) {
+      console.log('[URL Loading] No connections in URL');
+      return;
+    }
+
+    if (containerRef.current) {
+      isLoadingFromUrl.current = true;
+      cableManagement.loadCircuitFromNotation(connections);
+      // Reset flag after a tick to allow URL update
+      setTimeout(() => {
+        isLoadingFromUrl.current = false;
+      }, 0);
+    } else {
+      console.warn('[URL Loading] Container not ready for circuit loading');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPanelReady, window.location.hash]);
+
+  // Listen for hash changes (when user manually changes URL)
+  React.useEffect(() => {
+    const handleHashChange = () => {
+      console.log('[Hash Change] URL hash changed, reloading circuit');
+      const connections = getCircuitFromUrl();
+      if (connections.length > 0 && containerRef.current) {
+        isLoadingFromUrl.current = true;
+        cableManagement.loadCircuitFromNotation(connections);
+        setTimeout(() => {
+          isLoadingFromUrl.current = false;
+        }, 0);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Update URL whenever cables change (but not while loading from URL)
+  React.useEffect(() => {
+    // Skip update if we're currently loading from URL
+    if (isLoadingFromUrl.current) {
+      return;
+    }
+
+    console.log('[URL Update] Updating URL with', cableManagement.cables.length, 'cables');
+    updateUrlWithCircuit(cableManagement.cables);
+  }, [cableManagement.cables]);
+
   // Recreate simulator whenever cables change (including initial mount)
   React.useEffect(() => {
     // Convert cables to circuit notation
@@ -39,7 +108,7 @@ function App() {
     const oldMotorAngle = simulator?.motorAngle || 0;
 
     // Create new simulator with updated circuit
-    const minivac = new MinIVACSimulator(circuitNotation);
+    const minivac = new MinivacSimulator(circuitNotation);
 
     // Restore motor angle BEFORE initialization so the circuit simulates with correct position
     minivac.updateMotorAngle(oldMotorAngle);
@@ -74,6 +143,13 @@ function App() {
     const interval = setInterval(() => {
       const newState = simulator.getState();
 
+      // Check for short circuit and auto power-off
+      if (newState.alerts && newState.alerts.some(alert => alert.includes('SHORT CIRCUIT'))) {
+        setIsPowerOn(false);
+        setSimState(newState);
+        return; // Stop polling
+      }
+
       // Detect relay state changes and play sound
       if (previousRelayStates.current.length > 0) {
         for (let i = 0; i < newState.relays.length; i++) {
@@ -91,30 +167,52 @@ function App() {
     return () => clearInterval(interval);
   }, [simulator, simState, isPowerOn]);
 
+  const handleLoadCircuit = (circuit?: string[]) => {
+    if (circuit) {
+      // Load sample circuit directly
+      cableManagement.loadCircuitFromNotation(circuit);
+    } else {
+      // Show manual load dialog
+      setShowLoadDialog(true);
+    }
+  };
+
   return (
-    <MinivacPanel
-      containerRef={containerRef}
-      simState={simState}
-      simulator={simulator}
-      setSimulator={setSimulator}
-      setSimState={setSimState}
-      isPowerOn={isPowerOn}
-      setIsPowerOn={setIsPowerOn}
-      slideStates={slideStates}
-      setSlideStates={setSlideStates}
-      previousRelayStatesRef={previousRelayStates}
-      cables={cableManagement.cables}
-      isDraggingWire={cableManagement.isDraggingWire}
-      dragStartPos={cableManagement.dragStartPos}
-      dragCurrentPos={cableManagement.dragCurrentPos}
-      cableToDelete={cableManagement.cableToDelete}
-      handleMouseMove={cableManagement.handleMouseMove}
-      handleMouseUp={cableManagement.handleMouseUp}
-      handleCableClick={cableManagement.handleCableClick}
-      confirmDeleteCable={cableManagement.confirmDeleteCable}
-      cancelDeleteCable={cableManagement.cancelDeleteCable}
-      previewCableRef={cableManagement.previewCableRef}
-    />
+    <>
+      <Sidebar onLoadCircuit={handleLoadCircuit} />
+
+      <LoadCircuitDialog
+        isOpen={showLoadDialog}
+        onClose={() => setShowLoadDialog(false)}
+        onLoadCircuit={(notation) => cableManagement.loadCircuitFromNotation(notation)}
+      />
+
+      <MinivacPanel
+        containerRef={containerRef}
+        onPanelReady={() => setIsPanelReady(true)}
+        simState={simState}
+        simulator={simulator}
+        setSimulator={setSimulator}
+        setSimState={setSimState}
+        isPowerOn={isPowerOn}
+        setIsPowerOn={setIsPowerOn}
+        slideStates={slideStates}
+        setSlideStates={setSlideStates}
+        previousRelayStatesRef={previousRelayStates}
+        hasShortCircuit={simState?.alerts?.some(alert => alert.includes('SHORT CIRCUIT')) || false}
+        cables={cableManagement.cables}
+        isDraggingWire={cableManagement.isDraggingWire}
+        dragStartPos={cableManagement.dragStartPos}
+        dragCurrentPos={cableManagement.dragCurrentPos}
+        cableToDelete={cableManagement.cableToDelete}
+        handleMouseMove={cableManagement.handleMouseMove}
+        handleMouseUp={cableManagement.handleMouseUp}
+        handleCableClick={cableManagement.handleCableClick}
+        confirmDeleteCable={cableManagement.confirmDeleteCable}
+        cancelDeleteCable={cableManagement.cancelDeleteCable}
+        previewCableRef={cableManagement.previewCableRef}
+      />
+    </>
   );
 }
 

@@ -51,6 +51,7 @@ export function loadSimulator(): CircuitSimulator {
   const simulatorCode = readFileSync(simulatorPath, 'utf8');
 
   // Create a sandbox with all necessary globals
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sandbox: Record<string, any> = {
     console,
     Math,

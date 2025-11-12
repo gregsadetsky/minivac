@@ -5,13 +5,15 @@ interface SlideSwitchVerticalProps {
   height?: number;
   isBottom?: boolean;
   onChange?: (isBottom: boolean) => void;
+  disabled?: boolean;
 }
 
 export default function SlideSwitchVertical({
   width = 24,
   height = 50,
   isBottom: controlledIsBottom,
-  onChange
+  onChange,
+  disabled = false
 }: SlideSwitchVerticalProps) {
   const [internalIsBottom, setInternalIsBottom] = useState(false);
 
@@ -19,6 +21,7 @@ export default function SlideSwitchVertical({
   const isBottom = controlledIsBottom !== undefined ? controlledIsBottom : internalIsBottom;
 
   const handleClick = () => {
+    if (disabled) return;
     const newState = !isBottom;
     if (controlledIsBottom === undefined) {
       setInternalIsBottom(newState);
@@ -32,7 +35,7 @@ export default function SlideSwitchVertical({
 
   return (
     <div
-      className="relative cursor-pointer select-none"
+      className={`relative select-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
       style={{ width: `${width}px`, height: `${height}px` }}
       onClick={handleClick}
     >

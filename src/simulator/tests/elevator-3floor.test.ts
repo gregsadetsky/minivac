@@ -1,10 +1,5 @@
 /**
  * Test three-floor elevator circuit
- * Circuit: 1A/1E 2B/2— 3F/3G 5F/6C 1B/1- 2C/3C 3G/3X 5G/5N 1C/2C 2E/D7 3J/4E
- *          5J/5K 1E/D1 2F/2G 3Y/4J 5J/D17 1F/1G 2G/2X 4C/5F 5L/5— 1G/1X 2J/3H
- *          4F/4+ 5N/D18 1H/1+ 2X/6H 4G/4H 6C/6— 1H/1L 2Y/3Y 4H/4+ 6F/D12 1J/2H
- *          3A/3E 4L/D19 D0/D1 1K/5E 3B/3— 4N/D18 D6/D7 1Y/2Y 3C/4C 5C/5G D12/D13
- *          2A/2E 3E/D13 5E/6G D16/M—
  *
  * Three-floor elevator:
  * - Floor 1: D0-D1 (Light 1 ON)
@@ -16,16 +11,16 @@
  * - Buttons interlock during motion
  */
 
-import { describe, it, expect } from 'vitest';
-import { MinIVACSimulator } from '../minivac-simulator';
+import { describe, expect, it } from 'vitest';
+import { MinivacSimulator } from '../minivac-simulator';
 
 const circuit = [
-  '1A/1E',   '2B/2-',   '3F/3G',   '5F/6C',   '1B/1-',   '2C/3C',   '3G/3X',   '5G/5N',
-  '1C/2C',   '2E/D7',   '3J/4E',   '5J/5K',   '1E/D1',   '2F/2G',   '3Y/4J',   '5J/D17',
-  '1F/1G',   '2G/2X',   '4C/5F',   '5L/5-',   '1G/1X',   '2J/3H',   '4F/4+',   '5N/D18',
-  '1H/1+',   '2X/6H',   '4G/5H',   '6C/6-',   '1H/1L',   '2Y/3Y',   '4H/4+',   '6F/D12',
-  '1J/2H',   '3A/3E',   '4L/D19',  'D0/D1',   '1K/5E',   '3B/3-',   '4N/D18',  'D6/D7',
-  '1Y/2Y',   '3C/4C',   '5C/5G',   'D12/D13', '2A/2E',   '3E/D13',  '5E/6G',   'D16/M+',
+  '1A/1E', '2B/2-', '3F/3G', '5F/6C', '1B/1-', '2C/3C', '3G/3X', '5G/5N',
+  '1C/2C', '2E/D7', '3J/4E', '5J/5K', '1E/D1', '2F/2G', '3Y/4J', '5J/D17',
+  '1F/1G', '2G/2X', '4C/5F', '5L/5-', '1G/1X', '2J/3H', '4F/4+', '5N/D18',
+  '1H/1+', '2X/6H', '4G/5H', '6C/6-', '1H/1L', '2Y/3Y', '4H/4+', '6F/D12',
+  '1J/2H', '3A/3E', '4L/D19', 'D0/D1', '1K/5E', '3B/3-', '4N/D18', 'D6/D7',
+  '1Y/2Y', '3C/4C', '5C/5G', 'D12/D13', '2A/2E', '3E/D13', '5E/6G', 'D16/M+',
 ];
 
 function getFloorFromPosition(position: number): number {
@@ -35,7 +30,7 @@ function getFloorFromPosition(position: number): number {
   return 0; // In transit
 }
 
-function waitForFloor(minivac: MinIVACSimulator, targetFloor: number, timeoutMs = 10000): Promise<boolean> {
+function waitForFloor(minivac: MinivacSimulator, targetFloor: number, timeoutMs = 10000): Promise<boolean> {
   return new Promise((resolve) => {
     const startTime = Date.now();
     const checkInterval = setInterval(() => {
@@ -60,7 +55,7 @@ function sleep(ms: number): Promise<void> {
 
 describe('MinIVAC Simulator - Three-Floor Elevator', () => {
   it('should initialize at floor 1 with correct indicators', () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 0;
     minivac.initialize();
 
@@ -75,7 +70,7 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
   });
 
   it('should travel from floor 1 to floor 3', async () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 0;
     minivac.initialize();
 
@@ -97,7 +92,7 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
   });
 
   it('should travel from floor 3 to floor 2', async () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 12; // Start at floor 3
     minivac.initialize();
 
@@ -116,7 +111,7 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
   });
 
   it('should travel from floor 2 to floor 1', async () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 6; // Start at floor 2
     minivac.initialize();
 
@@ -135,7 +130,7 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
   });
 
   it('should not move when calling current floor', async () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 0; // At floor 1
     minivac.initialize();
 
@@ -153,7 +148,7 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
   });
 
   it('should handle interlock during motion', async () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 0;
     minivac.initialize();
 
@@ -180,7 +175,7 @@ describe('MinIVAC Simulator - Three-Floor Elevator', () => {
   });
 
   it('should handle long trip from floor 1 to floor 3', async () => {
-    const minivac = new MinIVACSimulator(circuit);
+    const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 0;
     minivac.initialize();
 

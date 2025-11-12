@@ -19,4 +19,13 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['fs', 'path', 'vm'],
   },
+  test: {
+    environment: 'node', // Default to node for simulator tests
+    setupFiles: './src/test/setup.ts',
+    server: {
+      deps: {
+        inline: ['@testing-library/react', '@testing-library/jest-dom'],
+      },
+    },
+  },
 })

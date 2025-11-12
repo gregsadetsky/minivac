@@ -3,7 +3,7 @@ import { type CableData } from '../utils/wire-utils';
 
 const wireColors = ['#cc3333', '#3366cc', '#33cc66', '#dd8833', '#d4af37', '#9933cc', '#cc3399', '#33cccc'];
 
-export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>) {
+export function useCableManagement(containerRef: React.RefObject<HTMLDivElement | null>) {
   const [cables, setCables] = React.useState<CableData[]>([]);
   const [isDraggingWire, setIsDraggingWire] = React.useState(false);
   const isDraggingWireRef = React.useRef(false);
@@ -81,14 +81,26 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>
     previewCableRef.current.droop = calculatedDroop;
   };
 
+  // Helper functions for highlighting holes
+  const clearHoleHighlight = (holeElement: Element) => {
+    const hole = holeElement as HTMLElement;
+    // Remove inline styles entirely to let CSS hover work again
+    hole.style.borderColor = '';
+    hole.style.boxShadow = '';
+  };
+
+  const highlightHole = (holeElement: Element) => {
+    const hole = holeElement as HTMLElement;
+    hole.style.borderColor = '#84B6C7';
+    hole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.8), 0 0 0 2px rgba(132, 182, 199, 0.5), 0 0 12px rgba(132, 182, 199, 0.6)';
+  };
+
   const handleHoleMouseEnterElement = (holeElement: Element, holeId: string) => {
     if (!isDraggingWireRef.current || !containerRef.current) return;
 
     // Clear previous highlight first
     if (dragEndHoleElement.current && dragEndHoleElement.current !== holeElement) {
-      const prevHole = dragEndHoleElement.current as HTMLElement;
-      prevHole.style.borderColor = '#737373';
-      prevHole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)';
+      clearHoleHighlight(dragEndHoleElement.current);
     }
 
     // Check if this hole is already connected
@@ -103,18 +115,14 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>
     dragEndHoleElement.current = holeElement;
 
     // Highlight the hovered hole
-    const hole = holeElement as HTMLElement;
-    hole.style.borderColor = '#84B6C7';
-    hole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.8), 0 0 0 2px rgba(132, 182, 199, 0.5), 0 0 12px rgba(132, 182, 199, 0.6)';
+    highlightHole(holeElement);
   };
 
   const handleHoleMouseLeave = () => {
     if (!isDraggingWireRef.current || !dragEndHoleElement.current) return;
 
     // Remove highlight from the previously hovered hole
-    const hole = dragEndHoleElement.current as HTMLElement;
-    hole.style.borderColor = '#737373';
-    hole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)';
+    clearHoleHighlight(dragEndHoleElement.current);
 
     hoveredHoleIdRef.current = null;
     dragEndHoleElement.current = null;
@@ -123,9 +131,7 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>
   const handleMouseUp = () => {
     // Always clear highlight when mouse is released
     if (dragEndHoleElement.current) {
-      const endHole = dragEndHoleElement.current as HTMLElement;
-      endHole.style.borderColor = '#737373';
-      endHole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)';
+      clearHoleHighlight(dragEndHoleElement.current);
     }
 
     if (isDraggingWireRef.current && dragStartHoleElement.current && dragEndHoleElement.current &&
@@ -206,6 +212,9 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>
         // Remove data-connected attribute to re-enable hover
         (startHole as HTMLElement).removeAttribute('data-connected');
         (endHole as HTMLElement).removeAttribute('data-connected');
+        // Clear any lingering highlights
+        clearHoleHighlight(startHole);
+        clearHoleHighlight(endHole);
       }
 
       setCables(prev => {
@@ -249,6 +258,7 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cableToDelete]);
 
   // Set up event delegation for holes
@@ -293,7 +303,65 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>
       container.removeEventListener('mousedown', handleMouseDownCapture, true);
       container.removeEventListener('mouseover', handleMouseOverCapture, true);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load circuit from notation array
+  const loadCircuitFromNotation = (notation: string[]) => {
+    if (!containerRef.current) {
+      console.warn('[loadCircuitFromNotation] containerRef not set');
+      return;
+    }
+
+    const newCables: CableData[] = [];
+
+    notation.forEach((conn, idx) => {
+      const [hole1Id, hole2Id] = conn.split('/');
+      if (!hole1Id || !hole2Id) {
+        console.warn(`Invalid connection format: ${conn}`);
+        return;
+      }
+
+      // Find the hole elements
+      const hole1 = containerRef.current!.querySelector(`[data-hole-id="${hole1Id}"]`);
+      const hole2 = containerRef.current!.querySelector(`[data-hole-id="${hole2Id}"]`);
+
+      if (!hole1) {
+        console.warn(`Hole not found: ${hole1Id}`);
+        return;
+      }
+      if (!hole2) {
+        console.warn(`Hole not found: ${hole2Id}`);
+        return;
+      }
+
+      const containerRect = containerRef.current!.getBoundingClientRect();
+      const rect1 = hole1.getBoundingClientRect();
+      const rect2 = hole2.getBoundingClientRect();
+
+      const startX = rect1.left + rect1.width / 2 - containerRect.left - 5;
+      const startY = rect1.top + rect1.height / 2 - containerRect.top - 5;
+      const endX = rect2.left + rect2.width / 2 - containerRect.left - 5;
+      const endY = rect2.top + rect2.height / 2 - containerRect.top - 5;
+
+      // Calculate droop based on distance
+      const dx = endX - startX;
+      const dy = endY - startY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const droop = Math.min(distance * 0.4, 200);
+
+      newCables.push({
+        start: { x: startX, y: startY },
+        end: { x: endX, y: endY },
+        color: wireColors[idx % wireColors.length],
+        droop,
+        holeIds: [hole1Id, hole2Id]
+      });
+    });
+
+    console.log(`Loaded ${newCables.length} cables from ${notation.length} connections`);
+    setCables(newCables);
+  };
 
   return {
     cables,
@@ -307,6 +375,7 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>
     handleCableClick,
     confirmDeleteCable,
     cancelDeleteCable,
-    previewCableRef
+    previewCableRef,
+    loadCircuitFromNotation
   };
 }

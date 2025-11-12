@@ -76,7 +76,7 @@ export interface MinivacState {
 /**
  * Stateful MinIVAC Simulator
  */
-export class MinIVACSimulator {
+export class MinivacSimulator {
   private wires: Array<[string, string]>;
   private buttonStates: boolean[] = [false, false, false, false, false, false];
   private relayStates: boolean[] = [false, false, false, false, false, false];
