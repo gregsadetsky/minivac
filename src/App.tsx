@@ -23,9 +23,11 @@ function App() {
   const [cables, setCables] = React.useState<CableData[]>([]);
   const [simulator, setSimulator] = React.useState<MinIVACSimulator | null>(null);
   const [simState, setSimState] = React.useState<MinivacState | null>(null);
-  const [cumulativeRotation, setCumulativeRotation] = React.useState(0);
   const previousRelayStates = React.useRef<boolean[]>([]);
   const relayClickSound = React.useRef<Howl | null>(null);
+
+  // Power state (true = on, false = off)
+  const [isPowerOn, setIsPowerOn] = React.useState(true);
 
   // Slide switch states (false = left, true = right)
   const [slideStates, setSlideStates] = React.useState<boolean[]>([false, false, false, false, false, false]);
@@ -66,9 +68,15 @@ function App() {
       .filter(cable => cable.holeIds && cable.holeIds.length === 2)
       .map(cable => `${cable.holeIds![0]}/${cable.holeIds![1]}`);
 
+    // Preserve motor angle from old simulator
+    const oldMotorAngle = simulator?.motorAngle || 0;
+
     // Create new simulator with updated circuit
     const minivac = new MinIVACSimulator(circuitNotation);
     minivac.initialize();
+
+    // Restore motor angle to prevent visual snap-back
+    minivac.motorAngle = oldMotorAngle;
 
     // Restore slide switch states (captures current slideStates via closure)
     // Note: slideStates is NOT in dependency array - we only recreate on cable changes
@@ -130,7 +138,7 @@ function App() {
 
   // Polling loop to update simulation state
   React.useEffect(() => {
-    if (!simulator) return;
+    if (!simulator || !isPowerOn) return;
 
     const interval = setInterval(() => {
       const newState = simulator.getState();
@@ -146,34 +154,11 @@ function App() {
       }
       previousRelayStates.current = [...newState.relays];
 
-      // Handle cumulative rotation to avoid 15→0 snap
-      if (simState) {
-        const currentPos = simState.motor.position;
-        const newPos = newState.motor.position;
-
-        // Detect wrap-around from 15 to 0 (forward rotation)
-        if (currentPos === 15 && newPos === 0) {
-          setCumulativeRotation(prev => prev + (360 / 16));
-        }
-        // Detect wrap-around from 0 to 15 (backward rotation)
-        else if (currentPos === 0 && newPos === 15) {
-          setCumulativeRotation(prev => prev - (360 / 16));
-        }
-        // Normal position change
-        else if (newPos !== currentPos) {
-          const positionDiff = newPos - currentPos;
-          setCumulativeRotation(prev => prev + positionDiff * (360 / 16));
-        }
-      } else {
-        // First time initialization
-        setCumulativeRotation(newState.motor.position * (360 / 16));
-      }
-
       setSimState(newState);
     }, 50); // Poll every 50ms
 
     return () => clearInterval(interval);
-  }, [simulator, simState]);
+  }, [simulator, simState, isPowerOn]);
 
   // Check if a hole element is already connected
   const isHoleConnected = (holeElement: Element): boolean => {
@@ -447,7 +432,7 @@ function App() {
       >
         <div className="flex gap-0">
           {/* LEFT PANEL - 6 columns */}
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 pr-3">
             {/* Row: Numbers */}
             <div className="flex gap-9">
               {columns.map(num => (
@@ -465,7 +450,7 @@ function App() {
                     <PortPair holeIds={[`${num}A`, `${num}A`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">A</div>
                   </div>
-                  <Light isOn={simState?.lights[num - 1] || false} />
+                  <Light isOn={isPowerOn && (simState?.lights[num - 1] || false)} />
                   <div className="flex flex-col items-center gap-0.5">
                     <PortPair holeIds={[`${num}B`, `${num}B`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">B</div>
@@ -478,7 +463,7 @@ function App() {
             <div className="text-white font-sans font-bold text-base tracking-wider text-center">BINARY OUTPUT</div>
 
             {/* Blue section with + and - ports - full width */}
-            <div className="bg-[#84B6C7] p-2 flex gap-9">
+            <div className="bg-[#84B6C7] py-2 flex gap-9">
               {columns.map(num => (
                 <div key={`power-${num}`} className="flex justify-center gap-9" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
@@ -514,7 +499,7 @@ function App() {
               {columns.map(num => (
                 <div key={`relay-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <div style={{ marginLeft: '10px' }}>
-                    <Relay isEnergized={simState?.relays[num - 1] || false} />
+                    <Relay isEnergized={isPowerOn && (simState?.relays[num - 1] || false)} />
                   </div>
                 </div>
               ))}
@@ -524,7 +509,7 @@ function App() {
             <div className="flex gap-9 -mt-2">
               {columns.map(num => (
                 <div key={`indicator-${num}`} className="flex justify-center" style={{ width: '120px' }}>
-                  <Light isOn={simState?.relayIndicatorLights[num - 1] || false} />
+                  <Light isOn={isPowerOn && (simState?.relayIndicatorLights[num - 1] || false)} />
                 </div>
               ))}
             </div>
@@ -576,7 +561,7 @@ function App() {
             </div>
 
             {/* Blue section with COMMON - full width */}
-            <div className="bg-[#84B6C7] p-2 flex gap-9">
+            <div className="bg-[#84B6C7] py-2 flex gap-9">
               {columns.map(num => (
                 <div key={`common-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <PortPair label="COMMON" holeCount={4} holeIds={[`${num}com`, `${num}com`, `${num}com`, `${num}com`]} />
@@ -655,7 +640,7 @@ function App() {
             </div>
 
             {/* Blue section empty - full width */}
-            <div className="bg-[#84B6C7] p-2 h-3" />
+            <div className="bg-[#84B6C7] py-2 h-3" />
 
             {/* BINARY INPUT label */}
             <div className="text-white font-sans font-bold text-base tracking-wider text-center">BINARY INPUT</div>
@@ -710,7 +695,7 @@ function App() {
           <div className="w-[3px] bg-[#84B6C7]" />
 
           {/* RIGHT PANEL */}
-          <div className="flex flex-col" style={{ width: '450px' }}>
+          <div className="flex flex-col px-3" style={{ width: '450px' }}>
             {/* Title section */}
             <div className="flex flex-col items-center gap-1">
               <div className="text-white font-sans text-6xl font-bold tracking-wider" style={{ marginTop: '27px' }}>Minivac 601</div>
@@ -735,7 +720,7 @@ function App() {
               </div>
               {/* Power label - right 22% */}
               <div className="flex items-center justify-center" style={{ width: '22%' }}>
-                <div className="text-white font-mono text-sm font-bold tracking-wider">POWER</div>
+                <div className="text-white font-mono text-sm font-bold tracking-wider" style={{ marginLeft: '8px' }}>POWER</div>
               </div>
             </div>
 
@@ -774,11 +759,37 @@ function App() {
 
               {/* Power section - 22% */}
               <div className="flex flex-col items-center justify-center" style={{ width: '22%' }}>
-                <Light />
+                <Light isOn={isPowerOn} />
                 <div style={{ height: '20px' }} />
                 <div className="text-neutral-300 font-mono text-[9px] font-bold">ON</div>
                 <div style={{ height: '2px' }} />
-                <SlideSwitchVertical />
+                <SlideSwitchVertical
+                  isBottom={!isPowerOn}
+                  onChange={(isBottom) => {
+                    setIsPowerOn(!isBottom);
+                    if (!isBottom) {
+                      // Power turned on - recreate simulator with current wiring
+                      // Preserve motor angle from old simulator
+                      const oldMotorAngle = simulator?.motorAngle || 0;
+
+                      const circuitNotation = cables
+                        .filter(cable => cable.holeIds && cable.holeIds.length === 2)
+                        .map(cable => `${cable.holeIds![0]}/${cable.holeIds![1]}`);
+                      const minivac = new MinIVACSimulator(circuitNotation);
+                      minivac.initialize();
+
+                      // Restore motor angle to prevent visual snap-back
+                      minivac.motorAngle = oldMotorAngle;
+
+                      // Restore slide switch states
+                      slideStates.forEach((isRight, index) => {
+                        minivac.setSlide(index + 1, isRight ? 'right' : 'left');
+                      });
+                      setSimulator(minivac);
+                      setSimState(minivac.getState());
+                    }
+                  }}
+                />
                 <div style={{ height: '2px' }} />
                 <div className="text-neutral-300 font-mono text-[9px] font-bold">OFF</div>
               </div>
@@ -818,12 +829,12 @@ function App() {
 
               {/* Decimal wheel with rotary knob in center */}
               <div className="relative flex-1 flex items-center justify-center">
-                <DecimalWheel diameter={320} currentValue={simState?.motor.position || 0} />
+                <DecimalWheel diameter={320} currentValue={simState?.motor.position || 0} angle={simState?.motor.angle || 0} />
                 {/* Rotary knob centered - rotates to point at current motor position */}
                 <div className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
                   <RotaryKnob
                     size={100}
-                    angle={cumulativeRotation}
+                    angle={simState?.motor.angle || 0}
                   />
                 </div>
               </div>

@@ -4,11 +4,13 @@ interface DecimalWheelProps {
   diameter?: number;       // Outer diameter
   holeSize?: number;
   currentValue?: number;   // 0-15, for future pointer
+  angle?: number;          // Rotation angle in degrees
 }
 
 export default function DecimalWheel({
   diameter = 240,
-  holeSize = 10
+  holeSize = 10,
+  angle = 0
 }: DecimalWheelProps) {
   const centerX = diameter / 2;
   const centerY = diameter / 2;
@@ -47,14 +49,22 @@ export default function DecimalWheel({
   }
 
   return (
-    <div className="relative" style={{ width: `${diameter}px`, height: `${diameter}px` }}>
-      {/* SVG layer for circles, lines, and labels */}
+    <div
+      className="relative"
+      style={{
+        width: `${diameter}px`,
+        height: `${diameter}px`
+      }}
+    >
+      {/* SVG layer for circles and lines (rotating) and labels (stationary) */}
       <svg
         className="absolute top-0 left-0"
         width={diameter}
         height={diameter}
         viewBox={`0 0 ${diameter} ${diameter}`}
       >
+        {/* Stationary group: circles, lines, and number labels */}
+        <g>
           {/* Outer circle */}
           <circle
             cx={centerX}
@@ -119,6 +129,7 @@ export default function DecimalWheel({
               </text>
             );
           })}
+        </g>
       </svg>
 
       {/* HTML layer for holes (better for interaction) */}

@@ -66,6 +66,7 @@ export interface MinivacState {
   slides: string[];
   motor: {
     position: number;
+    angle: number;
     running: boolean;
     direction: string;
   };
@@ -83,10 +84,10 @@ export class MinIVACSimulator {
   private relayIndicatorLightStates: boolean[] = [false, false, false, false, false, false];
   private slideStates: boolean[] = [false, false, false, false, false, false];
   public motorPosition: number = 0;
+  public motorAngle: number = 0;  // Continuous angle in degrees (0° is north/top)
   private motorRunning: boolean = false;
   private motorDirection: number = 1;
   private lastMotorUpdateTime: number | null = null;
-  private motorAccumulatedTime: number = 0;
   private lastResults: Record<string, number> | null = null;
   public verbose: boolean = false;
 
@@ -374,22 +375,25 @@ export class MinIVACSimulator {
 
     const now = Date.now();
     const elapsed = now - this.lastMotorUpdateTime;
-    this.motorAccumulatedTime += elapsed;
     this.lastMotorUpdateTime = now;
 
-    const stepsToTake = Math.floor(this.motorAccumulatedTime / MOTOR_STEP_TIME);
+    // Update angle continuously
+    // Speed: (360 degrees / 16 positions) / 187.5 ms per position = 0.12 degrees/ms
+    const degreesPerMs = (360 / 16) / MOTOR_STEP_TIME;
+    const angleDelta = elapsed * degreesPerMs * this.motorDirection;
+    this.motorAngle += angleDelta;
 
-    if (stepsToTake > 0) {
-      const oldPosition = this.motorPosition;
-      this.motorPosition = (this.motorPosition + (stepsToTake * this.motorDirection) + 16 * stepsToTake) % 16;
-      this.motorAccumulatedTime -= stepsToTake * MOTOR_STEP_TIME;
+    // Calculate discrete position from angle
+    // 0° is north (top). Section 0 is centered at 0°, spanning from -11.25° to +11.25°
+    // Each section is 22.5° wide (360° / 16 positions)
+    const normalizedAngle = ((this.motorAngle % 360) + 360) % 360;
+    // Shift by +11.25° so section boundaries align with multiples of 22.5°
+    const adjustedAngle = (normalizedAngle + 11.25) % 360;
+    const oldPosition = this.motorPosition;
+    this.motorPosition = Math.floor(adjustedAngle / 22.5) % 16;
 
-      if (oldPosition !== this.motorPosition) {
-        return true;
-      }
-    }
-
-    return false;
+    // Return true if position changed (circuit needs resimulation)
+    return oldPosition !== this.motorPosition;
   }
 
   getState(): MinivacState {
@@ -407,6 +411,7 @@ export class MinIVACSimulator {
       slides: this.slideStates.map(s => s ? 'right' : 'left'),
       motor: {
         position: this.motorPosition,
+        angle: this.motorAngle,
         running: this.motorRunning,
         direction: this.motorDirection > 0 ? 'CW' : 'CCW',
       },
