@@ -28,9 +28,8 @@ export default function Sidebar({ onLoadCircuit }: SidebarProps) {
 
       {/* Sidebar panel */}
       <div
-        className={`fixed top-0 left-0 h-full w-64 bg-neutral-900 border-r-2 border-[#84B6C7] shadow-xl z-40 transition-transform duration-300 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed top-0 left-0 h-full w-64 bg-neutral-900 border-r-2 border-[#84B6C7] shadow-xl z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div className="pt-20 px-4 overflow-y-auto h-full pb-8">
           <button
@@ -62,7 +61,7 @@ export default function Sidebar({ onLoadCircuit }: SidebarProps) {
       {/* Overlay - click to close */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-30 z-30"
+          className="fixed inset-0 bg-black/80 z-30"
           onClick={() => setIsOpen(false)}
         />
       )}
