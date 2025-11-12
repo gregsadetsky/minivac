@@ -368,6 +368,16 @@ export class MinIVACSimulator {
     }
   }
 
+  // Calculate motor position from current angle
+  private _calculatePositionFromAngle(): void {
+    // 0° is north (top). Section 0 is centered at 0°, spanning from -11.25° to +11.25°
+    // Each section is 22.5° wide (360° / 16 positions)
+    const normalizedAngle = ((this.motorAngle % 360) + 360) % 360;
+    // Shift by +11.25° so section boundaries align with multiples of 22.5°
+    const adjustedAngle = (normalizedAngle + 11.25) % 360;
+    this.motorPosition = Math.floor(adjustedAngle / 22.5) % 16;
+  }
+
   private _updateMotorPosition(): boolean {
     if (!this.motorRunning || !this.lastMotorUpdateTime) {
       return false;
@@ -383,14 +393,8 @@ export class MinIVACSimulator {
     const angleDelta = elapsed * degreesPerMs * this.motorDirection;
     this.motorAngle += angleDelta;
 
-    // Calculate discrete position from angle
-    // 0° is north (top). Section 0 is centered at 0°, spanning from -11.25° to +11.25°
-    // Each section is 22.5° wide (360° / 16 positions)
-    const normalizedAngle = ((this.motorAngle % 360) + 360) % 360;
-    // Shift by +11.25° so section boundaries align with multiples of 22.5°
-    const adjustedAngle = (normalizedAngle + 11.25) % 360;
     const oldPosition = this.motorPosition;
-    this.motorPosition = Math.floor(adjustedAngle / 22.5) % 16;
+    this._calculatePositionFromAngle();
 
     // Return true if position changed (circuit needs resimulation)
     return oldPosition !== this.motorPosition;
@@ -438,5 +442,12 @@ export class MinIVACSimulator {
     if (this.verbose) console.log('\n⚡ Initializing circuit...');
     this._simulate();
     if (this.verbose) this._printState();
+  }
+
+  // Update motor angle and recalculate position
+  // Use this instead of directly setting motorAngle to ensure position stays in sync
+  updateMotorAngle(angle: number): void {
+    this.motorAngle = angle;
+    this._calculatePositionFromAngle();
   }
 }

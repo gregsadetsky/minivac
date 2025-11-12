@@ -84,17 +84,19 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement>
   const handleHoleMouseEnterElement = (holeElement: Element, holeId: string) => {
     if (!isDraggingWireRef.current || !containerRef.current) return;
 
-    // Check if this hole is already connected
-    if (isHoleConnected(holeElement)) {
-      // Don't highlight or allow connection to already-connected holes
-      return;
-    }
-
-    // Clear previous highlight
+    // Clear previous highlight first
     if (dragEndHoleElement.current && dragEndHoleElement.current !== holeElement) {
       const prevHole = dragEndHoleElement.current as HTMLElement;
       prevHole.style.borderColor = '#737373';
       prevHole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)';
+    }
+
+    // Check if this hole is already connected
+    if (isHoleConnected(holeElement)) {
+      // Clear refs since we can't connect to this hole
+      hoveredHoleIdRef.current = null;
+      dragEndHoleElement.current = null;
+      return;
     }
 
     hoveredHoleIdRef.current = holeId;

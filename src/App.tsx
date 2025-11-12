@@ -40,10 +40,11 @@ function App() {
 
     // Create new simulator with updated circuit
     const minivac = new MinIVACSimulator(circuitNotation);
-    minivac.initialize();
 
-    // Restore motor angle to prevent visual snap-back
-    minivac.motorAngle = oldMotorAngle;
+    // Restore motor angle BEFORE initialization so the circuit simulates with correct position
+    minivac.updateMotorAngle(oldMotorAngle);
+
+    minivac.initialize();
 
     // Restore slide switch states (captures current slideStates via closure)
     // Note: slideStates is NOT in dependency array - we only recreate on cable changes
@@ -52,8 +53,15 @@ function App() {
       minivac.setSlide(index + 1, isRight ? 'right' : 'left');
     });
 
+    // Get final state after all restorations and before starting polling
+    const finalState = minivac.getState();
     setSimulator(minivac);
-    setSimState(minivac.getState());
+    setSimState(finalState);
+
+    // Keep previous relay states from before recreation so we can detect and hear
+    // relay state changes caused by wiring changes. If this is the first init,
+    // previousRelayStates will be empty and no sound will play (correct).
+    // Don't reset it here - let the polling loop detect actual changes.
 
     console.log('Simulator initialized with', circuitNotation.length, 'wires');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,6 +102,7 @@ function App() {
       setIsPowerOn={setIsPowerOn}
       slideStates={slideStates}
       setSlideStates={setSlideStates}
+      previousRelayStatesRef={previousRelayStates}
       cables={cableManagement.cables}
       isDraggingWire={cableManagement.isDraggingWire}
       dragStartPos={cableManagement.dragStartPos}

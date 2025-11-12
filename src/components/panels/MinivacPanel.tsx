@@ -26,6 +26,7 @@ interface MinivacPanelProps {
   setIsPowerOn: (on: boolean) => void;
   slideStates: boolean[];
   setSlideStates: React.Dispatch<React.SetStateAction<boolean[]>>;
+  previousRelayStatesRef: React.MutableRefObject<boolean[]>;
   cables: CableData[];
   isDraggingWire: boolean;
   dragStartPos: { x: number; y: number } | null;
@@ -49,6 +50,7 @@ export default function MinivacPanel({
   setIsPowerOn,
   slideStates,
   setSlideStates,
+  previousRelayStatesRef,
   cables,
   isDraggingWire,
   dragStartPos,
@@ -419,17 +421,25 @@ export default function MinivacPanel({
                         .filter(cable => cable.holeIds && cable.holeIds.length === 2)
                         .map(cable => `${cable.holeIds![0]}/${cable.holeIds![1]}`);
                       const minivac = new MinIVACSimulator(circuitNotation);
-                      minivac.initialize();
 
-                      // Restore motor angle to prevent visual snap-back
-                      minivac.motorAngle = oldMotorAngle;
+                      // Restore motor angle BEFORE initialization so the circuit simulates with correct position
+                      minivac.updateMotorAngle(oldMotorAngle);
+
+                      minivac.initialize();
 
                       // Restore slide switch states
                       slideStates.forEach((isRight, index) => {
                         minivac.setSlide(index + 1, isRight ? 'right' : 'left');
                       });
+
+                      const newState = minivac.getState();
+
+                      // Set previousRelayStates to "all off" (power-off state) so the polling loop
+                      // can detect relay activation and play the click sound
+                      previousRelayStatesRef.current = [false, false, false, false, false, false];
+
                       setSimulator(minivac);
-                      setSimState(minivac.getState());
+                      setSimState(newState);
                     }
                   }}
                 />
