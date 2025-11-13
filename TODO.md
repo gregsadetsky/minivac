@@ -1,3 +1,7 @@
+- https://chatgpt.com/c/6915617e-c880-832b-b7bb-38e70ffa200c
+- https://aistudio.google.com/prompts/1ZAGIklZ700TTbwpUsF231hvu87nqlPyE
+- https://claude.ai/chat/907c3a7c-8e35-40a2-8a8e-614463c922ea
+
 - ability to turn the wheel manually - while its not turning only..?
 - ability to close (while clicking/holding) a relay manually..?
 - write a repo readme

@@ -141,6 +141,20 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement 
       const startHole = dragStartHoleElement.current;
       const endHole = dragEndHoleElement.current;
 
+      // Don't allow connecting a hole to itself
+      if (startHole === endHole) {
+        // Reset and return early
+        setIsDraggingWire(false);
+        isDraggingWireRef.current = false;
+        dragStartHoleIdRef.current = null;
+        dragStartHoleElement.current = null;
+        dragEndHoleElement.current = null;
+        setDragStartPos(null);
+        setDragCurrentPos(null);
+        hoveredHoleIdRef.current = null;
+        return;
+      }
+
       // Double check neither is already connected (safety check)
       if (!isHoleConnected(startHole) && !isHoleConnected(endHole)) {
         const containerRect = containerRef.current.getBoundingClientRect();
@@ -322,6 +336,12 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement 
       const [hole1Id, hole2Id] = conn.split('/');
       if (!hole1Id || !hole2Id) {
         console.warn(`Invalid connection format: ${conn}`);
+        return;
+      }
+
+      // Don't allow self-connections
+      if (hole1Id === hole2Id) {
+        console.warn(`Ignoring self-connection: ${conn}`);
         return;
       }
 

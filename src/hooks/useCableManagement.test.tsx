@@ -125,6 +125,42 @@ describe('URL management', () => {
   it('should use different holes when multiple wires connect to the same terminal', () => {
     // Regression test for bug where multiple wires to same terminal (e.g., 5+)
     // would all use the first hole instead of spreading across available holes
+
+    // Mock getBoundingClientRect to return predictable positions
+    let holeCounter = 0;
+    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+    Element.prototype.getBoundingClientRect = function() {
+      const holeId = this.getAttribute('data-hole-id');
+      if (holeId) {
+        // Return different positions for each hole element instance
+        const thisHoleIndex = holeCounter++;
+        return {
+          left: 100 + (thisHoleIndex * 50), // Different X for each hole
+          top: 100,
+          right: 110 + (thisHoleIndex * 50),
+          bottom: 110,
+          width: 10,
+          height: 10,
+          x: 100 + (thisHoleIndex * 50),
+          y: 100,
+          toJSON: () => ({})
+        } as DOMRect;
+      }
+      // Container
+      return {
+        left: 0,
+        top: 0,
+        right: 1000,
+        bottom: 1000,
+        width: 1000,
+        height: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      } as DOMRect;
+    };
+
     const TestComponentWithCheck = () => {
       const ref = useRef<HTMLDivElement>(null);
       const cableManagement = useCableManagement(ref);
@@ -132,45 +168,106 @@ describe('URL management', () => {
       // Trigger load after mount
       React.useEffect(() => {
         if (ref.current) {
+          holeCounter = 0; // Reset counter before loading
           cableManagement.loadCircuitFromNotation(['6A/5+', '5C/5+']);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, []); // We only want to load once on mount
+      }, []);
 
       return (
         <div ref={ref} data-testid="container2">
-          <div style={{ position: 'absolute', left: '100px', top: '100px' }}>
-            <Hole size={10} dataHoleId="5+" />
-          </div>
-          <div style={{ position: 'absolute', left: '150px', top: '100px' }}>
-            <Hole size={10} dataHoleId="5+" />
-          </div>
-          <div style={{ position: 'absolute', left: '100px', top: '200px' }}>
-            <Hole size={10} dataHoleId="6A" />
-          </div>
-          <div style={{ position: 'absolute', left: '150px', top: '200px' }}>
-            <Hole size={10} dataHoleId="6A" />
-          </div>
-          <div style={{ position: 'absolute', left: '200px', top: '150px' }}>
-            <Hole size={10} dataHoleId="5C" />
-          </div>
+          {/* Two 5+ holes */}
+          <Hole size={10} dataHoleId="5+" />
+          <Hole size={10} dataHoleId="5+" />
+          {/* Two 6A holes */}
+          <Hole size={10} dataHoleId="6A" />
+          <Hole size={10} dataHoleId="6A" />
+          {/* One 5C hole */}
+          <Hole size={10} dataHoleId="5C" />
           <div data-testid="cable-count">{cableManagement.cables.length}</div>
+          {/* Expose cable data for testing */}
+          <div data-testid="cables-data">{JSON.stringify(cableManagement.cables.map(c => ({
+            endX: Math.round(c.end.x),
+            holeIds: c.holeIds
+          })))}</div>
         </div>
       );
     };
 
-    render(<TestComponentWithCheck />);
+    try {
+      render(<TestComponentWithCheck />);
 
-    // Wait for cables to be loaded
+      // Verify we got 2 cables
+      const cableCount = screen.getByTestId('cable-count');
+      expect(cableCount.textContent).toBe('2');
+
+      // THE ACTUAL BUG TEST: Check that the two cables ending at 5+ have different X coordinates
+      const cablesData = JSON.parse(screen.getByTestId('cables-data').textContent!);
+
+      // Both cables should end at 5+
+      const cablesEndingAt5Plus = cablesData.filter((c: { endX: number; holeIds: string[] }) =>
+        c.holeIds && c.holeIds[1] === '5+'
+      );
+      expect(cablesEndingAt5Plus.length).toBe(2);
+
+      // The key assertion: The two cables ending at 5+ should have DIFFERENT X coordinates
+      // If the bug existed, both would use the first hole and have the same coordinates
+      const endX1 = cablesEndingAt5Plus[0].endX;
+      const endX2 = cablesEndingAt5Plus[1].endX;
+
+      expect(endX1).not.toBe(endX2); // Different X positions = different holes!
+    } finally {
+      // Restore original method
+      Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    }
+  });
+
+  it('should not allow connecting a hole to itself via URL loading', () => {
+    // Regression test for bug where you could connect a hole to itself,
+    // making it unable to receive new wires and creating fake URL entries like #wires=5A%2F5A
+    const TestComponent = () => {
+      const ref = useRef<HTMLDivElement>(null);
+      const cableManagement = useCableManagement(ref);
+
+      React.useEffect(() => {
+        if (ref.current) {
+          // Try to load a self-connection from URL notation
+          cableManagement.loadCircuitFromNotation(['5A/5A', '6B/6C']);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+
+      return (
+        <div ref={ref} data-testid="container">
+          <div style={{ position: 'absolute', left: '100px', top: '100px' }}>
+            <Hole size={10} dataHoleId="5A" />
+          </div>
+          <div style={{ position: 'absolute', left: '200px', top: '100px' }}>
+            <Hole size={10} dataHoleId="6B" />
+          </div>
+          <div style={{ position: 'absolute', left: '200px', top: '200px' }}>
+            <Hole size={10} dataHoleId="6C" />
+          </div>
+          <div data-testid="cable-count">{cableManagement.cables.length}</div>
+          <div data-testid="cables-data">{JSON.stringify(cableManagement.cables.map(c => c.holeIds))}</div>
+        </div>
+      );
+    };
+
+    render(<TestComponent />);
+
     const cableCount = screen.getByTestId('cable-count');
-    expect(cableCount.textContent).toBe('2');
+    const cablesData = JSON.parse(screen.getByTestId('cables-data').textContent!);
 
-    // The key assertion: We should have 2 cables
-    // If the bug existed, querySelector would return the same hole twice,
-    // resulting in duplicate coordinates or failed cable creation.
-    // With the fix, each cable should use a different hole for 5+.
+    // Should have only 1 cable (6B/6C), not 2
+    // The self-connection 5A/5A should be rejected
+    expect(cableCount.textContent).toBe('1');
+    expect(cablesData).toEqual([['6B', '6C']]);
 
-    // This test verifies the fix works by ensuring we get 2 cables
-    // (one from 6A to first 5+ hole, one from 5C to second 5+ hole)
+    // Verify no self-connection was created
+    const hasSelfConnection = cablesData.some((holeIds: string[]) =>
+      holeIds[0] === holeIds[1]
+    );
+    expect(hasSelfConnection).toBe(false);
   });
 });
