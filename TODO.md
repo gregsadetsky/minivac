@@ -1,3 +1,15 @@
+steps to launch:
+- show reduced versions of minivac - just relay + button + light
+- hold button for long time to lock, click again to unlock
+- drag cables on mobile
+- for elevator, grey out buttons 4-5-6?
+- add "stickers" on top of buttons/wheel..?
+- how to have small zoomed out version with 'fullscreen' version?
+  - mobile fullscreen version rotated 90 degrees and button to-unfullscreen
+- automate button pressing (for 3 bit counter)
+  - how to pause this automation example?
+- 3 bit counter: labels for lights 4/5/6? show binary table with the correct 4/5/6 lights in a row and highlight row of the current number?
+
 - https://chatgpt.com/c/6915617e-c880-832b-b7bb-38e70ffa200c
 - https://aistudio.google.com/prompts/1ZAGIklZ700TTbwpUsF231hvu87nqlPyE
 - https://claude.ai/chat/907c3a7c-8e35-40a2-8a8e-614463c922ea

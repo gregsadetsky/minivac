@@ -3,7 +3,12 @@ import { type CableData } from '../utils/wire-utils';
 
 const wireColors = ['#cc3333', '#3366cc', '#33cc66', '#dd8833', '#d4af37', '#9933cc', '#cc3399', '#33cccc'];
 
-export function useCableManagement(containerRef: React.RefObject<HTMLDivElement | null>) {
+export function useCableManagement(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  scale: number = 1,
+  offsetX: number = 0,
+  offsetY: number = 0
+) {
   const [cables, setCables] = React.useState<CableData[]>([]);
   const [isDraggingWire, setIsDraggingWire] = React.useState(false);
   const isDraggingWireRef = React.useRef(false);
@@ -45,8 +50,8 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement 
     const containerRect = containerRef.current.getBoundingClientRect();
 
     const startPos = {
-      x: rect.left + rect.width / 2 - containerRect.left - 5,
-      y: rect.top + rect.height / 2 - containerRect.top - 5
+      x: (rect.left + rect.width / 2 - containerRect.left - 5) / scale + offsetX,
+      y: (rect.top + rect.height / 2 - containerRect.top - 5) / scale + offsetY
     };
 
     // Set the color for this new wire
@@ -66,8 +71,8 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement 
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const currentPos = {
-      x: event.clientX - containerRect.left - 5,
-      y: event.clientY - containerRect.top - 5
+      x: (event.clientX - containerRect.left - 5) / scale + offsetX,
+      y: (event.clientY - containerRect.top - 5) / scale + offsetY
     };
 
     setDragCurrentPos(currentPos);
@@ -164,10 +169,10 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement 
         // Verify container rect is valid
         if (containerRect.width > 0 && containerRect.height > 0) {
           // Calculate positions relative to container with offset
-          const startX = startRect.left + startRect.width / 2 - containerRect.left - 5;
-          const startY = startRect.top + startRect.height / 2 - containerRect.top - 5;
-          const endX = endRect.left + endRect.width / 2 - containerRect.left - 5;
-          const endY = endRect.top + endRect.height / 2 - containerRect.top - 5;
+          const startX = (startRect.left + startRect.width / 2 - containerRect.left - 5) / scale + offsetX;
+          const startY = (startRect.top + startRect.height / 2 - containerRect.top - 5) / scale + offsetY;
+          const endX = (endRect.left + endRect.width / 2 - containerRect.left - 5) / scale + offsetX;
+          const endY = (endRect.top + endRect.height / 2 - containerRect.top - 5) / scale + offsetY;
 
           // Only create cable if we got valid coordinates
           if (!isNaN(startX) && !isNaN(startY) && !isNaN(endX) && !isNaN(endY)) {
@@ -383,10 +388,10 @@ export function useCableManagement(containerRef: React.RefObject<HTMLDivElement 
       const rect1 = hole1.getBoundingClientRect();
       const rect2 = hole2.getBoundingClientRect();
 
-      const startX = rect1.left + rect1.width / 2 - containerRect.left - 5;
-      const startY = rect1.top + rect1.height / 2 - containerRect.top - 5;
-      const endX = rect2.left + rect2.width / 2 - containerRect.left - 5;
-      const endY = rect2.top + rect2.height / 2 - containerRect.top - 5;
+      const startX = (rect1.left + rect1.width / 2 - containerRect.left - 5) / scale + offsetX;
+      const startY = (rect1.top + rect1.height / 2 - containerRect.top - 5) / scale + offsetY;
+      const endX = (rect2.left + rect2.width / 2 - containerRect.left - 5) / scale + offsetX;
+      const endY = (rect2.top + rect2.height / 2 - containerRect.top - 5) / scale + offsetY;
 
       // Calculate droop based on distance
       const dx = endX - startX;

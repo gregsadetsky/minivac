@@ -327,6 +327,7 @@ export default function MinivacPanel({
               {columns.map(num => (
                 <div key={`button-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <PushButton
+                    pressed={simState?.buttons[num - 1]}
                     onPress={() => {
                       if (simulator) {
                         simulator.pressButton(num);

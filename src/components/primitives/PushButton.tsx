@@ -4,14 +4,19 @@ interface PushButtonProps {
   size?: number;
   onPress?: () => void;
   onRelease?: () => void;
+  pressed?: boolean; // External control of pressed state
 }
 
 export default function PushButton({
   size = 60,
   onPress,
-  onRelease
+  onRelease,
+  pressed
 }: PushButtonProps) {
   const [isPressed, setIsPressed] = useState(false);
+
+  // Use external pressed state if provided, otherwise use internal state
+  const actualPressed = pressed !== undefined ? pressed : isPressed;
 
   const handleMouseDown = () => {
     setIsPressed(true);
@@ -49,7 +54,7 @@ export default function PushButton({
       <div
         className="absolute rounded-full transition-all duration-100"
         style={{
-          top: isPressed ? '5px' : '3px',
+          top: actualPressed ? '5px' : '3px',
           left: '3px',
           width: `${size - 6}px`,
           height: `${size - 6}px`,
@@ -60,7 +65,7 @@ export default function PushButton({
             #d24444 60%,
             #e85d5d 100%
           )`,
-          boxShadow: isPressed ? `
+          boxShadow: actualPressed ? `
             0 2px 4px rgba(0,0,0,0.5),
             0 1px 2px rgba(0,0,0,0.3),
             inset 0 -1px 0 rgba(255,255,255,0.2),

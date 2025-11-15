@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minivac 601 - A Relay Computer from 1961</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        
+        header {
+            background: #1a1a1a;
+            color: white;
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-left: 2rem;
+            font-size: 0.95rem;
+        }
+        
+        nav a:hover {
+            text-decoration: underline;
+        }
+        
+        .hero {
+            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+            color: white;
+            padding: 3rem 2rem 1rem;
+            text-align: center;
+        }
+        
+        .hero h2 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 300;
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 800px;
+            margin: 0 auto 2rem;
+            opacity: 0.9;
+        }
+        
+        .minivac-embed {
+            background: #2a2a2a;
+            border: 3px solid #444;
+            border-radius: 8px;
+            height: 500px;
+            margin: 2rem auto;
+            max-width: 1200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #888;
+            font-size: 1.2rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .minivac-embed.peek {
+            margin-bottom: -100px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        
+        .mobile-hint {
+            display: none;
+            background: #fff3cd;
+            color: #856404;
+            padding: 0.75rem;
+            text-align: center;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #ffeaa7;
+        }
+        
+        section {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+            background: white;
+        }
+        
+        section h3 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            font-weight: 400;
+        }
+        
+        section p {
+            font-size: 1.1rem;
+            margin-bottom: 1.5rem;
+            color: #555;
+        }
+        
+        .exercise {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 2rem;
+            margin: 2rem 0;
+            border-radius: 4px;
+        }
+        
+        .exercise h4 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #007bff;
+        }
+        
+        .mini-minivac {
+            background: #2a2a2a;
+            border: 2px solid #444;
+            border-radius: 4px;
+            height: 200px;
+            margin: 1rem 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #888;
+        }
+        
+        .examples-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .example-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .example-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .example-card h5 {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .example-preview {
+            background: #2a2a2a;
+            height: 120px;
+            margin: 1rem 0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #888;
+            font-size: 0.9rem;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 1rem 2rem;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            margin: 1rem 0.5rem;
+            transition: background 0.2s;
+        }
+        
+        .cta-button:hover {
+            background: #0056b3;
+        }
+        
+        .cta-button.secondary {
+            background: #6c757d;
+        }
+        
+        .cta-button.secondary:hover {
+            background: #5a6268;
+        }
+        
+        footer {
+            background: #1a1a1a;
+            color: white;
+            padding: 3rem 2rem;
+            margin-top: 4rem;
+        }
+        
+        footer h4 {
+            margin-bottom: 1rem;
+        }
+        
+        footer a {
+            color: #88c0d0;
+            text-decoration: none;
+        }
+        
+        footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .credits {
+            max-width: 1200px;
+            margin: 0 auto;
+            font-size: 0.95rem;
+            opacity: 0.8;
+        }
+        
+        .credits p {
+            margin-bottom: 0.5rem;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-hint {
+                display: block;
+            }
+            
+            header h1 {
+                font-size: 1.2rem;
+            }
+            
+            nav a {
+                margin-left: 1rem;
+                font-size: 0.85rem;
+            }
+            
+            .hero h2 {
+                font-size: 1.8rem;
+            }
+            
+            .hero p {
+                font-size: 1rem;
+            }
+            
+            .minivac-embed {
+                height: 300px;
+                margin: 1rem;
+                overflow-x: scroll;
+                /* Allow horizontal scroll on mobile */
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            .minivac-embed.peek {
+                margin-bottom: -50px;
+            }
+            
+            section {
+                padding: 2rem 1rem;
+            }
+            
+            .examples-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="mobile-hint">
+        📱 Scroll/pan left-right to see the full circuit. Best viewed on desktop.
+    </div>
+    
+    <header>
+        <h1>Minivac 601</h1>
+        <nav>
+            <a href="#simulator">Open Simulator</a>
+            <a href="#about">About</a>
+        </nav>
+    </header>
+    
+    <div class="hero">
+        <h2>A Relay Computer from 1961</h2>
+        <p>Before microchips, before transistors, computers were built with mechanical relays. This is a working simulation of the Minivac 601 - watch it count in binary, the same way your phone does, just slow enough to see.</p>
+        
+        <!-- MAIN MINIVAC - Binary counter running automatically -->
+        <div class="minivac-embed peek">
+            [ Full Minivac 601 Simulator Here ]<br>
+            [ Running: 3-bit Binary Counter ]<br>
+            [ Relays clicking, lights blinking 0-7 ]
+        </div>
+    </div>
+    
+    <section>
+        <h3>Each relay click is a logic operation</h3>
+        <p>The same operations happening billions of times per second in your phone, computer, or smartwatch. Here they're slowed down enough that you can see, hear, and understand exactly how digital logic works.</p>
+        
+        <p>The three lights above are counting in binary: 000, 001, 010, 011, 100, 101, 110, 111 - that's 0 through 7. Every computer in the world counts this way.</p>
+    </section>
+    
+    <section>
+        <h3>Now you try: Control an elevator</h3>
+        <p>This circuit uses the same relays to control a 3-floor elevator. Press buttons 1, 2, or 3 to call the elevator to different floors.</p>
+        
+        <!-- Interactive elevator example -->
+        <div class="minivac-embed">
+            [ Minivac 601 - Elevator Controller ]<br>
+            [ Buttons 1/2/3 visible and clickable ]<br>
+            [ Wheel shows current floor ]
+        </div>
+        
+        <p>Notice how pressing a button causes relays to switch, which turns the motor wheel to the correct position. This is a real working elevator controller - the same logic used in 1960s buildings.</p>
+    </section>
+    
+    <section>
+        <h3>Build your first circuit</h3>
+        
+        <div class="exercise">
+            <h4>Exercise 1: Ring the Bell</h4>
+            <p>Connect a button to a relay to a light. When you press the button, the relay closes and the light turns on.</p>
+            
+            <div class="mini-minivac">
+                [ Minimal Minivac - just 1 button, 1 relay, 1 light ]<br>
+                [ Empty - ready to wire ]
+            </div>
+            
+            <p><small>Hint: Connect power (+) → button → relay coil → ground (-), then relay contacts → light → ground</small></p>
+        </div>
+        
+        <div class="exercise">
+            <h4>Exercise 2: Make an AND gate</h4>
+            <p>Use two buttons and one relay to make a light that only turns on when BOTH buttons are pressed.</p>
+            
+            <div class="mini-minivac">
+                [ Minimal Minivac - 2 buttons, 1 relay, 1 light ]
+            </div>
+        </div>
+        
+        <p>These simple circuits are the building blocks of all computation. String enough of them together and you can play tic-tac-toe, recognize handwritten digits, or run a computer.</p>
+    </section>
+    
+    <section>
+        <h3>Try more examples</h3>
+        
+        <div class="examples-grid">
+            <div class="example-card">
+                <h5>Morse Code</h5>
+                <div class="example-preview">
+                    [ Preview thumbnail ]
+                </div>
+                <p>Transmit morse code with sound and light</p>
+            </div>
+            
+            <div class="example-card">
+                <h5>Combination Lock</h5>
+                <div class="example-preview">
+                    [ Preview thumbnail ]
+                </div>
+                <p>Enter the right code to unlock</p>
+            </div>
+            
+            <div class="example-card">
+                <h5>OCR</h5>
+                <div class="example-preview">
+                    [ Preview thumbnail ]
+                </div>
+                <p>Recognize handwritten digits</p>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 3rem;">
+            <a href="#simulator" class="cta-button">Open the Full Simulator</a>
+            <a href="#manuals" class="cta-button secondary">Read the Original Manuals</a>
+        </div>
+    </section>
+    
+    <footer>
+        <div class="credits">
+            <h4>About this project</h4>
+            <p>The Minivac 601 was created in 1961 by Claude Shannon and others as an educational computer kit. This simulator recreates the original hardware using accurate electrical simulation.</p>
+            
+            <p>Built by <a href="https://greg.technology">Greg Technology</a></p>
+            
+            <h4 style="margin-top: 2rem;">Resources</h4>
+            <p><a href="#">Download Original Manuals (PDF)</a></p>
+            <p><a href="#">View on GitHub</a></p>
+            <p><a href="#">Technical Notes</a></p>
+            
+            <h4 style="margin-top: 2rem;">Credits</h4>
+            <p>Thanks to William McAllister for documentation, the Recurse Center community, and everyone who helped test.</p>
+            
+            <p style="margin-top: 2rem; opacity: 0.6;">© 2025 - Inspired by the original Minivac 601 by Scientific Development Corporation</p>
+        </div>
+    </footer>
+</body>
+</html>
