@@ -32,6 +32,9 @@
 - when the power is turned off, any relays losing power should click off (if they were on)
 - get a recording of the original minivac relay sound
 - find out real speed of the minivac wheel (does the motor "rev up" or is it immediately at full speed?)
+- to be able to create "micro panels" (for tutorial):
+  - get `setIsPowerOn(!isBottom);` code out of the minivacpanel into higher end component
+  - move cables and alerts out of minivacpanel as well into higher end (and could be passed down to minivacpanel?)
 
 ### no
 
