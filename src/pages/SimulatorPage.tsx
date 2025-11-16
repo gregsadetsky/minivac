@@ -84,6 +84,7 @@ export default function SimulatorPage() {
       holeIds: conn.split('/')
     }));
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     updateUrlWithCircuit(cables as any);
   };
 
