@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { MinivacSimulator } from '../minivac-simulator';
 import { morseTransmitterCircuit } from '../../circuits/morse-transmitter';
 
-describe('MinIVAC Simulator - Morse Code Transmitter', () => {
+describe('Minivac Simulator - Morse Code Transmitter', () => {
   const circuit = morseTransmitterCircuit.circuit;
 
   it('should have break-before-make gaps between symbols', { timeout: 10000 }, () => {

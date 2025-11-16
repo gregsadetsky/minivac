@@ -1,10 +1,10 @@
 /**
- * MinIVAC Circuit Notation Parser
- * Parses MinIVAC terminal notation (e.g., "6A", "D16", "3J") into internal node names
+ * Minivac Circuit Notation Parser
+ * Parses Minivac terminal notation (e.g., "6A", "D16", "3J") into internal node names
  */
 
 /**
- * Parse terminal identifier from MinIVAC notation
+ * Parse terminal identifier from Minivac notation
  * @param identifier - Terminal identifier (e.g., "6A", "D16", "3J", "6com", "+", "-")
  * @returns Internal node name (e.g., "Light6_A", "Motor_D16", "Relay3_Contact1_NC")
  * @throws Error if identifier is invalid
@@ -99,7 +99,7 @@ export function parseTerminalIdentifier(identifier: string): string {
 }
 
 /**
- * Parse MinIVAC notation into wire pairs
+ * Parse Minivac notation into wire pairs
  * @param instructions - Array of wire instructions (e.g., ["6A/6com", "D4/D5"])
  * @returns Array of wire pairs as internal node names
  * @throws Error if any instruction is invalid
@@ -119,7 +119,7 @@ export function parseMinivacNotation(instructions: string[]): Array<[string, str
 }
 
 /**
- * Parse MinIVAC notation and return terminal identifiers (for UI wiring)
+ * Parse Minivac notation and return terminal identifiers (for UI wiring)
  * @param instructions - Array of wire instructions (e.g., ["6A/6com", "D4/D5"])
  * @returns Array of wire pairs as terminal identifiers (not internal node names)
  */

@@ -1,12 +1,12 @@
 /**
- * Stateful MinIVAC Circuit Simulator
+ * Stateful Minivac Circuit Simulator
  * Maintains relay state between button presses
  */
 
 import { loadSimulator, T_VOLTAGE, alerts, type Circuit } from './simulator-loader-universal';
 import { parseMinivacNotation } from './circuit-notation-parser';
 
-// MinIVAC component specifications
+// Minivac component specifications
 const RELAY_COIL_RESISTANCE = 400;  // Ohms
 const RELAY_PICKUP_CURRENT = 0.020;  // 20mA threshold (with indicator lamp in series)
 const LIGHT_RESISTANCE = 100;  // Ohms
@@ -74,7 +74,7 @@ export interface MinivacState {
 }
 
 /**
- * Stateful MinIVAC Simulator
+ * Stateful Minivac Simulator
  */
 export class MinivacSimulator {
   private wires: Array<[string, string]>;
@@ -95,7 +95,7 @@ export class MinivacSimulator {
     this.wires = parseMinivacNotation(circuitNotation);
     this.verbose = verbose;
     if (this.verbose) {
-      console.log(`MinIVAC initialized with ${this.wires.length} wires`);
+      console.log(`Minivac initialized with ${this.wires.length} wires`);
     }
   }
 

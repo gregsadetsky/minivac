@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { MinivacSimulator } from '../minivac-simulator';
 import { threeBitCounterCircuit } from '../../circuits/three-bit-counter';
 
-describe('MinIVAC Simulator - 3-Bit Binary Counter', () => {
+describe('Minivac Simulator - 3-Bit Binary Counter', () => {
   const circuit = threeBitCounterCircuit.circuit;
 
   // Helper to get 3-bit binary value from lights 4, 5, 6

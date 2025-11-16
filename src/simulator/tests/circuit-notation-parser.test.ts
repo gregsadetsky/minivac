@@ -1,5 +1,5 @@
 /**
- * Tests for MinIVAC circuit notation parser
+ * Tests for Minivac circuit notation parser
  */
 
 import { describe, it, expect } from 'vitest';

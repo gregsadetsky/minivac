@@ -57,7 +57,7 @@ function waitForMotorPosition(minivac: MinivacSimulator, targetPosition: number,
   return false;
 }
 
-describe('MinIVAC Simulator - OCR Digit Recognition', () => {
+describe('Minivac Simulator - OCR Digit Recognition', () => {
   for (const pattern of digitPatterns) {
     it(`should recognize digit ${pattern.digit} and move motor to D${pattern.position}`, () => {
       // Create circuit with digit connections

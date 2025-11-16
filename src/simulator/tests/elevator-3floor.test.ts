@@ -47,7 +47,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-describe('MinIVAC Simulator - Three-Floor Elevator', () => {
+describe('Minivac Simulator - Three-Floor Elevator', () => {
   it('should initialize at floor 1 with correct indicators', () => {
     const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 0;
