@@ -1,3 +1,4 @@
+import React from 'react';
 import Hole from '../primitives/Hole';
 
 interface PortPairProps {
@@ -10,7 +11,7 @@ interface PortPairProps {
   holeIds?: string[];       // Terminal IDs for each hole (e.g., ["6A", "6A"])
 }
 
-export default function PortPair({
+function PortPair({
   label = '',
   centerLabel = '',
   sublabels = [],
@@ -54,3 +55,5 @@ export default function PortPair({
     </div>
   );
 }
+
+export default React.memo(PortPair);

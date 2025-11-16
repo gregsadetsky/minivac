@@ -75,7 +75,7 @@ export default function RotaryKnob({
   return (
     <div
       ref={knobRef}
-      className="relative cursor-pointer select-none"
+      className="relative select-none"
       style={{ width: `${size}px`, height: `${size}px` }}
       onMouseDown={handleMouseDown}
     >

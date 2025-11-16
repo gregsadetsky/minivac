@@ -1,3 +1,4 @@
+import React from 'react';
 import Hole from '../primitives/Hole';
 
 interface MatrixConnectorProps {
@@ -8,7 +9,7 @@ interface MatrixConnectorProps {
   holeIds?: string[];      // Terminal IDs for 4 holes [top-left, top-right, bottom-left, bottom-right]
 }
 
-export default function MatrixConnector({
+function MatrixConnector({
   label,
   holeSize = 10,
   horizontalSpacing = 12,
@@ -67,3 +68,5 @@ export default function MatrixConnector({
     </div>
   );
 }
+
+export default React.memo(MatrixConnector);

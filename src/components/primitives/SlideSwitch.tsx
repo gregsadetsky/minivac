@@ -56,7 +56,7 @@ export default function SlideSwitch({
 
       {/* Sliding button */}
       <div
-        className="absolute transition-all duration-150"
+        className="absolute transition-all duration-[30ms]"
         style={{
           top: `${(height - sliderHeight) / 2}px`,
           left: `${sliderLeftPos}px`,

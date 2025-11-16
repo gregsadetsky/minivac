@@ -85,12 +85,15 @@ export default function LandingPage() {
         <a href="/" style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0, color: 'white', textDecoration: 'none' }}>
           Minivac 601 Simulator
         </a>
-        <nav>
+        <nav style={{ display: 'flex', alignItems: 'center' }}>
           <a href="/simulator" style={{ color: 'white', textDecoration: 'none', marginLeft: '2rem' }}>
             Open Simulator
           </a>
           <a href="/about" style={{ color: 'white', textDecoration: 'none', marginLeft: '2rem' }}>
             About
+          </a>
+          <a href="https://github.com/gregsadetsky/minivac" target="_blank" style={{ marginLeft: '2rem', display: 'flex', alignItems: 'center' }}>
+            <img src="/github-icon/github-mark-white.svg" alt="GitHub" style={{ width: '24px', height: '24px' }} />
           </a>
         </nav>
       </header>
@@ -100,18 +103,27 @@ export default function LandingPage() {
         background: 'linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%)',
         color: 'white',
         padding: '3rem 2rem 1rem',
-        textAlign: 'center'
       }}>
-        <h2 style={{ fontSize: '2.5rem', marginBottom: '1rem', fontWeight: 300 }}>
-          A Relay Computer from 1961
+        <h2 style={{ fontSize: '2.5rem', marginBottom: '1rem', fontWeight: 300, textAlign: 'center' }}>
+          A 1961 Relay Computer Running in Your Browser
         </h2>
+
         <p style={{ fontSize: '1.2rem', maxWidth: '800px', margin: '0 auto 2rem', opacity: 0.9 }}>
-          Before microchips, before transistors, computers were built with mechanical relays.
-          This is a working simulation of the Minivac 601 - watch it count in binary, the same way
-          your phone does, just slow enough to see.
+          Before microchips existed, computers were built with mechanical relays.<br/>
+          This is a working simulation of the Minivac 601, an educational computer designed by Claude&nbsp;Shannon.
+          You can watch it think slowly enough to see every step.
         </p>
 
-        {/* Audio control link */}
+        <p style={{ fontSize: '1.2rem', maxWidth: '800px', margin: '0 auto 2rem', opacity: 0.9 }}>
+          The circuit below is a simple 3-bit binary counter.<br/>
+          Lights 4, 5, and 6 are counting from zero to seven in binary.
+        </p>
+
+        <p style={{ fontSize: '1.2rem', maxWidth: '800px', margin: '0 auto 2rem', opacity: 0.9 }}>
+          Try pausing the automation and manually pressing the button 6.
+        </p>
+
+        {/* Audio and automation controls */}
         <div style={{ textAlign: 'center', margin: '1rem 0' }}>
           <a
             href="#"
@@ -127,6 +139,22 @@ export default function LandingPage() {
             }}
           >
             {isMuted ? 'Click to hear the relays' : 'Mute the relays'}
+          </a>
+          <span style={{ color: 'white', margin: '0 1rem', opacity: 0.5 }}>•</span>
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setIsPlaying(!isPlaying);
+            }}
+            style={{
+              color: '#88c0d0',
+              textDecoration: 'underline',
+              fontSize: '1.1rem',
+              cursor: 'pointer'
+            }}
+          >
+            {isPlaying ? 'Pause automation' : 'Resume automation'}
           </a>
         </div>
 
@@ -155,37 +183,6 @@ export default function LandingPage() {
             cableOffsetY={2}
           />
         </div>
-
-        {/* Pause/Resume automation control */}
-        <div style={{
-          textAlign: 'center',
-          padding: '1.5rem',
-          marginTop: '2rem'
-        }}>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              setIsPlaying(!isPlaying);
-            }}
-            style={{
-              color: '#88c0d0',
-              textDecoration: 'underline',
-              fontSize: '1rem',
-              cursor: 'pointer'
-            }}
-          >
-            {isPlaying ? 'Pause automation' : 'Resume automation'}
-          </a>
-          {!isPlaying && (
-            <>
-              <br /><br />
-              <span style={{ color: 'white', fontSize: '0.9rem' }}>
-                You can also manually push and release the 6th button from the left!
-              </span>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Explanation Section */}
@@ -194,19 +191,43 @@ export default function LandingPage() {
         margin: '0 auto',
         padding: '4rem 2rem',
         background: 'white',
-        marginTop: '8rem'
+        marginTop: '4rem'
       }}>
         <h3 style={{ fontSize: '2rem', marginBottom: '1rem', fontWeight: 400 }}>
-          Each relay click is a logic operation
+          Where to go from here?
         </h3>
         <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', color: '#555' }}>
-          The same operations happening billions of times per second in your phone, computer, or smartwatch.
-          Here they're slowed down enough that you can see, hear, and understand exactly how digital logic works.
+          This site is a work in progress. For now, I recommend that you peruse the original Minivac manuals (and don't forget to check the Erratas!) and play around with the Full Simulator below. Questions / comments? Reach out! <a href="mailto:hi@greg.technology" style={{textDecoration: "underline"}}>hi@greg.technology</a>
         </p>
-        <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', color: '#555' }}>
-          The three lights above are counting in binary: 000, 001, 010, 011, 100, 101, 110, 111 -
-          that's 0 through 7. Every computer in the world counts this way.
-        </p>
+
+        {/* Manual Links */}
+        <div style={{ marginTop: '2rem', marginBottom: '2rem' }}>
+          <h4 style={{ fontSize: '1.3rem', marginBottom: '1rem', fontWeight: 500, color: '#333' }}>
+            Original Manuals
+          </h4>
+          <ul style={{ fontSize: '1rem', lineHeight: '2', color: '#555', listStyle: 'none', padding: 0 }}>
+            <li>
+              - <a href="/manuals/1961-minivac601-book1.pdf" target="_blank" style={{ color: '#007bff', textDecoration: 'underline' }}>
+                Book 1
+              </a>
+            </li>
+            <li>
+              - <a href="/manuals/1961-minivac601-book2-3-4.pdf" target="_blank" style={{ color: '#007bff', textDecoration: 'underline' }}>
+                Books 2, 3 & 4
+              </a>
+            </li>
+            <li>
+              - <a href="/manuals/1961-minivac601-book5-6.pdf" target="_blank" style={{ color: '#007bff', textDecoration: 'underline' }}>
+                Books 5 & 6
+              </a>
+            </li>
+            <li>
+              - <a href="/manuals/1961-minivac601-erratas.pdf" target="_blank" style={{ color: '#007bff', textDecoration: 'underline' }}>
+                Erratas
+              </a>
+            </li>
+          </ul>
+        </div>
 
         <div style={{ textAlign: 'center', marginTop: '3rem' }}>
           <a
@@ -241,7 +262,7 @@ export default function LandingPage() {
             <a href="/about" style={{ color: '#88c0d0', textDecoration: 'none' }}>Read more...</a>
           </p>
           <p style={{ marginTop: '2rem', fontSize: '0.85rem', opacity: 0.6 }}>
-            A project by <a href="https://greg.technology" style={{ color: '#888', textDecoration: 'none' }}>Greg Technology</a>
+            A project by <a href="https://greg.technology" style={{ color: '#888', textDecoration: 'none' }}>Greg Technology</a>.
           </p>
         </div>
       </footer>

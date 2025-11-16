@@ -1,9 +1,11 @@
+import React from 'react';
+
 interface HoleProps {
   size?: number;
   dataHoleId?: string;
 }
 
-export default function Hole({ size = 10, dataHoleId }: HoleProps) {
+function Hole({ size = 10, dataHoleId }: HoleProps) {
   return (
     <div
       className="
@@ -26,3 +28,5 @@ export default function Hole({ size = 10, dataHoleId }: HoleProps) {
     />
   );
 }
+
+export default React.memo(Hole);

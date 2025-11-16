@@ -21,7 +21,6 @@ export interface SimulatorCoreProps {
 
   // Callbacks
   onStateChange?: (state: MinivacState) => void;
-  onShortCircuit?: () => void;
   onSimulatorReady?: (simulator: MinivacSimulator) => void;
 }
 
@@ -95,7 +94,7 @@ export default function SimulatorCore({
     }
   }, [muted]);
 
-  // Load initial circuit when panel is ready
+  // Load initial circuit when panel is ready or when initialCircuit changes
   React.useEffect(() => {
     if (!isPanelReady || initialCircuit.length === 0) return;
 
@@ -104,7 +103,7 @@ export default function SimulatorCore({
       cableManagement.loadCircuitFromNotation(initialCircuit);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPanelReady]);
+  }, [isPanelReady, initialCircuit]);
 
   // Notify parent when circuit changes
   React.useEffect(() => {
@@ -151,6 +150,13 @@ export default function SimulatorCore({
     console.log('[SimulatorCore] Simulator initialized with', circuitNotation.length, 'wires');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cableManagement.cables]);
+
+  // Notify parent whenever simulator changes (including when power is toggled)
+  React.useEffect(() => {
+    if (simulator) {
+      onSimulatorReady?.(simulator);
+    }
+  }, [simulator, onSimulatorReady]);
 
   // Polling loop to update simulation state
   React.useEffect(() => {

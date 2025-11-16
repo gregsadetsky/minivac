@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 interface PushButtonProps {
   size?: number;
@@ -7,7 +7,7 @@ interface PushButtonProps {
   pressed?: boolean; // External control of pressed state
 }
 
-export default function PushButton({
+function PushButton({
   size = 60,
   onPress,
   onRelease,
@@ -81,3 +81,5 @@ export default function PushButton({
     </div>
   );
 }
+
+export default React.memo(PushButton);

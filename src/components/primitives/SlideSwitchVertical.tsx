@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 interface SlideSwitchVerticalProps {
   width?: number;
@@ -8,7 +8,7 @@ interface SlideSwitchVerticalProps {
   disabled?: boolean;
 }
 
-export default function SlideSwitchVertical({
+function SlideSwitchVertical({
   width = 24,
   height = 50,
   isBottom: controlledIsBottom,
@@ -20,7 +20,7 @@ export default function SlideSwitchVertical({
   // Use controlled if provided, otherwise use internal state
   const isBottom = controlledIsBottom !== undefined ? controlledIsBottom : internalIsBottom;
 
-  const handleClick = () => {
+  const handleMouseDown = () => {
     if (disabled) return;
     const newState = !isBottom;
     if (controlledIsBottom === undefined) {
@@ -37,7 +37,7 @@ export default function SlideSwitchVertical({
     <div
       className={`relative select-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
       style={{ width: `${width}px`, height: `${height}px` }}
-      onClick={handleClick}
+      onMouseDown={handleMouseDown}
     >
       {/* Track/housing */}
       <div
@@ -59,7 +59,7 @@ export default function SlideSwitchVertical({
 
       {/* Sliding button */}
       <div
-        className="absolute transition-all duration-150"
+        className="absolute transition-all duration-[30ms]"
         style={{
           top: `${sliderTopPos}px`,
           left: `${(width - sliderWidth) / 2}px`,
@@ -93,3 +93,5 @@ export default function SlideSwitchVertical({
     </div>
   );
 }
+
+export default React.memo(SlideSwitchVertical);

@@ -1,12 +1,28 @@
+import React from 'react';
+
 interface LightProps {
   size?: number;
   isOn?: boolean;
 }
 
-export default function Light({
+function Light({
   size = 40,
   isOn = false
 }: LightProps) {
+  // Calculate scaled dimensions based on size (default 40px)
+  // Special case for debug lights (size ~44): 8px shadow, 24px bulb
+  // For sizes <= 30: use 0.1 ratio, for size 40: use 0.25 ratio
+  const shadowOffset = size > 42 ? 8 : (size <= 30 ? size * 0.1 : size * 0.25);  // 8px for size 44, 3px for size 30, 10px for size 40
+  const bulbOffset = size > 42 ? 8 : (size <= 30 ? size * 0.1 : size * 0.25);    // 8px for size 44, 3px for size 30, 10px for size 40
+  const innerRingSize = size > 42 ? 28 : size * 0.65;   // 28px for size 44, 26px for size 40, 19.5px for size 30
+  const bulbSize = size > 42 ? 24 : size * 0.55;        // 24px for size 44, 22px for size 40, 16.5px for size 30
+  const highlightTop = size * 0.1;     // 4px for size 40, 3px for size 30
+  const highlightRight = size * 0.15;  // 6px for size 40, 4.5px for size 30
+  const highlightWidthOn = size > 42 ? 12 : size * 0.275;  // 12px for size 44, 11px for size 40
+  const highlightWidthOff = size > 42 ? 8 : size * 0.175;  // 8px for size 44, 7px for size 40
+  const highlightHeightOn = size > 42 ? 8 : size * 0.175;  // 8px for size 44, 7px for size 40
+  const highlightHeightOff = size > 42 ? 6 : size * 0.125; // 6px for size 44, 5px for size 40
+  const glowOffset = size > 42 ? 8 : size * 0.175;     // 8px for size 44, 7px for size 40
 
   return (
     <div
@@ -31,10 +47,10 @@ export default function Light({
         <div
           className="absolute rounded-full"
           style={{
-            top: '8px',
-            left: '8px',
-            width: '26px',
-            height: '26px',
+            top: `${shadowOffset}px`,
+            left: `${shadowOffset}px`,
+            width: `${innerRingSize}px`,
+            height: `${innerRingSize}px`,
             background: '#0d0f13',
             boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.9)'
           }}
@@ -45,10 +61,10 @@ export default function Light({
       <div
         className="absolute rounded-full"
         style={{
-          top: '10px',
-          left: '10px',
-          width: '22px',
-          height: '22px',
+          top: `${bulbOffset}px`,
+          left: `${bulbOffset}px`,
+          width: `${bulbSize}px`,
+          height: `${bulbSize}px`,
           background: isOn ? `radial-gradient(
             circle at 35% 35%,
             #fff5f0 0%,
@@ -78,10 +94,10 @@ export default function Light({
         <div
           className="absolute rounded-full"
           style={{
-            top: '4px',
-            right: '6px',
-            width: isOn ? '11px' : '7px',
-            height: isOn ? '7px' : '5px',
+            top: `${highlightTop}px`,
+            right: `${highlightRight}px`,
+            width: isOn ? `${highlightWidthOn}px` : `${highlightWidthOff}px`,
+            height: isOn ? `${highlightHeightOn}px` : `${highlightHeightOff}px`,
             background: isOn ? `radial-gradient(
               ellipse at center,
               rgba(255,255,255,0.9) 0%,
@@ -101,10 +117,10 @@ export default function Light({
           <div
             className="absolute rounded-full animate-pulse"
             style={{
-              top: '-7px',
-              left: '-7px',
-              right: '-7px',
-              bottom: '-7px',
+              top: `-${glowOffset}px`,
+              left: `-${glowOffset}px`,
+              right: `-${glowOffset}px`,
+              bottom: `-${glowOffset}px`,
               background: `radial-gradient(
                 circle at center,
                 rgba(255,120,80,0.3) 0%,
@@ -117,3 +133,5 @@ export default function Light({
     </div>
   );
 }
+
+export default React.memo(Light);

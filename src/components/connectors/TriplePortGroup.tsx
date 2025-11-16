@@ -1,3 +1,4 @@
+import React from 'react';
 import Hole from '../primitives/Hole';
 
 interface TriplePortGroupProps {
@@ -9,7 +10,7 @@ interface TriplePortGroupProps {
   holeIds?: string[];      // Terminal IDs for all 6 holes (2 per pair)
 }
 
-export default function TriplePortGroup({
+function TriplePortGroup({
   topRow,
   bottomLabels,
   holeSize = 10,
@@ -71,8 +72,10 @@ export default function TriplePortGroup({
   );
 }
 
+export default React.memo(TriplePortGroup);
+
 // Helper component for the LIGHT/COIL bracket decorations
-export function LightCoilDecorations() {
+function LightCoilDecorationsComponent() {
   return (
     <>
       {/* First bracket ┏ */}
@@ -125,3 +128,5 @@ export function LightCoilDecorations() {
     </>
   );
 }
+
+export const LightCoilDecorations = React.memo(LightCoilDecorationsComponent);
