@@ -11,8 +11,9 @@ function Light({
 }: LightProps) {
   // Calculate scaled dimensions based on size (default 40px)
   // Special case for debug lights (size ~44): 8px shadow, 24px bulb
-  // For sizes <= 30: use 0.1 ratio, for size 40: use 0.25 ratio
-  const shadowOffset = size > 42 ? 8 : (size <= 30 ? size * 0.1 : size * 0.25);  // 8px for size 44, 3px for size 30, 10px for size 40
+  // For sizes <= 30: use 0.1 ratio, for size 40: use custom values
+  const shadowOffsetTop = size > 42 ? 8 : (size <= 30 ? size * 0.1 : 9);         // 8px for size 44, 3px for size 30, 9px for size 40
+  const shadowOffsetLeft = size > 42 ? 8 : (size <= 30 ? size * 0.1 : 8);        // 8px for size 44, 3px for size 30, 8px for size 40
   const bulbOffset = size > 42 ? 8 : (size <= 30 ? size * 0.1 : size * 0.25);    // 8px for size 44, 3px for size 30, 10px for size 40
   const innerRingSize = size > 42 ? 28 : size * 0.65;   // 28px for size 44, 26px for size 40, 19.5px for size 30
   const bulbSize = size > 42 ? 24 : size * 0.55;        // 24px for size 44, 22px for size 40, 16.5px for size 30
@@ -47,8 +48,8 @@ function Light({
         <div
           className="absolute rounded-full"
           style={{
-            top: `${shadowOffset}px`,
-            left: `${shadowOffset}px`,
+            top: `${shadowOffsetTop}px`,
+            left: `${shadowOffsetLeft}px`,
             width: `${innerRingSize}px`,
             height: `${innerRingSize}px`,
             background: '#0d0f13',
