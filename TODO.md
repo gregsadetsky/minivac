@@ -30,6 +30,8 @@
 - ability to slow down or speed up the motor wheel..?
 - retest automatic toll to see if it passes (with break before make?)
 - when the power is turned off, any relays losing power should click off (if they were on)
+- get a recording of the original minivac relay sound
+- find out real speed of the minivac wheel (does the motor "rev up" or is it immediately at full speed?)
 
 ### no
 

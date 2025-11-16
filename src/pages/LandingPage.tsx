@@ -222,6 +222,19 @@ export default function LandingPage() {
             cableOffsetY={2}
           />
         </div>
+
+        <div style={{ textAlign: 'center', marginTop: '1rem', marginBottom: '2rem' }}>
+          <a
+            href={`/simulator${import.meta.env.DEV ? '' : '/'}#wires=${encodeURIComponent(THREEBIT_COUNTER.join(' '))}`}
+            style={{
+              color: '#88c0d0',
+              textDecoration: 'none',
+              fontSize: '0.95rem'
+            }}
+          >
+            See in Simulator →
+          </a>
+        </div>
       </div>
 
       {/* Explanation Section */}
