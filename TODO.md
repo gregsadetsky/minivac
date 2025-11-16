@@ -1,4 +1,3 @@
-steps to launch:
 - show reduced versions of minivac - just relay + button + light
 - hold button for long time to lock, click again to unlock
 - drag cables on mobile
@@ -11,8 +10,6 @@ steps to launch:
 - 3 bit counter: labels for lights 4/5/6? show binary table with the correct 4/5/6 lights in a row and highlight row of the current number?
 - ability to turn the wheel manually - while its not turning only..?
 - ability to close (while clicking/holding) a relay manually..?
-- write a repo readme
-- give it a public url (minivac.greg.technology)
 - live documentation: show relevant manual page?
 - bring in examples: tic tac toe... others from all books?
 - bring in existing tests or just go through books again and re-create tests: very basic "do voltage work" (like test fundamental circuit simulation), test short circuit (+ to -) at analog simulation level, then test the same at minivac level: loading a url that connects positive to negative power rails
