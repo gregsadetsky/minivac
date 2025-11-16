@@ -2,6 +2,7 @@ import React from 'react';
 import SimulatorCore from '../components/SimulatorCore';
 import { THREEBIT_COUNTER } from '../circuits/presets';
 import { MinivacSimulator } from '../simulator/minivac-simulator';
+import { SpeakerWaveIcon, SpeakerXMarkIcon, PauseCircleIcon, PlayCircleIcon, LightBulbIcon } from '@heroicons/react/24/outline';
 
 export default function LandingPage() {
   const [simulator, setSimulator] = React.useState<MinivacSimulator | null>(null);
@@ -87,7 +88,7 @@ export default function LandingPage() {
         </a>
         <nav style={{ display: 'flex', alignItems: 'center' }}>
           <a href="/simulator" style={{ color: 'white', textDecoration: 'none', marginLeft: '2rem' }}>
-            Open Simulator
+            Open the Minivac 601 Simulator
           </a>
           <a href="https://github.com/gregsadetsky/minivac" target="_blank" style={{ marginLeft: '2rem', display: 'flex', alignItems: 'center' }}>
             <img src="/github-icon/github-mark-white.svg" alt="GitHub" style={{ width: '24px', height: '24px' }} />
@@ -95,64 +96,105 @@ export default function LandingPage() {
         </nav>
       </header>
 
-      {/* Hero Section */}
-      <div style={{
-        background: 'linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%)',
+      {/* Hero Section - Part 1 */}
+      <div className="text-center pt-16 px-8 pb-16" style={{
+        background: 'linear-gradient(135deg, #202020 0%, #1a1a1a 100%)',
         color: 'white',
-        padding: '3rem 2rem 1rem',
       }}>
-        <h2 style={{ fontSize: '2.5rem', marginBottom: '1rem', fontWeight: 300, textAlign: 'center' }}>
+        <h2 className="text-[3rem] mb-6 font-light">
           A 1961 Relay Computer Running in Your Browser
         </h2>
 
-        <p style={{ fontSize: '1.2rem', maxWidth: '800px', margin: '0 auto 2rem', opacity: 0.9 }}>
+        <p className="text-[1.3rem] max-w-[900px] mx-auto opacity-95 leading-[1.7]">
           Before microchips existed, computers were built with mechanical relays.<br/>
           This is a working simulation of the Minivac 601, an educational computer designed by Claude&nbsp;Shannon.
           You can watch it think slowly enough to see every step.
         </p>
+      </div>
 
-        <p style={{ fontSize: '1.2rem', maxWidth: '800px', margin: '0 auto 2rem', opacity: 0.9 }}>
-          The circuit below is a simple 3-bit binary counter.<br/>
+      {/* Hero Section - Part 2 */}
+      <div className="pt-12 px-8 pb-4" style={{
+        background: 'linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%)',
+        color: 'white',
+      }}>
+        <h3 className="text-center text-[1.8rem] mb-4 font-normal text-[#f0e68c]">
+          This circuit is a simple 3-bit binary counter
+        </h3>
+
+        <p className="text-center text-[1.1rem] max-w-[800px] mx-auto mb-16 opacity-90">
           Lights 4, 5, and 6 are counting from zero to seven in binary.
         </p>
 
-        <p style={{ fontSize: '1.2rem', maxWidth: '800px', margin: '0 auto 2rem', opacity: 0.9 }}>
-          Try pausing the automation and manually pressing the button 6.
-        </p>
-
         {/* Audio and automation controls */}
-        <div style={{ textAlign: 'center', margin: '1rem 0' }}>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              setIsMuted(!isMuted);
-            }}
-            style={{
-              color: '#88c0d0',
-              textDecoration: 'underline',
-              fontSize: '1.1rem',
-              cursor: 'pointer'
-            }}
-          >
-            {isMuted ? 'Click to hear the relays' : 'Mute the relays'}
-          </a>
-          <span style={{ color: 'white', margin: '0 1rem', opacity: 0.5 }}>•</span>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              setIsPlaying(!isPlaying);
-            }}
-            style={{
-              color: '#88c0d0',
-              textDecoration: 'underline',
-              fontSize: '1.1rem',
-              cursor: 'pointer'
-            }}
-          >
-            {isPlaying ? 'Pause automation' : 'Resume automation'}
-          </a>
+        <div className="max-w-[800px] mx-auto mb-8 mt-4">
+          <div className="flex justify-center items-center gap-4">
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                setIsMuted(!isMuted);
+              }}
+              style={{
+                background: '#88c0d0',
+                color: '#1a1a1a',
+                border: 'none',
+                padding: '0.4rem 0.85rem',
+                borderRadius: '4px',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 500
+              }}
+            >
+              {isMuted ? (
+                <>
+                  <SpeakerWaveIcon style={{ width: '16px', height: '16px' }} />
+                  Hear the relays
+                </>
+              ) : (
+                <>
+                  <SpeakerXMarkIcon style={{ width: '16px', height: '16px' }} />
+                  Mute the relays
+                </>
+              )}
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                setIsPlaying(!isPlaying);
+              }}
+              style={{
+                background: '#88c0d0',
+                color: '#1a1a1a',
+                border: 'none',
+                padding: '0.4rem 0.85rem',
+                borderRadius: '4px',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 500
+              }}
+            >
+              {isPlaying ? (
+                <>
+                  <PauseCircleIcon style={{ width: '16px', height: '16px' }} />
+                  Pause automation
+                </>
+              ) : (
+                <>
+                  <PlayCircleIcon style={{ width: '16px', height: '16px' }} />
+                  Resume automation
+                </>
+              )}
+            </button>
+            <div className="flex items-center gap-2">
+              <LightBulbIcon className="w-5 h-5" />
+              <span>Try pausing and clicking the #6 button.</span>
+            </div>
+          </div>
         </div>
 
         {/* Embedded Simulator - 3-bit counter auto-playing */}
@@ -184,23 +226,24 @@ export default function LandingPage() {
 
       {/* Explanation Section */}
       <section style={{
-        maxWidth: '1200px',
+        maxWidth: '1000px',
         margin: '0 auto',
-        padding: '4rem 2rem',
+        padding: '2rem 2rem',
         background: 'white',
         marginTop: '4rem'
       }}>
         <h3 style={{ fontSize: '2rem', marginBottom: '1rem', fontWeight: 400 }}>
-          Where to go from here?
+          Build Your Own Circuits!
         </h3>
         <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', color: '#555' }}>
-          This site is a work in progress. For now, I recommend that you peruse the original Minivac manuals (and don't forget to check the Erratas!) and play around with the Full Simulator below. Questions / comments? Reach out! <a href="mailto:hi@greg.technology" style={{textDecoration: "underline"}}>hi@greg.technology</a>
+          This site is a work in progress. For now, peruse the original Minivac manuals (don't forget to check the Erratas!) and play around with the Simulator.<br/><br/>
+          Questions / comments? Reach out! <a href="mailto:hi@greg.technology" style={{textDecoration: "underline"}}>hi@greg.technology</a>
         </p>
 
         {/* Manual Links */}
         <div style={{ marginTop: '2rem', marginBottom: '2rem' }}>
           <h4 style={{ fontSize: '1.3rem', marginBottom: '1rem', fontWeight: 500, color: '#333' }}>
-            Original Manuals
+            Follow the Original Manuals
           </h4>
           <ul style={{ fontSize: '1rem', lineHeight: '2', color: '#555', listStyle: 'none', padding: 0 }}>
             <li>
@@ -240,7 +283,7 @@ export default function LandingPage() {
               margin: '1rem 0.5rem'
             }}
           >
-            Open the Full Simulator
+            Open the Minivac 601 Simulator
           </a>
         </div>
       </section>

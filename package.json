@@ -13,6 +13,7 @@
     "check": "npm run lint && npm run typecheck && npm run test -- --run"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@tailwindcss/vite": "^4.1.17",
     "howler": "^2.2.4",
     "react": "^19.2.0",
