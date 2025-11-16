@@ -22,7 +22,6 @@
 - ability to add skeuo "stickers"/"labels" ie add something "on top" of buttons 1-2-3 in elevator example? and something on top of the wheel for the elevator levels?
 - deal with sound not working if not click - if loading a circuit via url and the circuit starts, relays won't be clicking. show some fake dialog?
 - have an about dialog, credit William McAllister, + recurse people that helped (most recent flip flop thread + rob)
-- email William McAllister
 - about: i want to buy minivac + interested in the capacity + 24 additional circuit extension..!
 - have links/show ads from minivac era? maybe separate sub-about page?
 - present/write narrative? why do i care? why is this interesting?
