@@ -66,7 +66,7 @@ export default function SimulatorCore({
     return () => {
       relayClickSound.current?.unload();
     };
-  }, [enableAudio, audioSrc]);
+  }, [enableAudio, audioSrc, muted]);
 
   // Update mute state when muted prop changes
   React.useEffect(() => {
@@ -81,6 +81,7 @@ export default function SimulatorCore({
 
         // Resume audio context (required for browser autoplay policies)
         if (typeof window !== 'undefined') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const ctx = (window as any).Howler?.ctx;
           if (ctx && ctx.state === 'suspended') {
             ctx.resume();
