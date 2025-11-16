@@ -416,6 +416,20 @@ export class MinivacSimulator {
     return oldPosition !== this.motorPosition || oldContactState !== newContactState;
   }
 
+  // Pause the simulator (called when UI power is turned off)
+  pause(): void {
+    // Clear motor update time to prevent catch-up when resumed
+    this.lastMotorUpdateTime = null;
+  }
+
+  // Resume the simulator (called when UI power is turned on)
+  resume(): void {
+    // If motor is running, reset the timer to now
+    if (this.motorRunning) {
+      this.lastMotorUpdateTime = Date.now();
+    }
+  }
+
   getState(): MinivacState {
     const needsResimulation = this._updateMotorPosition();
 

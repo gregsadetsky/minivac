@@ -158,6 +158,17 @@ export default function SimulatorCore({
     }
   }, [simulator, onSimulatorReady]);
 
+  // Handle power on/off - pause/resume simulator
+  React.useEffect(() => {
+    if (!simulator) return;
+
+    if (isPowerOn) {
+      simulator.resume();
+    } else {
+      simulator.pause();
+    }
+  }, [simulator, isPowerOn]);
+
   // Polling loop to update simulation state
   React.useEffect(() => {
     if (!simulator || !isPowerOn) return;
