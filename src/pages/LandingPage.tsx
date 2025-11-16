@@ -236,7 +236,7 @@ export default function LandingPage() {
           Build Your Own Circuits!
         </h3>
         <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', color: '#555' }}>
-          This site is a work in progress. For now, peruse the original Minivac manuals (don't forget to check the Erratas!) and play around with the Simulator.<br/><br/>
+          This site is a work in progress. For now, peruse the original Minivac manuals (don't forget to check the Erratas) and play around with the Simulator. Drag wires, connect components, make a short circuit! (it's safe)<br/><br/>
           Questions / comments? Reach out! <a href="mailto:hi@greg.technology" style={{textDecoration: "underline"}}>hi@greg.technology</a>
         </p>
 
