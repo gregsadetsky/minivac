@@ -89,9 +89,6 @@ export default function LandingPage() {
           <a href="/simulator" style={{ color: 'white', textDecoration: 'none', marginLeft: '2rem' }}>
             Open Simulator
           </a>
-          <a href="/about" style={{ color: 'white', textDecoration: 'none', marginLeft: '2rem' }}>
-            About
-          </a>
           <a href="https://github.com/gregsadetsky/minivac" target="_blank" style={{ marginLeft: '2rem', display: 'flex', alignItems: 'center' }}>
             <img src="/github-icon/github-mark-white.svg" alt="GitHub" style={{ width: '24px', height: '24px' }} />
           </a>
@@ -256,12 +253,7 @@ export default function LandingPage() {
         marginTop: '4rem'
       }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', fontSize: '0.95rem', opacity: 0.8 }}>
-          <p style={{ marginBottom: '0.5rem' }}>
-            The Minivac 601 was created in 1961 by Claude Shannon and others as an educational computer kit.
-            This simulator recreates the original hardware using accurate electrical simulation.{' '}
-            <a href="/about" style={{ color: '#88c0d0', textDecoration: 'none' }}>Read more...</a>
-          </p>
-          <p style={{ marginTop: '2rem', fontSize: '0.85rem', opacity: 0.6 }}>
+          <p style={{ fontSize: '0.85rem', opacity: 0.6 }}>
             A project by <a href="https://greg.technology" style={{ color: '#888', textDecoration: 'none' }}>Greg Technology</a>.
           </p>
         </div>
