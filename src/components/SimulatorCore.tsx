@@ -34,7 +34,6 @@ export default function SimulatorCore({
   audioSrc = '/relay-click.mp3',
   muted = false,
   onStateChange,
-  onShortCircuit,
   onSimulatorReady
 }: SimulatorCoreProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -169,7 +168,6 @@ export default function SimulatorCore({
       if (newState.alerts && newState.alerts.some(alert => alert.includes('SHORT CIRCUIT'))) {
         setIsPowerOn(false);
         setSimState(newState);
-        onShortCircuit?.();
         return; // Stop polling
       }
 
@@ -189,7 +187,7 @@ export default function SimulatorCore({
     }, 10); // Poll every 10ms
 
     return () => clearInterval(interval);
-  }, [simulator, isPowerOn, enableAudio, onStateChange, onShortCircuit]);
+  }, [simulator, isPowerOn, enableAudio, onStateChange]);
 
   const hasShortCircuit = simState?.alerts?.some(alert => alert.includes('SHORT CIRCUIT')) || false;
 
