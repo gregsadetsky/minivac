@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
+import { resolve } from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -11,6 +12,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        simulator: resolve(__dirname, 'simulator.html'),
+      },
+    },
+  },
   test: {
     environment: 'node', // Default to node for simulator tests
     setupFiles: './src/test/setup.ts',
