@@ -1,6 +1,6 @@
 # Minivac 601 Simulator
 
-... todo ...
+An attempt to create a web Simulator for the [Minivac 601](https://en.wikipedia.org/wiki/Minivac_601), an early electronics kit created by Claude Shannon.
 
 ### Credits
 
