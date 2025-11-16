@@ -13,8 +13,27 @@
     <meta property="og:description" content="A 1961 relay computer running in your browser" />
     <meta property="og:image" content="https://minivac.greg.technology/og-minivac.jpg" />
     <meta property="og:type" content="website" />
+    <style>
+      .mobile-hint {
+        display: none;
+        background: #fff3cd;
+        color: #856404;
+        padding: 0.75rem;
+        text-align: center;
+        font-size: 0.9rem;
+        border-bottom: 1px solid #ffeaa7;
+      }
+      @media (max-width: 768px) {
+        .mobile-hint {
+          display: block;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div class="mobile-hint">
+      Mobile support is about 20% there. Best viewed on desktop.
+    </div>
     <div id="root"></div>
     <script>
       // Set up i18n before circuit simulator loads
