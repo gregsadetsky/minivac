@@ -270,4 +270,73 @@ describe('URL management', () => {
     );
     expect(hasSelfConnection).toBe(false);
   });
+
+  it('should allow new wires to be created after reset', () => {
+    // Regression test for bug where holes become unusable after reset
+    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+    Element.prototype.getBoundingClientRect = function() {
+      const holeId = this.getAttribute('data-hole-id');
+      if (holeId === '1A') {
+        return { left: 100, top: 100, right: 110, bottom: 110, width: 10, height: 10, x: 100, y: 100, toJSON: () => ({}) } as DOMRect;
+      }
+      if (holeId === '2B') {
+        return { left: 200, top: 100, right: 210, bottom: 110, width: 10, height: 10, x: 200, y: 100, toJSON: () => ({}) } as DOMRect;
+      }
+      return { left: 0, top: 0, right: 1000, bottom: 1000, width: 1000, height: 1000, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    };
+
+    try {
+      const TestComponent = () => {
+        const ref = useRef<HTMLDivElement>(null);
+        const cableManagement = useCableManagement(ref);
+        const [step, setStep] = React.useState<'initial' | 'loaded' | 'reset' | 'reloaded'>('initial');
+
+        React.useEffect(() => {
+          if (!ref.current) return;
+
+          if (step === 'initial') {
+            // Step 1: Load a circuit
+            cableManagement.loadCircuitFromNotation(['1A/2B']);
+            setStep('loaded');
+          } else if (step === 'loaded') {
+            // Step 2: Reset by loading empty circuit
+            cableManagement.loadCircuitFromNotation([]);
+            setStep('reset');
+          } else if (step === 'reset') {
+            // Step 3: Try to load a new circuit after reset
+            cableManagement.loadCircuitFromNotation(['1A/2B']);
+            setStep('reloaded');
+          }
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [step]);
+
+        return (
+          <div ref={ref} data-testid="reset-container">
+            <Hole size={10} dataHoleId="1A" />
+            <Hole size={10} dataHoleId="2B" />
+            <div data-testid="step">{step}</div>
+            <div data-testid="cable-count">{cableManagement.cables.length}</div>
+          </div>
+        );
+      };
+
+      const { rerender } = render(<TestComponent />);
+
+      // Wait for all steps to complete
+      let attempts = 0;
+      while (attempts < 10) {
+        const stepEl = screen.getByTestId('step');
+        if (stepEl.textContent === 'reloaded') break;
+        rerender(<TestComponent />);
+        attempts++;
+      }
+
+      // After reset and reload, should have 1 cable again
+      const cableCount = screen.getByTestId('cable-count');
+      expect(cableCount.textContent).toBe('1');
+    } finally {
+      Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    }
+  });
 });

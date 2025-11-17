@@ -107,9 +107,18 @@ export default function SimulatorPage() {
     setShowLoadDialog(false);
   };
 
+  // Handle resetting the circuit
+  const handleResetCircuit = () => {
+    console.log('[SimulatorPage] Resetting circuit');
+    setCircuit([]);
+  };
+
   return (
     <>
-      <Sidebar onLoadCircuit={handleLoadCircuit} />
+      <Sidebar
+        onLoadCircuit={handleLoadCircuit}
+        onResetCircuit={handleResetCircuit}
+      />
 
       <LoadCircuitDialog
         isOpen={showLoadDialog}

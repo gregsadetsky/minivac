@@ -78,22 +78,23 @@ export interface MinivacState {
  */
 export class MinivacSimulator {
   private wires: Array<[string, string]>;
-  private buttonStates: boolean[] = [false, false, false, false, false, false];
-  private relayStates: boolean[] = [false, false, false, false, false, false];
-  private lightStates: boolean[] = [false, false, false, false, false, false];
-  private relayIndicatorLightStates: boolean[] = [false, false, false, false, false, false];
-  private slideStates: boolean[] = [false, false, false, false, false, false];
-  public motorPosition: number = 0;
-  public motorAngle: number = 0;  // Continuous angle in degrees (0° is north/top)
-  private motorRunning: boolean = false;
-  private motorDirection: number = 1;
-  private lastMotorUpdateTime: number | null = null;
-  private lastMotorContactState: boolean = true;  // Track if motor arm was making contact
+  private buttonStates!: boolean[];
+  private relayStates!: boolean[];
+  private lightStates!: boolean[];
+  private relayIndicatorLightStates!: boolean[];
+  private slideStates!: boolean[];
+  public motorPosition!: number;
+  public motorAngle!: number;  // Continuous angle in degrees (0° is north/top)
+  private motorRunning!: boolean;
+  private motorDirection!: number;
+  private lastMotorUpdateTime!: number | null;
+  private lastMotorContactState!: boolean;  // Track if motor arm was making contact
   public verbose: boolean = false;
 
   constructor(circuitNotation: string[], verbose = false) {
     this.wires = parseMinivacNotation(circuitNotation);
     this.verbose = verbose;
+    this.reset(); // Initialize all state to defaults
     if (this.verbose) {
       console.log(`Minivac initialized with ${this.wires.length} wires`);
     }
@@ -485,5 +486,22 @@ export class MinivacSimulator {
     this.motorAngle = angle;
     this._calculatePositionFromAngle();
     this.lastMotorContactState = this._isMotorMakingContact();
+  }
+
+  // Reset simulator to initial state (all relays off, buttons up, motor at position 0)
+  reset(): void {
+    this.buttonStates = [false, false, false, false, false, false];
+    this.relayStates = [false, false, false, false, false, false];
+    this.lightStates = [false, false, false, false, false, false];
+    this.relayIndicatorLightStates = [false, false, false, false, false, false];
+    this.slideStates = [false, false, false, false, false, false];
+    this.motorPosition = 0;
+    this.motorAngle = 0;
+    this.motorRunning = false;
+    this.motorDirection = 1;
+    this.lastMotorUpdateTime = null;
+    this.lastMotorContactState = true;
+
+    if (this.verbose) console.log('\n🔄 Simulator reset to initial state');
   }
 }

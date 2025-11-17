@@ -8,6 +8,7 @@ export interface SimulatorCoreProps {
   // Circuit configuration
   initialCircuit?: string[];
   onCircuitChange?: (circuit: string[]) => void;
+  onReset?: () => void;
 
   // Display options
   scale?: number;
@@ -96,7 +97,7 @@ export default function SimulatorCore({
 
   // Load initial circuit when panel is ready or when initialCircuit changes
   React.useEffect(() => {
-    if (!isPanelReady || initialCircuit.length === 0) return;
+    if (!isPanelReady) return;
 
     console.log('[SimulatorCore] Loading initial circuit:', initialCircuit.length, 'connections');
     if (containerRef.current) {
@@ -123,8 +124,11 @@ export default function SimulatorCore({
       .filter(cable => cable.holeIds && cable.holeIds.length === 2)
       .map(cable => `${cable.holeIds![0]}/${cable.holeIds![1]}`);
 
-    // Preserve motor angle from old simulator
-    const oldMotorAngle = simulator?.motorAngle || 0;
+    // If circuit is empty (reset), don't preserve motor angle or slide states
+    const isReset = circuitNotation.length === 0;
+
+    // Preserve motor angle from old simulator (unless resetting)
+    const oldMotorAngle = isReset ? 0 : (simulator?.motorAngle || 0);
 
     // Create new simulator with updated circuit
     const minivac = new MinivacSimulator(circuitNotation);
@@ -134,10 +138,15 @@ export default function SimulatorCore({
 
     minivac.initialize();
 
-    // Restore slide switch states
-    slideStates.forEach((isRight, index) => {
-      minivac.setSlide(index + 1, isRight ? 'right' : 'left');
-    });
+    // Restore slide switch states (unless resetting)
+    if (!isReset) {
+      slideStates.forEach((isRight, index) => {
+        minivac.setSlide(index + 1, isRight ? 'right' : 'left');
+      });
+    } else {
+      // Reset slide states in UI when circuit is reset
+      setSlideStates([false, false, false, false, false, false]);
+    }
 
     // Get final state after all restorations
     const finalState = minivac.getState();

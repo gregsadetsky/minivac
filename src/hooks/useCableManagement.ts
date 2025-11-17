@@ -332,7 +332,16 @@ export function useCableManagement(
       return;
     }
 
+    // Clear all existing hole connection tracking
+    // Remove data-connected attribute from all previously connected holes
+    connectedHoleElements.current.forEach(([startEl, endEl]) => {
+      (startEl as HTMLElement).removeAttribute('data-connected');
+      (endEl as HTMLElement).removeAttribute('data-connected');
+    });
+    connectedHoleElements.current.clear();
+
     const newCables: CableData[] = [];
+    const newConnectedElements = new Map<number, [Element, Element]>();
 
     // Track how many times each hole ID has been used
     const holeUsageCount: Record<string, number> = {};
@@ -399,14 +408,24 @@ export function useCableManagement(
       const distance = Math.sqrt(dx * dx + dy * dy);
       const droop = Math.min(distance * 0.4, 200);
 
-      newCables.push({
+      const cable = {
         start: { x: startX, y: startY },
         end: { x: endX, y: endY },
         color: wireColors[idx % wireColors.length],
         droop,
         holeIds: [hole1Id, hole2Id]
-      });
+      };
+
+      newCables.push(cable);
+
+      // Track this connection and mark holes as connected
+      newConnectedElements.set(newCables.length - 1, [hole1, hole2]);
+      (hole1 as HTMLElement).setAttribute('data-connected', 'true');
+      (hole2 as HTMLElement).setAttribute('data-connected', 'true');
     });
+
+    // Update the connected elements map
+    connectedHoleElements.current = newConnectedElements;
 
     console.log(`Loaded ${newCables.length} cables from ${notation.length} connections`);
     setCables(newCables);

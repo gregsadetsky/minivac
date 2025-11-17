@@ -3,9 +3,10 @@ import { SAMPLE_CIRCUITS } from '../circuits';
 
 interface SidebarProps {
   onLoadCircuit: (circuit?: string[]) => void;
+  onResetCircuit: () => void;
 }
 
-export default function Sidebar({ onLoadCircuit }: SidebarProps) {
+export default function Sidebar({ onLoadCircuit, onResetCircuit }: SidebarProps) {
   const [isOpen, setIsOpen] = React.useState(false);
 
   const handleSampleClick = (circuit: string[]) => {
@@ -32,6 +33,16 @@ export default function Sidebar({ onLoadCircuit }: SidebarProps) {
           }`}
       >
         <div className="pt-20 px-4 overflow-y-auto h-full pb-8">
+          <button
+            onClick={() => {
+              onResetCircuit();
+              setIsOpen(false);
+            }}
+            className="w-full px-4 py-3 bg-red-700 text-white font-sans font-bold rounded hover:bg-red-600 transition-colors cursor-pointer mb-3"
+          >
+            Reset Circuit
+          </button>
+
           <button
             onClick={() => {
               onLoadCircuit();
