@@ -20,7 +20,7 @@ function SlideSwitchVertical({
   // Use controlled if provided, otherwise use internal state
   const isBottom = controlledIsBottom !== undefined ? controlledIsBottom : internalIsBottom;
 
-  const handleMouseDown = () => {
+  const handlePointerDown = () => {
     if (disabled) return;
     const newState = !isBottom;
     if (controlledIsBottom === undefined) {
@@ -36,8 +36,14 @@ function SlideSwitchVertical({
   return (
     <div
       className={`relative select-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-      style={{ width: `${width}px`, height: `${height}px` }}
-      onMouseDown={handleMouseDown}
+      style={{
+        width: `${width}px`,
+        height: `${height}px`,
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        touchAction: 'none'
+      }}
+      onPointerDown={handlePointerDown}
     >
       {/* Track/housing */}
       <div

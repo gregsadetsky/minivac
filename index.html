@@ -17,6 +17,13 @@
     <meta property="og:image" content="https://minivac.greg.technology/og-minivac.jpg" />
     <meta property="og:type" content="website" />
     <style>
+      /* Prevent iOS text selection UI globally for interactive app */
+      * {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+
       body {
         font-family: "Nunito Sans", sans-serif;
         font-optical-sizing: auto;

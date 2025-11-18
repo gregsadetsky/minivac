@@ -18,7 +18,7 @@ export default function SlideSwitch({
   // Use controlled if provided, otherwise use internal state
   const isRight = controlledIsRight !== undefined ? controlledIsRight : internalIsRight;
 
-  const handleClick = () => {
+  const handlePointerDown = () => {
     const newState = !isRight;
     if (controlledIsRight === undefined) {
       setInternalIsRight(newState);
@@ -33,8 +33,14 @@ export default function SlideSwitch({
   return (
     <div
       className="relative cursor-pointer select-none"
-      style={{ width: `${width}px`, height: `${height}px` }}
-      onClick={handleClick}
+      style={{
+        width: `${width}px`,
+        height: `${height}px`,
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        touchAction: 'none'
+      }}
+      onPointerDown={handlePointerDown}
     >
       {/* Track/housing */}
       <div

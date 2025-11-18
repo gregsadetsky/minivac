@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import React, { useRef } from 'react';
 import { useCableManagement } from './useCableManagement';
 import Hole from '../components/primitives/Hole';
@@ -337,6 +337,114 @@ describe('URL management', () => {
       expect(cableCount.textContent).toBe('1');
     } finally {
       Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    }
+  });
+});
+
+describe('Touch interaction', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', window.location.pathname);
+  });
+
+  it('should create cable with touch events (pointerdown, pointermove, pointerup)', () => {
+    // Mock getBoundingClientRect for predictable positions
+    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+    Element.prototype.getBoundingClientRect = function() {
+      const holeId = this.getAttribute('data-hole-id');
+      if (holeId === '1A') {
+        return { left: 100, top: 100, right: 110, bottom: 110, width: 10, height: 10, x: 100, y: 100, toJSON: () => ({}) } as DOMRect;
+      }
+      if (holeId === '2B') {
+        return { left: 300, top: 200, right: 310, bottom: 210, width: 10, height: 10, x: 300, y: 200, toJSON: () => ({}) } as DOMRect;
+      }
+      // Container
+      return { left: 0, top: 0, right: 1000, bottom: 1000, width: 1000, height: 1000, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    };
+
+    // Mock elementFromPoint to return the hole element during drag
+    const originalElementFromPoint = document.elementFromPoint;
+    let isOverHole2 = false;
+
+    document.elementFromPoint = function(x: number, y: number) {
+      // During drag, when pointer is near hole 2B position, return hole 2B
+      if (isOverHole2 && x >= 300 && x <= 310 && y >= 200 && y <= 210) {
+        return screen.getByTestId('container').querySelector('[data-hole-id="2B"]');
+      }
+      return null;
+    };
+
+    try {
+      const TestComponent = () => {
+        const ref = useRef<HTMLDivElement>(null);
+        const cableManagement = useCableManagement(ref);
+
+        return (
+          <div
+            ref={ref}
+            data-testid="container"
+            onPointerMove={cableManagement.handleMouseMove}
+            onPointerUp={cableManagement.handleMouseUp}
+          >
+            <Hole size={10} dataHoleId="1A" />
+            <Hole size={10} dataHoleId="2B" />
+            <div data-testid="cable-count">{cableManagement.cables.length}</div>
+            <div data-testid="is-dragging">{cableManagement.isDraggingWire ? 'true' : 'false'}</div>
+          </div>
+        );
+      };
+
+      render(<TestComponent />);
+
+      const container = screen.getByTestId('container');
+      const hole1 = container.querySelector('[data-hole-id="1A"]') as HTMLElement;
+      const hole2 = container.querySelector('[data-hole-id="2B"]') as HTMLElement;
+
+      expect(hole1).toBeTruthy();
+      expect(hole2).toBeTruthy();
+
+      // Initial state: no cables
+      expect(screen.getByTestId('cable-count').textContent).toBe('0');
+      expect(screen.getByTestId('is-dragging').textContent).toBe('false');
+
+      // Step 1: Touch down on hole 1A
+      fireEvent.pointerDown(hole1, {
+        pointerType: 'touch',
+        clientX: 105,
+        clientY: 105,
+        bubbles: true
+      });
+
+      // Should start dragging
+      expect(screen.getByTestId('is-dragging').textContent).toBe('true');
+
+      // Step 2: Move touch towards hole 2B
+      isOverHole2 = true;
+      fireEvent.pointerMove(container, {
+        pointerType: 'touch',
+        clientX: 305,
+        clientY: 205,
+        bubbles: true
+      });
+
+      // Still dragging
+      expect(screen.getByTestId('is-dragging').textContent).toBe('true');
+
+      // Step 3: Release touch over hole 2B
+      fireEvent.pointerUp(container, {
+        pointerType: 'touch',
+        clientX: 305,
+        clientY: 205,
+        bubbles: true
+      });
+
+      // Should complete the cable
+      expect(screen.getByTestId('is-dragging').textContent).toBe('false');
+      expect(screen.getByTestId('cable-count').textContent).toBe('1');
+
+    } finally {
+      Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+      document.elementFromPoint = originalElementFromPoint;
     }
   });
 });

@@ -20,29 +20,4 @@ export const THREEBIT_COUNTER = threeBitCounterCircuit.circuit;
  */
 export const ELEVATOR_3FLOOR = elevatorCircuit.circuit;
 
-/**
- * Simple button → relay → light circuit for Exercise 1
- * "Ring the Bell" - demonstrates basic relay operation
- */
-export const SIMPLE_BELL = [
-  '1Y/1+',  // Button 1 Y-contact to power
-  '1X/1C',  // Button 1 NO-contact to relay 1 coil
-  '1C/1-',  // Relay 1 coil to ground
-  '1+/1A',  // Power to light 1 input
-  '1G/1B',  // Relay 1 NO-contact to light 1 output
-  '1B/1-',  // Light 1 output to ground
-];
 
-/**
- * AND gate using two buttons
- * Light only turns on when BOTH buttons are pressed
- */
-export const AND_GATE = [
-  '1Y/1+',   // Button 1 to power
-  '1X/2Y',   // Button 1 NO → Button 2 Y
-  '2X/1C',   // Button 2 NO → Relay 1 coil
-  '1C/1-',   // Relay coil to ground
-  '1+/1A',   // Power to light
-  '1G/1B',   // Relay NO to light
-  '1B/1-',   // Light to ground
-];

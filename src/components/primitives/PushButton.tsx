@@ -31,7 +31,13 @@ function PushButton({
   return (
     <div
       className="relative cursor-pointer select-none"
-      style={{ width: `${size}px`, height: `${size}px` }}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        WebkitTouchCallout: 'none', // Prevent iOS selection UI/magnifying glass
+        WebkitUserSelect: 'none',
+        touchAction: 'none', // Prevent pan when pressing button
+      }}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerLeave={() => isPressed && handlePointerUp()}

@@ -34,7 +34,7 @@ interface MinivacPanelProps {
   dragStartPos: { x: number; y: number } | null;
   dragCurrentPos: { x: number; y: number } | null;
   cableToDelete: number | null;
-  handleMouseMove: (event: React.MouseEvent) => void;
+  handleMouseMove: (event: React.MouseEvent | React.PointerEvent) => void;
   handleMouseUp: () => void;
   handleCableClick: (index: number) => void;
   confirmDeleteCable: () => void;
@@ -80,9 +80,13 @@ export default function MinivacPanel({
       <div
         ref={containerRef}
         className="relative bg-[#1a1a1a] p-3 border-[5px] border-[#84B6C7] select-none overflow-hidden mx-auto"
-        style={{ minWidth: '1200px', width: 'fit-content' }}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        style={{
+          minWidth: '1200px',
+          width: 'fit-content',
+          touchAction: isDraggingWire ? 'none' : 'auto', // Prevent pan during wire drag
+        }}
+        onPointerMove={handleMouseMove}
+        onPointerUp={handleMouseUp}
       >
         <div className="flex gap-0">
           {/* LEFT PANEL - 6 columns */}
@@ -153,7 +157,22 @@ export default function MinivacPanel({
               {columns.map(num => (
                 <div key={`relay-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <div style={{ marginLeft: '10px' }}>
-                    <Relay isEnergized={isPowerOn && (simState?.relays[num - 1] || false)} />
+                    <Relay
+                      isEnergized={isPowerOn && (simState?.relays[num - 1] || false)}
+                      onPointerDown={() => {
+                        if (!simulator) return;
+                        // Toggle current state (override)
+                        const currentState = simState?.relays[num - 1] || false;
+                        simulator.setRelayOverride(num, !currentState);
+                        setSimState(simulator.getState());
+                      }}
+                      onPointerUp={() => {
+                        if (!simulator) return;
+                        // Clear override, return to simulation control
+                        simulator.clearRelayOverride(num);
+                        setSimState(simulator.getState());
+                      }}
+                    />
                   </div>
                 </div>
               ))}

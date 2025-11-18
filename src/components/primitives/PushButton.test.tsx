@@ -58,5 +58,25 @@ describe('PushButton', () => {
       fireEvent.pointerCancel(button);
       expect(onRelease).toHaveBeenCalledTimes(1);
     });
+
+    it('should work with touch events through pointer API', () => {
+      // This test verifies that touch events work through the pointer event API
+      // Modern browsers map touch events to pointer events automatically
+      const onPress = vi.fn();
+      const onRelease = vi.fn();
+
+      const { container } = render(
+        <PushButton onPress={onPress} onRelease={onRelease} />
+      );
+
+      const button = container.firstChild as HTMLElement;
+
+      // Simulate touch by using pointerDown with pointerType: 'touch'
+      fireEvent.pointerDown(button, { pointerType: 'touch' });
+      expect(onPress).toHaveBeenCalledTimes(1);
+
+      fireEvent.pointerUp(button, { pointerType: 'touch' });
+      expect(onRelease).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -66,7 +66,7 @@ export function useCableManagement(
     setDragCurrentPos(startPos);
   };
 
-  const handleMouseMove = (event: React.MouseEvent) => {
+  const handleMouseMove = (event: React.MouseEvent | React.PointerEvent) => {
     if (!isDraggingWire || !containerRef.current || !dragStartPos) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
@@ -84,6 +84,22 @@ export function useCableManagement(
     const calculatedDroop = Math.min(distance * 0.4, 200);
 
     previewCableRef.current.droop = calculatedDroop;
+
+    // For touch devices, pointerover doesn't fire while dragging
+    // Use elementFromPoint to detect hole under pointer
+    const elementUnderPointer = document.elementFromPoint(event.clientX, event.clientY);
+    if (elementUnderPointer) {
+      const hole = elementUnderPointer.closest('[data-hole-id]');
+      if (hole) {
+        const holeId = hole.getAttribute('data-hole-id');
+        if (holeId && dragEndHoleElement.current !== hole) {
+          handleHoleMouseEnterElement(hole, holeId);
+        }
+      } else if (dragEndHoleElement.current) {
+        // Not over a hole anymore, clear highlight
+        handleHoleMouseLeave();
+      }
+    }
   };
 
   // Helper functions for highlighting holes
@@ -286,7 +302,7 @@ export function useCableManagement(
 
     const container = containerRef.current;
 
-    const handleMouseDownCapture = (e: MouseEvent) => {
+    const handlePointerDownCapture = (e: PointerEvent) => {
       const hole = (e.target as HTMLElement).closest('[data-hole-id]');
       if (!hole) return;
 
@@ -296,7 +312,7 @@ export function useCableManagement(
       handleHoleMouseDown(holeId, e as unknown as React.MouseEvent);
     };
 
-    const handleMouseOverCapture = (e: MouseEvent) => {
+    const handlePointerOverCapture = (e: PointerEvent) => {
       const hole = (e.target as HTMLElement).closest('[data-hole-id]');
       if (!hole) {
         handleHoleMouseLeave();
@@ -315,12 +331,13 @@ export function useCableManagement(
     };
 
     // Use capture phase to catch events before they're consumed
-    container.addEventListener('mousedown', handleMouseDownCapture, true);
-    container.addEventListener('mouseover', handleMouseOverCapture, true);
+    // Use pointer events instead of mouse events for touch/mouse/pen support
+    container.addEventListener('pointerdown', handlePointerDownCapture, true);
+    container.addEventListener('pointerover', handlePointerOverCapture, true);
 
     return () => {
-      container.removeEventListener('mousedown', handleMouseDownCapture, true);
-      container.removeEventListener('mouseover', handleMouseOverCapture, true);
+      container.removeEventListener('pointerdown', handlePointerDownCapture, true);
+      container.removeEventListener('pointerover', handlePointerOverCapture, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

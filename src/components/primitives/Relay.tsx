@@ -2,18 +2,32 @@ interface RelayProps {
   width?: number;
   height?: number;
   isEnergized?: boolean;
+  onPointerDown?: () => void;
+  onPointerUp?: () => void;
 }
 
 export default function Relay({
   width = 90,
   height = 80,
-  isEnergized = false
+  isEnergized = false,
+  onPointerDown,
+  onPointerUp
 }: RelayProps) {
 
   return (
     <div
-      className="relative select-none"
-      style={{ width: `${width}px`, height: `${height}px` }}
+      className="relative select-none cursor-pointer"
+      style={{
+        width: `${width}px`,
+        height: `${height}px`,
+        WebkitTouchCallout: 'none', // Prevent iOS selection UI/magnifying glass
+        WebkitUserSelect: 'none',
+        touchAction: 'none', // Prevent pan when pressing relay
+      }}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerUp}
+      onPointerCancel={onPointerUp}
     >
       {/* Vertical cylindrical coil on the left */}
       <div

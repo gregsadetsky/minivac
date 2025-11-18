@@ -80,6 +80,7 @@ export class MinivacSimulator {
   private wires: Array<[string, string]>;
   private buttonStates!: boolean[];
   private relayStates!: boolean[];
+  private relayOverrides!: Array<boolean | null>;  // Manual override states (null = no override)
   private lightStates!: boolean[];
   private relayIndicatorLightStates!: boolean[];
   private slideStates!: boolean[];
@@ -136,7 +137,12 @@ export class MinivacSimulator {
       const g1 = `Relay${i}_Contact1_NO`;
       const j1 = `Relay${i}_Contact1_NC`;
 
-      if (this.relayStates[i - 1]) {
+      // Use override state if present, otherwise use simulated relay state
+      const effectiveRelayState = this.relayOverrides[i - 1] !== null
+        ? this.relayOverrides[i - 1]
+        : this.relayStates[i - 1];
+
+      if (effectiveRelayState) {
         builder.addWire(h1, g1, `RELAY${i}_CONTACT1_NO_CLOSED`);
       } else {
         builder.addWire(h1, j1, `RELAY${i}_CONTACT1_NC_CLOSED`);
@@ -146,7 +152,7 @@ export class MinivacSimulator {
       const k2 = `Relay${i}_Contact2_NO`;
       const n2 = `Relay${i}_Contact2_NC`;
 
-      if (this.relayStates[i - 1]) {
+      if (effectiveRelayState) {
         builder.addWire(l2, k2, `RELAY${i}_CONTACT2_NO_CLOSED`);
       } else {
         builder.addWire(l2, n2, `RELAY${i}_CONTACT2_NC_CLOSED`);
@@ -438,8 +444,13 @@ export class MinivacSimulator {
       this._simulate();
     }
 
+    // Compute effective relay states (override takes precedence)
+    const effectiveRelayStates = this.relayStates.map((state, i) =>
+      this.relayOverrides[i] !== null ? this.relayOverrides[i]! : state
+    );
+
     return {
-      relays: [...this.relayStates],
+      relays: effectiveRelayStates,
       buttons: [...this.buttonStates],
       lights: [...this.lightStates],
       relayIndicatorLights: [...this.relayIndicatorLightStates],
@@ -488,10 +499,35 @@ export class MinivacSimulator {
     this.lastMotorContactState = this._isMotorMakingContact();
   }
 
+  // Manually override relay state (for manual relay control)
+  setRelayOverride(relayNum: number, state: boolean): void {
+    if (relayNum < 1 || relayNum > 6) {
+      throw new Error(`Invalid relay number: ${relayNum}`);
+    }
+    if (this.verbose) console.log(`\n🔧 Manual override: Relay ${relayNum} → ${state ? 'ON' : 'OFF'}`);
+    this.relayOverrides[relayNum - 1] = state;
+
+    // Re-simulate to update relay contacts with new override state
+    this._simulate();
+  }
+
+  // Clear manual relay override (return to simulation control)
+  clearRelayOverride(relayNum: number): void {
+    if (relayNum < 1 || relayNum > 6) {
+      throw new Error(`Invalid relay number: ${relayNum}`);
+    }
+    if (this.verbose) console.log(`\n🔧 Clear override: Relay ${relayNum} → simulation control`);
+    this.relayOverrides[relayNum - 1] = null;
+
+    // Re-simulate to update relay contacts back to simulation control
+    this._simulate();
+  }
+
   // Reset simulator to initial state (all relays off, buttons up, motor at position 0)
   reset(): void {
     this.buttonStates = [false, false, false, false, false, false];
     this.relayStates = [false, false, false, false, false, false];
+    this.relayOverrides = [null, null, null, null, null, null];
     this.lightStates = [false, false, false, false, false, false];
     this.relayIndicatorLightStates = [false, false, false, false, false, false];
     this.slideStates = [false, false, false, false, false, false];

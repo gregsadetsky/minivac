@@ -23,6 +23,7 @@ function Hole({ size = 10, dataHoleId }: HoleProps) {
       style={{
         width: `${size}px`,
         height: `${size}px`,
+        touchAction: 'none', // Prevent pan when dragging from hole (for wire creation on touch devices)
       }}
       data-hole-id={dataHoleId}
     />
