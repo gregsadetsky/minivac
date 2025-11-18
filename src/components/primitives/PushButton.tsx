@@ -18,12 +18,12 @@ function PushButton({
   // Use external pressed state if provided, otherwise use internal state
   const actualPressed = pressed !== undefined ? pressed : isPressed;
 
-  const handleMouseDown = () => {
+  const handlePointerDown = () => {
     setIsPressed(true);
     onPress?.();
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     setIsPressed(false);
     onRelease?.();
   };
@@ -32,9 +32,10 @@ function PushButton({
     <div
       className="relative cursor-pointer select-none"
       style={{ width: `${size}px`, height: `${size}px` }}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={() => isPressed && handleMouseUp()}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={() => isPressed && handlePointerUp()}
+      onPointerCancel={() => isPressed && handlePointerUp()}
     >
       {/* Base/housing */}
       <div
