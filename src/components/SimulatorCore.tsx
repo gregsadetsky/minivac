@@ -99,7 +99,6 @@ export default function SimulatorCore({
   React.useEffect(() => {
     if (!isPanelReady) return;
 
-    console.log('[SimulatorCore] Loading initial circuit:', initialCircuit.length, 'connections');
     if (containerRef.current) {
       cableManagement.loadCircuitFromNotation(initialCircuit);
     }
@@ -156,7 +155,6 @@ export default function SimulatorCore({
     // Notify parent that simulator is ready
     onSimulatorReady?.(minivac);
 
-    console.log('[SimulatorCore] Simulator initialized with', circuitNotation.length, 'wires');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cableManagement.cables]);
 

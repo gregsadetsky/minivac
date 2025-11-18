@@ -1,3 +1,4 @@
+import isMobile from 'is-mobile';
 import React from 'react';
 import { type CableData } from '../utils/wire-utils';
 
@@ -156,7 +157,7 @@ export function useCableManagement(
     }
 
     if (isDraggingWireRef.current && dragStartHoleElement.current && dragEndHoleElement.current &&
-        dragStartHoleIdRef.current && hoveredHoleIdRef.current && containerRef.current) {
+      dragStartHoleIdRef.current && hoveredHoleIdRef.current && containerRef.current) {
 
       // Use the stored element references
       const startHole = dragStartHoleElement.current;
@@ -235,42 +236,55 @@ export function useCableManagement(
   };
 
   const handleCableClick = (index: number) => {
-    setCableToDelete(index);
+    // On mobile/tablet, use native browser confirm dialog (doesn't zoom)
+    // On desktop, use custom dialog
+    // `featureDetect` below is necessary to correctly detect iPads
+    if (isMobile({ tablet: true, featureDetect: true })) {
+      if (window.confirm('Delete this wire?')) {
+        deleteCable(index);
+      }
+    } else {
+      setCableToDelete(index);
+    }
+  };
+
+  const deleteCable = (index: number) => {
+    // Get the hole elements before deleting
+    const elementsToDisconnect = connectedHoleElements.current.get(index);
+    if (elementsToDisconnect) {
+      const [startHole, endHole] = elementsToDisconnect;
+      // Remove data-connected attribute to re-enable hover
+      (startHole as HTMLElement).removeAttribute('data-connected');
+      (endHole as HTMLElement).removeAttribute('data-connected');
+      // Clear any lingering highlights
+      clearHoleHighlight(startHole);
+      clearHoleHighlight(endHole);
+    }
+
+    setCables(prev => {
+      const newCables = prev.filter((_, i) => i !== index);
+
+      // Remove from connected elements map and rebuild indices
+      const newMap = new Map<number, [Element, Element]>();
+      let newIndex = 0;
+      for (let i = 0; i < prev.length; i++) {
+        if (i !== index) {
+          const elements = connectedHoleElements.current.get(i);
+          if (elements) {
+            newMap.set(newIndex, elements);
+          }
+          newIndex++;
+        }
+      }
+      connectedHoleElements.current = newMap;
+
+      return newCables;
+    });
   };
 
   const confirmDeleteCable = () => {
     if (cableToDelete !== null) {
-      // Get the hole elements before deleting
-      const elementsToDisconnect = connectedHoleElements.current.get(cableToDelete);
-      if (elementsToDisconnect) {
-        const [startHole, endHole] = elementsToDisconnect;
-        // Remove data-connected attribute to re-enable hover
-        (startHole as HTMLElement).removeAttribute('data-connected');
-        (endHole as HTMLElement).removeAttribute('data-connected');
-        // Clear any lingering highlights
-        clearHoleHighlight(startHole);
-        clearHoleHighlight(endHole);
-      }
-
-      setCables(prev => {
-        const newCables = prev.filter((_, i) => i !== cableToDelete);
-
-        // Remove from connected elements map and rebuild indices
-        const newMap = new Map<number, [Element, Element]>();
-        let newIndex = 0;
-        for (let i = 0; i < prev.length; i++) {
-          if (i !== cableToDelete) {
-            const elements = connectedHoleElements.current.get(i);
-            if (elements) {
-              newMap.set(newIndex, elements);
-            }
-            newIndex++;
-          }
-        }
-        connectedHoleElements.current = newMap;
-
-        return newCables;
-      });
+      deleteCable(cableToDelete);
       setCableToDelete(null);
     }
   };
@@ -279,7 +293,7 @@ export function useCableManagement(
     setCableToDelete(null);
   };
 
-  // Handle keyboard events for delete dialog
+  // Handle keyboard events for delete dialog (desktop only)
   React.useEffect(() => {
     if (cableToDelete === null) return;
 
@@ -444,7 +458,6 @@ export function useCableManagement(
     // Update the connected elements map
     connectedHoleElements.current = newConnectedElements;
 
-    console.log(`Loaded ${newCables.length} cables from ${notation.length} connections`);
     setCables(newCables);
   };
 

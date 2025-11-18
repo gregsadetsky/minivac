@@ -555,16 +555,16 @@ export default function MinivacPanel({
           />
         )}
 
-        {/* Delete confirmation dialog */}
+        {/* Delete confirmation dialog (desktop only - mobile uses window.confirm) */}
         {cableToDelete !== null && (
           <div
-            className="absolute inset-0 flex items-center justify-center"
+            className="fixed inset-0 flex items-center justify-center"
             style={{ zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.7)' }}
             onClick={(e) => {
               if (e.target === e.currentTarget) cancelDeleteCable();
             }}
           >
-            <div className="bg-neutral-900 border-2 border-[#84B6C7] p-6 rounded-lg shadow-xl">
+            <div className="bg-neutral-900 border-2 border-[#84B6C7] p-6 rounded-lg shadow-xl max-w-[90vw] max-h-[90vh] overflow-auto">
               <h3 className="text-white text-lg font-sans font-bold mb-4">Delete Wire?</h3>
               <p className="text-neutral-300 mb-6">Are you sure you want to delete this wire?</p>
               <div className="flex gap-3 justify-end">

@@ -1,5 +1,6 @@
 import React from 'react';
 import SimulatorCore from '../components/SimulatorCore';
+import MobileHint from '../components/MobileHint';
 import { THREEBIT_COUNTER } from '../circuits/presets';
 import { MinivacSimulator } from '../simulator/minivac-simulator';
 import { SpeakerWaveIcon, SpeakerXMarkIcon, PauseCircleIcon, PlayCircleIcon, LightBulbIcon } from '@heroicons/react/24/outline';
@@ -73,6 +74,7 @@ export default function LandingPage() {
 
   return (
     <div style={{ background: '#f5f5f5', minHeight: '100vh' }}>
+      <MobileHint />
       {/* Header */}
       <header style={{
         background: '#1a1a1a',
