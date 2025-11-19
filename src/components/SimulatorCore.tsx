@@ -176,18 +176,24 @@ export default function SimulatorCore({
     }
   }, [simulator, isPowerOn]);
 
-  // Polling loop to update simulation state
+  // Animation loop to update simulation state (using RAF for smooth motor updates)
   React.useEffect(() => {
     if (!simulator || !isPowerOn) return;
 
-    const interval = setInterval(() => {
+    let rafId: number;
+    let isRunning = true;
+
+    const frame = () => {
+      if (!isRunning) return;
+
       const newState = simulator.getState();
 
       // Check for short circuit and auto power-off
       if (newState.alerts && newState.alerts.some(alert => alert.includes('SHORT CIRCUIT'))) {
         setIsPowerOn(false);
         setSimState(newState);
-        return; // Stop polling
+        isRunning = false;
+        return; // Stop animation loop
       }
 
       // Detect relay state changes and play sound
@@ -203,9 +209,18 @@ export default function SimulatorCore({
 
       setSimState(newState);
       onStateChange?.(newState);
-    }, 10); // Poll every 10ms
 
-    return () => clearInterval(interval);
+      // Request next frame
+      rafId = requestAnimationFrame(frame);
+    };
+
+    // Start animation loop
+    rafId = requestAnimationFrame(frame);
+
+    return () => {
+      isRunning = false;
+      cancelAnimationFrame(rafId);
+    };
   }, [simulator, isPowerOn, enableAudio, onStateChange]);
 
   const hasShortCircuit = simState?.alerts?.some(alert => alert.includes('SHORT CIRCUIT')) || false;
