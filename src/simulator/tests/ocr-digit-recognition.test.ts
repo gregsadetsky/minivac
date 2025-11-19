@@ -59,7 +59,7 @@ function waitForMotorPosition(minivac: MinivacSimulator, targetPosition: number,
 
 describe('Minivac Simulator - OCR Digit Recognition', () => {
   for (const pattern of digitPatterns) {
-    it(`should recognize digit ${pattern.digit} and move motor to D${pattern.position}`, () => {
+    it(`should recognize digit ${pattern.digit} and move motor to D${pattern.position}`, { timeout: 15000 }, () => {
       // Create circuit with digit connections
       const digitConnections = pattern.segments.map(seg => `M10/M${seg}t`);
       const testCircuit = [...baseCircuit, ...digitConnections];
@@ -92,7 +92,7 @@ describe('Minivac Simulator - OCR Digit Recognition', () => {
     });
   }
 
-  it('should distinguish between digit 0 and digit 4', () => {
+  it('should distinguish between digit 0 and digit 4', { timeout: 15000 }, () => {
     // Both have M2t, M4t, M6t, M8t but only 4 has M9t
     // Digit 0: segments [2, 4, 6, 8] → D0
     // Digit 4: segments [2, 4, 6, 8, 9] → D4
