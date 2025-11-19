@@ -27,6 +27,7 @@ interface MinivacPanelProps {
   setIsPowerOn: (on: boolean) => void;
   slideStates: boolean[];
   setSlideStates: React.Dispatch<React.SetStateAction<boolean[]>>;
+  setButtonStates: React.Dispatch<React.SetStateAction<boolean[]>>;
   previousRelayStatesRef: React.MutableRefObject<boolean[]>;
   hasShortCircuit: boolean;
   cables: CableData[];
@@ -53,6 +54,7 @@ export default function MinivacPanel({
   setIsPowerOn,
   slideStates,
   setSlideStates,
+  setButtonStates,
   previousRelayStatesRef,
   hasShortCircuit,
   cables,
@@ -351,12 +353,24 @@ export default function MinivacPanel({
                       if (simulator) {
                         simulator.pressButton(num);
                         setSimState(simulator.getState());
+                        // Update button state tracking
+                        setButtonStates(prev => {
+                          const newStates = [...prev];
+                          newStates[num - 1] = true;
+                          return newStates;
+                        });
                       }
                     }}
                     onRelease={() => {
                       if (simulator) {
                         simulator.releaseButton(num);
                         setSimState(simulator.getState());
+                        // Update button state tracking
+                        setButtonStates(prev => {
+                          const newStates = [...prev];
+                          newStates[num - 1] = false;
+                          return newStates;
+                        });
                       }
                     }}
                   />

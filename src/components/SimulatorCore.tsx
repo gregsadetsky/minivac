@@ -49,6 +49,9 @@ export default function SimulatorCore({
   // Slide switch states (false = left, true = right)
   const [slideStates, setSlideStates] = React.useState<boolean[]>([false, false, false, false, false, false]);
 
+  // Button states (false = released, true = pressed)
+  const [buttonStates, setButtonStates] = React.useState<boolean[]>([false, false, false, false, false, false]);
+
   // Track when panel is ready for circuit loading
   const [isPanelReady, setIsPanelReady] = React.useState(false);
 
@@ -126,14 +129,18 @@ export default function SimulatorCore({
     // If circuit is empty (reset), don't preserve motor angle or slide states
     const isReset = circuitNotation.length === 0;
 
-    // Preserve motor angle from old simulator (unless resetting)
+    // Preserve state from old simulator (unless resetting)
     const oldMotorAngle = isReset ? 0 : (simulator?.motorAngle || 0);
+    const oldRelayStates = isReset ? [false, false, false, false, false, false] : (simulator?.getState().relays || [false, false, false, false, false, false]);
 
     // Create new simulator with updated circuit
     const minivac = new MinivacSimulator(circuitNotation);
 
     // Restore motor angle BEFORE initialization so the circuit simulates with correct position
     minivac.updateMotorAngle(oldMotorAngle);
+
+    // Restore relay states BEFORE initialization to preserve latched relays
+    minivac.setRelayStates(oldRelayStates);
 
     minivac.initialize();
 
@@ -145,6 +152,18 @@ export default function SimulatorCore({
     } else {
       // Reset slide states in UI when circuit is reset
       setSlideStates([false, false, false, false, false, false]);
+    }
+
+    // Restore button states (unless resetting)
+    if (!isReset) {
+      buttonStates.forEach((isPressed, index) => {
+        if (isPressed) {
+          minivac.pressButton(index + 1);
+        }
+      });
+    } else {
+      // Reset button states in UI when circuit is reset
+      setButtonStates([false, false, false, false, false, false]);
     }
 
     // Get final state after all restorations
@@ -243,6 +262,7 @@ export default function SimulatorCore({
         setIsPowerOn={setIsPowerOn}
         slideStates={slideStates}
         setSlideStates={setSlideStates}
+        setButtonStates={setButtonStates}
         previousRelayStatesRef={previousRelayStates}
         hasShortCircuit={hasShortCircuit}
         cables={cableManagement.cables}

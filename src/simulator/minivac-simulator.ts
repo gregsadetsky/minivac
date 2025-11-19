@@ -523,6 +523,16 @@ export class MinivacSimulator {
     this._simulate();
   }
 
+  // Set initial relay states (for restoring state when circuit is modified)
+  // Call this BEFORE initialize() to preserve latched relay states
+  setRelayStates(states: boolean[]): void {
+    if (states.length !== 6) {
+      throw new Error(`Expected 6 relay states, got ${states.length}`);
+    }
+    this.relayStates = [...states];
+    if (this.verbose) console.log(`\n🔧 Set initial relay states: ${states.map((s, i) => `R${i+1}:${s?'ON':'OFF'}`).join(' ')}`);
+  }
+
   // Reset simulator to initial state (all relays off, buttons up, motor at position 0)
   reset(): void {
     this.buttonStates = [false, false, false, false, false, false];
