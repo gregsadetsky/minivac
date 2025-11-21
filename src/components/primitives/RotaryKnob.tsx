@@ -45,39 +45,41 @@ export default function RotaryKnob({
     onChange?.(newAngle);
   }, [controlledAngle, onChange, minAngle, maxAngle]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault(); // Prevent scrolling on touch
     setIsDragging(true);
     updateAngle(e.clientX, e.clientY);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
+  const handlePointerMove = useCallback((e: PointerEvent) => {
     if (isDragging) {
       updateAngle(e.clientX, e.clientY);
     }
   }, [isDragging, updateAngle]);
 
-  const handleMouseUp = useCallback(() => {
+  const handlePointerUp = useCallback(() => {
     setIsDragging(false);
   }, []);
 
   // Add and remove event listeners
   useEffect(() => {
     if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
       return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
       };
     }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+  }, [isDragging, handlePointerMove, handlePointerUp]);
 
   return (
     <div
       ref={knobRef}
       className="relative select-none"
-      style={{ width: `${size}px`, height: `${size}px` }}
-      onMouseDown={handleMouseDown}
+      style={{ width: `${size}px`, height: `${size}px`, touchAction: 'none' }}
+      onPointerDown={handlePointerDown}
     >
       {/* Base/shadow */}
       <div
