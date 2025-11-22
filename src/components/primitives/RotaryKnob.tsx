@@ -6,6 +6,7 @@ interface RotaryKnobProps {
   onChange?: (angle: number) => void;
   minAngle?: number;
   maxAngle?: number;
+  isInteractive?: boolean;  // Show pointer cursor when draggable
 }
 
 export default function RotaryKnob({
@@ -13,7 +14,8 @@ export default function RotaryKnob({
   angle: controlledAngle,
   onChange,
   minAngle = 0,
-  maxAngle = 360
+  maxAngle = 360,
+  isInteractive = true
 }: RotaryKnobProps) {
   const [internalAngle, setInternalAngle] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -78,7 +80,12 @@ export default function RotaryKnob({
     <div
       ref={knobRef}
       className="relative select-none"
-      style={{ width: `${size}px`, height: `${size}px`, touchAction: 'none' }}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        touchAction: 'none',
+        cursor: isInteractive ? 'pointer' : 'default'
+      }}
       onPointerDown={handlePointerDown}
     >
       {/* Base/shadow */}

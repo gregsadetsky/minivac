@@ -532,6 +532,7 @@ export default function MinivacPanel({
                   <RotaryKnob
                     size={100}
                     angle={simState?.motor.angle || 0}
+                    isInteractive={!simState?.motor.running}
                     onChange={(newAngle) => {
                       // Only allow manual control when motor is not running
                       if (simulator && simState && !simState.motor.running) {
