@@ -7,6 +7,7 @@ import VerticalPortStack from '../connectors/VerticalPortStack';
 import DecimalWheel from '../modules/DecimalWheel';
 import Cable from '../primitives/Cable';
 import Hole from '../primitives/Hole';
+import Label from '../primitives/Label';
 import Light from '../primitives/Light';
 import PushButton from '../primitives/PushButton';
 import Relay from '../primitives/Relay';
