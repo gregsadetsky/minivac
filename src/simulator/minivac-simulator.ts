@@ -71,6 +71,7 @@ export interface MinivacState {
     direction: string;
   };
   alerts: string[];
+  relayCurrents: number[];  // Relay coil currents in mA
 }
 
 /**
@@ -80,6 +81,7 @@ export class MinivacSimulator {
   private wires: Array<[string, string]>;
   private buttonStates!: boolean[];
   private relayStates!: boolean[];
+  private relayCurrents!: number[];  // Relay coil currents in mA
   private relayOverrides!: Array<boolean | null>;  // Manual override states (null = no override)
   private lightStates!: boolean[];
   private relayIndicatorLightStates!: boolean[];
@@ -267,13 +269,18 @@ export class MinivacSimulator {
         console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <0.5A)`);
       }
 
-      // Extract new relay states
+      // Extract new relay states and currents
       const newRelayStates: boolean[] = [];
+      const newRelayCurrents: number[] = [];
       for (let i = 1; i <= 6; i++) {
         const current = Math.abs(results[`I(RELAY${i}_COIL_PROBE)`] || 0);
         const energized = current >= RELAY_PICKUP_CURRENT;
         newRelayStates.push(energized);
+        newRelayCurrents.push(current * 1000);  // Store in mA
       }
+
+      // Store relay currents
+      this.relayCurrents = newRelayCurrents;
 
       // Check if relay states changed
       let changed = false;
@@ -335,7 +342,13 @@ export class MinivacSimulator {
       iteration++;
     }
 
+    // Maximum iterations reached - likely relay oscillation
+    const message = 'RELAY OSCILLATION DETECTED!';
+    if (!alerts.includes(message)) {
+      alerts.push(message);
+    }
     if (this.verbose) console.log('⚠️  Maximum iterations reached');
+    console.warn(`${message} Circuit did not stabilize after ${maxIterations} iterations (relays may be oscillating)`);
     return false;
   }
 
@@ -462,6 +475,7 @@ export class MinivacSimulator {
         direction: this.motorDirection > 0 ? 'CW' : 'CCW',
       },
       alerts: [...alerts],
+      relayCurrents: [...this.relayCurrents],
     };
   }
 
@@ -537,6 +551,7 @@ export class MinivacSimulator {
   reset(): void {
     this.buttonStates = [false, false, false, false, false, false];
     this.relayStates = [false, false, false, false, false, false];
+    this.relayCurrents = [0, 0, 0, 0, 0, 0];
     this.relayOverrides = [null, null, null, null, null, null];
     this.lightStates = [false, false, false, false, false, false];
     this.relayIndicatorLightStates = [false, false, false, false, false, false];
