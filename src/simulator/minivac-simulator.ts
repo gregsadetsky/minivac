@@ -9,6 +9,8 @@ import { parseMinivacNotation } from './circuit-notation-parser';
 // Minivac component specifications
 // measured on a real Minivac 601, 2026-08-17 — see REAL-DEVICE-MEASUREMENTS.md
 const SUPPLY_VOLTAGE = 13.3;  // Volts, measured open-circuit (was 12, a guess)
+// derived from measured sag: 13.3->13.15 V at ~100mA (1.5 Ohm), 13.3->12.88 V at ~230mA (1.8 Ohm)
+const SUPPLY_INTERNAL_RESISTANCE = 1.8;  // Ohms
 const RELAY_COIL_RESISTANCE = 55;  // Ohms, measured (was 400, a guess)
 // pickup bracketed on real device: coil + 1 light in series always picks up
 // (~71mA in this linear model), + 2 lights is unreliable (~42mA) — threshold set between
@@ -112,10 +114,11 @@ export class MinivacSimulator {
     const ckt = new cktsim.Circuit();
     const builder = new CircuitBuilder(ckt);
 
-    // Power supply
-    const vccNode = builder.getNode('Power_Positive');
+    // Power supply: ideal source behind measured internal resistance
+    const vsrcNode = builder.getNode('Power_Source_Internal');
     const gnd = ckt.gnd_node();
-    ckt.v(vccNode, gnd, SUPPLY_VOLTAGE.toString(), 'V_POWER');
+    ckt.v(vsrcNode, gnd, SUPPLY_VOLTAGE.toString(), 'V_POWER');
+    builder.addResistor('Power_Source_Internal', 'Power_Positive', SUPPLY_INTERNAL_RESISTANCE, 'V_POWER_INTERNAL_R');
 
     // Add all 6 lights
     for (let i = 1; i <= 6; i++) {
