@@ -19,8 +19,11 @@ const RELAY_COIL_RESISTANCE = 55;  // Ohms, measured (was 400, a guess)
 // so model behavior matches the observed device: coil + 1 light picks up (~71mA here),
 // coil + 2 lights doesn't (~42mA here).
 const RELAY_PICKUP_CURRENT = 0.050;
-// dropout scaled by the measured hysteresis ratio (1.65V / 5.05V ~= 0.33)
-const RELAY_DROPOUT_CURRENT = 0.0163;
+// NOTE: real relays have ~3:1 hysteresis (drop out at ~1.65V/~30mA, well below pickup).
+// tried modeling it (see git history) but it breaks the 3-bit counter in this linear
+// model: the counter holds relays at 25-38mA model-current in states where it needs them
+// to release. whether the real counter works on real hardware is untested — until then,
+// single threshold.
 const LIGHT_RESISTANCE = 131;  // Ohms hot: measured 13.11V / 100mA lit (cold reads 14)
 const LIGHT_ON_CURRENT = 0.010;  // 10mA threshold — still a guess, not measured
 const WIRE_RESISTANCE = 0.1;  // Ohms — not measured, kept as is
@@ -287,10 +290,7 @@ export class MinivacSimulator {
       const newRelayCurrents: number[] = [];
       for (let i = 1; i <= 6; i++) {
         const current = Math.abs(results[`I(RELAY${i}_COIL_PROBE)`] || 0);
-        // hysteresis: an energized relay holds down to the (lower) dropout current
-        const energized = this.relayStates[i - 1]
-          ? current >= RELAY_DROPOUT_CURRENT
-          : current >= RELAY_PICKUP_CURRENT;
+        const energized = current >= RELAY_PICKUP_CURRENT;
         newRelayStates.push(energized);
         newRelayCurrents.push(current * 1000);  // Store in mA
       }
