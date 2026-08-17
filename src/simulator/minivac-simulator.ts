@@ -7,11 +7,15 @@ import { loadSimulator, T_VOLTAGE, alerts, type Circuit } from './simulator-load
 import { parseMinivacNotation } from './circuit-notation-parser';
 
 // Minivac component specifications
-const RELAY_COIL_RESISTANCE = 400;  // Ohms
-const RELAY_PICKUP_CURRENT = 0.020;  // 20mA threshold (with indicator lamp in series)
-const LIGHT_RESISTANCE = 100;  // Ohms
-const LIGHT_ON_CURRENT = 0.010;  // 10mA threshold
-const WIRE_RESISTANCE = 0.1;  // Ohms
+// measured on a real Minivac 601, 2026-08-17 — see REAL-DEVICE-MEASUREMENTS.md
+const SUPPLY_VOLTAGE = 13.3;  // Volts, measured open-circuit (was 12, a guess)
+const RELAY_COIL_RESISTANCE = 55;  // Ohms, measured (was 400, a guess)
+// pickup bracketed on real device: coil + 1 light in series always picks up
+// (~71mA in this linear model), + 2 lights is unreliable (~42mA) — threshold set between
+const RELAY_PICKUP_CURRENT = 0.050;
+const LIGHT_RESISTANCE = 131;  // Ohms hot: measured 13.11V / 100mA lit (cold reads 14)
+const LIGHT_ON_CURRENT = 0.010;  // 10mA threshold — still a guess, not measured
+const WIRE_RESISTANCE = 0.1;  // Ohms — not measured, kept as is
 
 // Motor specifications
 const MOTOR_RESISTANCE = 200;  // Ohms
@@ -111,7 +115,7 @@ export class MinivacSimulator {
     // Power supply
     const vccNode = builder.getNode('Power_Positive');
     const gnd = ckt.gnd_node();
-    ckt.v(vccNode, gnd, '12', 'V_POWER');
+    ckt.v(vccNode, gnd, SUPPLY_VOLTAGE.toString(), 'V_POWER');
 
     // Add all 6 lights
     for (let i = 1; i <= 6; i++) {
