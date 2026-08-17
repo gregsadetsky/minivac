@@ -20,14 +20,14 @@ fill in as measured. sim's current assumptions are in [brackets] — they are un
 - [x] DC volts at +/− terminals, nothing connected: 13.3 V
 - [x] DC volts with one light on: 13.15 V
 - [x] DC volts with one relay energized: 12.88 V
-- [D] same terminals on AC range (ripple check — is it smooth DC or pulsating?): i don't undersatnd
+- [ ] same terminals on AC range (ripple check): turn the meter dial to V~ (AC volts), measure the same +/− terminals. near 0 V = smooth DC, several volts = unfiltered rectified supply. not yet measured: ______ V
 - [x] battery or wall adapter? what does the label on the supply say? wall adaptar
 
 ## lights (0–5)  [sim: 100 Ω, "on" above 10 mA]
 
 - [x] cold resistance, one bulb, isolated: 14 Ω
 - [x] wire one light directly across supply with meter in series (mA): I = 100 mA
-- [D] volts across the lit bulb at the same time: V = 13.11 V  → hot R = V/I = i don't understand ______ Ω
+- [x] volts across the lit bulb at the same time: V = 13.11 V  → hot R = V/I = 13.11/0.100 = 131 Ω (computed from the two measurements above)
 - [x] dimmest visibly-on point (optional): put 1, then 2 lights in series — which still glow? 2 still glow ok, 3 are weak
 - [ ] bulb type if readable on glass/base (e.g. #47, #53): OMNI-GLOW 1090A34
 
