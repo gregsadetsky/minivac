@@ -44,11 +44,11 @@ fill in as measured. sim's current assumptions are in [brackets] — they are un
 - ipso facto, when energizing C F, you get coil + light. yes, they are in series. total resistance C F is 67 ohms.
 
 - [x] current through coil circuit when energized normally (meter in series): 200 mA
-- [x] pickup: with bench supply, slowly raise V until relay clicks in: V = ______, I = ______ mA
+- [x] pickup: with bench supply, slowly raise V until relay clicks in: V = 5.0 / 5.1 (two runs), I = 90 mA measured at bench (cross-checks: 5/0.09 = 55.6 Ω ≈ coil's 55 Ω)
 
-- i have no bench but with one light in series it consistently works, with 2 it doesn't always work
+- also, on the device: with one light in series it consistently works, with 2 it doesn't always work
 
-- [ ] dropout: lower V until relay releases: V = ______, I = ______ mA
+- [x] dropout: lower V until relay releases: V = 1.6 / 1.7 (two runs), I ≈ 30 mA (computed) → hysteresis ratio ~3:1
 
 ## motor  [sim: 200 Ω, R1/R2 100 Ω each, 187.5 ms/step, 16 steps/rev]
 

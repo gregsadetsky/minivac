@@ -12,9 +12,15 @@ const SUPPLY_VOLTAGE = 13.3;  // Volts, measured open-circuit (was 12, a guess)
 // derived from measured sag: 13.3->13.15 V at ~100mA (1.5 Ohm), 13.3->12.88 V at ~230mA (1.8 Ohm)
 const SUPPLY_INTERNAL_RESISTANCE = 1.8;  // Ohms
 const RELAY_COIL_RESISTANCE = 55;  // Ohms, measured (was 400, a guess)
-// pickup bracketed on real device: coil + 1 light in series always picks up
-// (~71mA in this linear model), + 2 lights is unreliable (~42mA) — threshold set between
+// bench-measured on the coil: picks up at ~5.0-5.1V (~90mA), drops out at ~1.6-1.7V (~30mA).
+// the measured 90mA can't be used directly in this linear model: a dim real bulb sits far
+// below its 131-ohm hot resistance, so coil + 1 series light really passes >90mA and picks
+// up, while this model computes only ~71mA for the same circuit. thresholds are calibrated
+// so model behavior matches the observed device: coil + 1 light picks up (~71mA here),
+// coil + 2 lights doesn't (~42mA here).
 const RELAY_PICKUP_CURRENT = 0.050;
+// dropout scaled by the measured hysteresis ratio (1.65V / 5.05V ~= 0.33)
+const RELAY_DROPOUT_CURRENT = 0.0163;
 const LIGHT_RESISTANCE = 131;  // Ohms hot: measured 13.11V / 100mA lit (cold reads 14)
 const LIGHT_ON_CURRENT = 0.010;  // 10mA threshold — still a guess, not measured
 const WIRE_RESISTANCE = 0.1;  // Ohms — not measured, kept as is
@@ -281,7 +287,10 @@ export class MinivacSimulator {
       const newRelayCurrents: number[] = [];
       for (let i = 1; i <= 6; i++) {
         const current = Math.abs(results[`I(RELAY${i}_COIL_PROBE)`] || 0);
-        const energized = current >= RELAY_PICKUP_CURRENT;
+        // hysteresis: an energized relay holds down to the (lower) dropout current
+        const energized = this.relayStates[i - 1]
+          ? current >= RELAY_DROPOUT_CURRENT
+          : current >= RELAY_PICKUP_CURRENT;
         newRelayStates.push(energized);
         newRelayCurrents.push(current * 1000);  // Store in mA
       }
