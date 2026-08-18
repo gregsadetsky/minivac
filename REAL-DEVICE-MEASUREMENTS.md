@@ -50,6 +50,8 @@ fill in as measured. sim's current assumptions are in [brackets] — they are un
 
 - [x] dropout: lower V until relay releases: V = 1.6 / 1.7 (two runs), I ≈ 30 mA (computed) → hysteresis ratio ~3:1
 
+- [x] coils in series across supply (bulb-free pickup bracket): 1 works, 2 work (~119 mA), 3 "at the limit — really no" (~80 mA) → pickup between 80 and 119 mA, consistent with bench 90 mA
+
 ## motor  [sim: 200 Ω, R1/R2 100 Ω each, 187.5 ms/step, 16 steps/rev]
 
 - [ ] resistance across motor terminals, power off (rotate dial, note if it varies): ______ Ω

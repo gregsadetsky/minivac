@@ -13,18 +13,25 @@ const SUPPLY_VOLTAGE = 13.3;  // Volts, measured open-circuit (was 12, a guess)
 const SUPPLY_INTERNAL_RESISTANCE = 1.8;  // Ohms
 const RELAY_COIL_RESISTANCE = 55;  // Ohms, measured (was 400, a guess)
 // bench-measured on the coil: picks up at ~5.0-5.1V (~90mA), drops out at ~1.6-1.7V (~30mA).
-// the measured 90mA can't be used directly in this linear model: a dim real bulb sits far
-// below its 131-ohm hot resistance, so coil + 1 series light really passes >90mA and picks
-// up, while this model computes only ~71mA for the same circuit. thresholds are calibrated
-// so model behavior matches the observed device: coil + 1 light picks up (~71mA here),
-// coil + 2 lights doesn't (~42mA here).
-const RELAY_PICKUP_CURRENT = 0.050;
-// NOTE: real relays have ~3:1 hysteresis (drop out at ~1.65V/~30mA, well below pickup).
-// tried modeling it (see git history) but it breaks the 3-bit counter in this linear
-// model: the counter holds relays at 25-38mA model-current in states where it needs them
-// to release. whether the real counter works on real hardware is untested — until then,
-// single threshold.
-const LIGHT_RESISTANCE = 131;  // Ohms hot: measured 13.11V / 100mA lit (cold reads 14)
+// pickup bracketed by bulb-free coil-series tests on the device: 2 coils in series
+// (~119mA in this model) pick up, 3 in series (~80mA) do not. matches the bench static
+// measurement (~90mA at 5.0-5.1V). dropout as measured (1.6-1.7V ≈ 30mA).
+// circuits driving a coil through a bulb pick up via cold-bulb inrush (a dark bulb sits
+// at cold resistance, so first contact passes ~187mA), then hold via dropout hysteresis
+// while the bulb warms — but a coil behind an ALREADY-WARM bulb (~77-80mA steady) will
+// not pick up, in the model or (per these measurements) on the device.
+const RELAY_PICKUP_CURRENT = 0.090;
+const RELAY_DROPOUT_CURRENT = 0.030;
+
+// bulb i-v curve, bench-measured 2026-08-17: I(A) = 0.0208 * V^0.625
+// reproduces all 6 measured points within ~1.5%:
+//   2V/32mA  4V/50mA  6V/64mA  8V/77mA  10V/88mA  13V/103mA
+// solved by relaxation: each bulb's resistance is re-fit to its operating voltage
+// every solver iteration until stable.
+const BULB_IV_COEFF = 0.0208;
+const BULB_IV_EXPONENT = 0.625;
+const BULB_COLD_RESISTANCE = 14;  // Ohms, measured with ohmmeter — floor of the curve
+const BULB_INITIAL_RESISTANCE = BULB_COLD_RESISTANCE;  // bulbs start cold, like reality
 const LIGHT_ON_CURRENT = 0.010;  // 10mA threshold — still a guess, not measured
 const WIRE_RESISTANCE = 0.1;  // Ohms — not measured, kept as is
 
@@ -34,6 +41,13 @@ const MOTOR_R1 = 100;  // Ohms
 const MOTOR_R2 = 100;  // Ohms
 const MOTOR_RUN_CURRENT = 0.010;  // 10mA threshold
 const MOTOR_STEP_TIME = 187.5;  // milliseconds per step
+
+// resistance of a bulb operating at the given voltage, per the measured i-v curve:
+// R = V / I(V) = V^(1-0.625) / 0.0208, floored at the measured cold resistance
+function bulbResistanceAtVoltage(volts: number): number {
+  const r = Math.pow(Math.abs(volts), 1 - BULB_IV_EXPONENT) / BULB_IV_COEFF;
+  return Math.max(BULB_COLD_RESISTANCE, r);
+}
 
 /**
  * Circuit builder
@@ -100,6 +114,7 @@ export class MinivacSimulator {
   private relayOverrides!: Array<boolean | null>;  // Manual override states (null = no override)
   private lightStates!: boolean[];
   private relayIndicatorLightStates!: boolean[];
+  private bulbResistances!: Record<string, number>;  // per-bulb, keys LIGHT1-6 / LAMP1-6
   private slideStates!: boolean[];
   public motorPosition!: number;
   public motorAngle!: number;  // Continuous angle in degrees (0° is north/top)
@@ -135,7 +150,7 @@ export class MinivacSimulator {
       const lightB = `Light${i}_B`;
       const probeNode = `Light${i}_Probe`;
       builder.addCurrentProbe(lightA, probeNode, `LIGHT${i}_PROBE`);
-      builder.addResistor(probeNode, lightB, LIGHT_RESISTANCE, `LIGHT${i}`);
+      builder.addResistor(probeNode, lightB, this.bulbResistances[`LIGHT${i}`], `LIGHT${i}`);
     }
 
     // Add all 6 relays
@@ -147,7 +162,7 @@ export class MinivacSimulator {
       const coilProbeNode = `Relay${i}_CoilProbe`;
 
       builder.addCurrentProbe(lampInput, lampProbeNode, `RELAY${i}_INDICATOR_LAMP_PROBE`);
-      builder.addResistor(lampProbeNode, coilInput, LIGHT_RESISTANCE, `RELAY${i}_INDICATOR_LAMP`);
+      builder.addResistor(lampProbeNode, coilInput, this.bulbResistances[`LAMP${i}`], `RELAY${i}_INDICATOR_LAMP`);
       builder.addCurrentProbe(coilInput, coilProbeNode, `RELAY${i}_COIL_PROBE`);
       builder.addResistor(coilProbeNode, coilOutput, RELAY_COIL_RESISTANCE, `RELAY${i}_COIL`);
 
@@ -246,7 +261,8 @@ export class MinivacSimulator {
     alerts.length = 0;
 
     let iteration = 0;
-    const maxIterations = 10;
+    // bulb relaxation (1% tolerance) needs ~5 iterations on top of relay settling
+    const maxIterations = 15;
 
     while (iteration < maxIterations) {
       if (this.verbose) console.log(`\n=== Iteration ${iteration + 1} ===`);
@@ -275,22 +291,15 @@ export class MinivacSimulator {
         return false;
       }
 
-      // Check for short circuit (excessive power supply current)
-      const powerCurrent = Math.abs(results['I(V_POWER)'] || 0);
-      if (powerCurrent > 1.0) {  // More than 1 amp indicates likely short circuit
-        const message = 'SHORT CIRCUIT DETECTED!';
-        if (!alerts.includes(message)) {
-          alerts.push(message);
-        }
-        console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <0.5A)`);
-      }
-
       // Extract new relay states and currents
       const newRelayStates: boolean[] = [];
       const newRelayCurrents: number[] = [];
       for (let i = 1; i <= 6; i++) {
         const current = Math.abs(results[`I(RELAY${i}_COIL_PROBE)`] || 0);
-        const energized = current >= RELAY_PICKUP_CURRENT;
+        // hysteresis: an energized relay holds down to the (lower) dropout current
+        const energized = this.relayStates[i - 1]
+          ? current >= RELAY_DROPOUT_CURRENT
+          : current >= RELAY_PICKUP_CURRENT;
         newRelayStates.push(energized);
         newRelayCurrents.push(current * 1000);  // Store in mA
       }
@@ -324,6 +333,26 @@ export class MinivacSimulator {
         this.relayIndicatorLightStates[i - 1] = current >= LIGHT_ON_CURRENT;
       }
 
+      // Relax bulb resistances toward the measured i-v curve at their present voltage
+      let bulbsConverged = true;
+      for (let i = 1; i <= 6; i++) {
+        const probes: Array<[string, string]> = [
+          [`LIGHT${i}`, `I(LIGHT${i}_PROBE)`],
+          [`LAMP${i}`, `I(RELAY${i}_INDICATOR_LAMP_PROBE)`],
+        ];
+        for (const [key, probe] of probes) {
+          const oldR = this.bulbResistances[key];
+          const volts = Math.abs(results[probe] || 0) * oldR;
+          // undamped: the R(V) map contracts (sensitivity <= 0.375/iteration), so this
+          // converges geometrically without oscillating
+          const newR = bulbResistanceAtVoltage(volts);
+          if (Math.abs(newR - oldR) / oldR > 0.01) {
+            bulbsConverged = false;
+          }
+          this.bulbResistances[key] = newR;
+        }
+      }
+
       // Extract motor state
       const motorCurrent = results[`I(MOTOR_PROBE)`] || 0;
       const motorCurrentAbs = Math.abs(motorCurrent);
@@ -350,8 +379,19 @@ export class MinivacSimulator {
         this.lastMotorUpdateTime = null;
       }
 
-      if (!changed) {
-        if (this.verbose) console.log('  Relay states stable!');
+      if (!changed && bulbsConverged) {
+        // Check for short circuit only at the converged (warm-bulb) solution — cold-bulb
+        // warm-up inrush legitimately exceeds 1A for the first iterations. A true short
+        // is limited only by supply internal + wire resistance (~7A), well above this.
+        const powerCurrent = Math.abs(results['I(V_POWER)'] || 0);
+        if (powerCurrent > 1.0) {
+          const message = 'SHORT CIRCUIT DETECTED!';
+          if (!alerts.includes(message)) {
+            alerts.push(message);
+          }
+          console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <0.7A)`);
+        }
+        if (this.verbose) console.log('  Relay states and bulb resistances stable!');
         return true;
       }
 
@@ -571,6 +611,11 @@ export class MinivacSimulator {
     this.relayOverrides = [null, null, null, null, null, null];
     this.lightStates = [false, false, false, false, false, false];
     this.relayIndicatorLightStates = [false, false, false, false, false, false];
+    this.bulbResistances = {};
+    for (let i = 1; i <= 6; i++) {
+      this.bulbResistances[`LIGHT${i}`] = BULB_INITIAL_RESISTANCE;
+      this.bulbResistances[`LAMP${i}`] = BULB_INITIAL_RESISTANCE;
+    }
     this.slideStates = [false, false, false, false, false, false];
     this.motorPosition = 0;
     this.motorAngle = 0;

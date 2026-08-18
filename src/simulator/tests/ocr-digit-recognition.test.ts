@@ -77,8 +77,11 @@ describe('Minivac Simulator - OCR Digit Recognition', () => {
       // Press button 6 to trigger recognition
       minivac.pressButton(6);
 
+      // motor stepping is wall-clock based, so a 1-step trip (e.g. digit 1 from D0) can
+      // complete inside pressButton() before this assertion samples the state — accept
+      // "already arrived" as well as "still traveling"
       const afterPress = minivac.getState();
-      expect(afterPress.motor.running).toBe(true);
+      expect(afterPress.motor.running || afterPress.motor.position === pattern.position).toBe(true);
 
       // Wait for motor to reach target position
       const motorReached = waitForMotorPosition(minivac, pattern.position);
