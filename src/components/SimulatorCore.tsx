@@ -203,8 +203,13 @@ export default function SimulatorCore({
       simulator.resume();
     } else {
       simulator.pause();
+      // cutting power drops any energized relays — play the release click (issue #9)
+      if (enableAudio && previousRelayStates.current.some(Boolean)) {
+        relayOffSound.current?.play();
+      }
+      previousRelayStates.current = previousRelayStates.current.map(() => false);
     }
-  }, [simulator, isPowerOn]);
+  }, [simulator, isPowerOn, enableAudio]);
 
   // Animation loop to update simulation state (using RAF for smooth motor updates)
   React.useEffect(() => {

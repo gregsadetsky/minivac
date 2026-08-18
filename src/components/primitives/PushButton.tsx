@@ -14,16 +14,29 @@ function PushButton({
   pressed
 }: PushButtonProps) {
   const [isPressed, setIsPressed] = useState(false);
+  // shift-click latches the button pressed until the next click releases it
+  const [isLatched, setIsLatched] = useState(false);
 
   // Use external pressed state if provided, otherwise use internal state
   const actualPressed = pressed !== undefined ? pressed : isPressed;
 
-  const handlePointerDown = () => {
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (isLatched) {
+      // any click on a latched button releases it
+      setIsLatched(false);
+      setIsPressed(false);
+      onRelease?.();
+      return;
+    }
+    if (e.shiftKey) {
+      setIsLatched(true);
+    }
     setIsPressed(true);
     onPress?.();
   };
 
   const handlePointerUp = () => {
+    if (isLatched || !isPressed) return; // latched buttons survive pointer up/leave/cancel
     setIsPressed(false);
     onRelease?.();
   };
