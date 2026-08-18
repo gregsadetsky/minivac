@@ -355,7 +355,7 @@ export default function MinivacPanel({
             {/* Row: Push buttons */}
             <div className="flex gap-9">
               {columns.map(num => (
-                <div key={`button-${num}`} className="flex justify-center" style={{ width: '120px' }}>
+                <div key={`button-${num}`} className="flex justify-center" style={{ width: '120px' }} data-testid={`push-button-${num}`}>
                   <PushButton
                     size={44}
                     pressed={simState?.buttons[num - 1]}
@@ -457,7 +457,12 @@ export default function MinivacPanel({
               <div className="bg-white" style={{ width: '2px', height: '100%' }} />
 
               {/* Power section - 22% */}
-              <div className="flex flex-col items-center justify-center" style={{ width: '22%' }}>
+              <div
+                className="flex flex-col items-center justify-center"
+                style={{ width: '22%' }}
+                data-testid="power-section"
+                data-power-on={isPowerOn}
+              >
                 <Light isOn={isPowerOn} />
                 <div style={{ height: '20px' }} />
                 <div className="text-neutral-300 font-mono text-[9px] font-bold">ON</div>
