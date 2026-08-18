@@ -1,5 +1,6 @@
 - show reduced versions of minivac - just relay + button + light
 - hold button for long time to lock, click again to unlock
+- shift-click a button to 'semi permanently' press it (until clicked again, then release) — with tests. do only after all the adder/book circuits are fully debugged (would have helped reproduce issue #8 without substituting switches for buttons)
 - drag cables on mobile
 - for elevator, grey out buttons 4-5-6?
 - add "stickers" on top of buttons/wheel..?
