@@ -3,12 +3,24 @@ import React from 'react';
 interface LightProps {
   size?: number;
   isOn?: boolean;
+  // 0-1 relative luminance from the simulator (bulb operating point). when provided it
+  // drives the visual intensity, so series/dim bulbs render dimmer like the real machine.
+  // when omitted, falls back to isOn as full-on/full-off.
+  brightness?: number;
 }
 
 function Light({
   size = 40,
-  isOn = false
+  isOn = false,
+  brightness
 }: LightProps) {
+  const luminance = brightness !== undefined ? brightness : (isOn ? 1 : 0);
+  // perceptual mapping: physical luminance to displayed intensity. calibrated against
+  // the real device: 2 lights in series (~10% luminance) "glow ok" (~0.5 here),
+  // 3 in series (~2.5%) are "weak" (~0.33 here)
+  const glow = luminance <= 0 ? 0 : Math.min(1, Math.pow(luminance, 0.3));
+  const lit = glow > 0.03;
+
   // Calculate scaled dimensions based on size (default 40px)
   // Special case for debug lights (size ~44): 8px shadow, 24px bulb
   // For sizes <= 30: use 0.1 ratio, for size 40: use custom values
@@ -24,6 +36,10 @@ function Light({
   const highlightHeightOn = size > 42 ? 8 : size * 0.175;  // 8px for size 44, 7px for size 40
   const highlightHeightOff = size > 42 ? 6 : size * 0.125; // 6px for size 44, 5px for size 40
   const glowOffset = size > 42 ? 8 : size * 0.175;     // 8px for size 44, 7px for size 40
+
+  // ~100ms approach mimics filament warm-up (a real small incandescent reaches
+  // temperature in tens of ms; this constant is a visual approximation, not measured)
+  const warmUp = 'opacity 100ms ease-out';
 
   return (
     <div
@@ -58,7 +74,7 @@ function Light({
         />
       </div>
 
-      {/* The light bulb */}
+      {/* The light bulb — dark glass base, always present */}
       <div
         className="absolute rounded-full"
         style={{
@@ -66,40 +82,51 @@ function Light({
           left: `${bulbOffset}px`,
           width: `${bulbSize}px`,
           height: `${bulbSize}px`,
-          background: isOn ? `radial-gradient(
-            circle at 35% 35%,
-            #fff5f0 0%,
-            #ffe4d0 15%,
-            #ffb088 40%,
-            #ff8855 60%,
-            #ee6633 80%,
-            #cc4422 100%
-          )` : `radial-gradient(
+          background: `radial-gradient(
             circle at 35% 35%,
             #4a3838 0%,
             #2d2020 50%,
             #1a1414 100%
           )`,
-          boxShadow: isOn ? `
-            0 0 10px rgba(255,100,50,0.6),
-            0 0 20px rgba(255,100,50,0.3),
-            inset 0 1px 2px rgba(255,255,255,0.4),
-            inset 0 -1px 3px rgba(200,50,20,0.4)
-          ` : `
+          boxShadow: `
             inset 0 1px 2px rgba(0,0,0,0.8),
             inset 0 -1px 1px rgba(255,255,255,0.05)
           `
         }}
       >
+        {/* Lit filament layer — intensity follows the simulated operating point */}
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            opacity: glow,
+            transition: warmUp,
+            background: `radial-gradient(
+              circle at 35% 35%,
+              #fff5f0 0%,
+              #ffe4d0 15%,
+              #ffb088 40%,
+              #ff8855 60%,
+              #ee6633 80%,
+              #cc4422 100%
+            )`,
+            boxShadow: `
+              0 0 10px rgba(255,100,50,0.6),
+              0 0 20px rgba(255,100,50,0.3),
+              inset 0 1px 2px rgba(255,255,255,0.4),
+              inset 0 -1px 3px rgba(200,50,20,0.4)
+            `
+          }}
+        />
+
         {/* Glass highlight */}
         <div
           className="absolute rounded-full"
           style={{
             top: `${highlightTop}px`,
             right: `${highlightRight}px`,
-            width: isOn ? `${highlightWidthOn}px` : `${highlightWidthOff}px`,
-            height: isOn ? `${highlightHeightOn}px` : `${highlightHeightOff}px`,
-            background: isOn ? `radial-gradient(
+            width: lit ? `${highlightWidthOn}px` : `${highlightWidthOff}px`,
+            height: lit ? `${highlightHeightOn}px` : `${highlightHeightOff}px`,
+            background: lit ? `radial-gradient(
               ellipse at center,
               rgba(255,255,255,0.9) 0%,
               rgba(255,255,255,0.3) 50%,
@@ -113,23 +140,23 @@ function Light({
           }}
         />
 
-        {/* Glow effect when on */}
-        {isOn && (
-          <div
-            className="absolute rounded-full animate-pulse"
-            style={{
-              top: `-${glowOffset}px`,
-              left: `-${glowOffset}px`,
-              right: `-${glowOffset}px`,
-              bottom: `-${glowOffset}px`,
-              background: `radial-gradient(
-                circle at center,
-                rgba(255,120,80,0.3) 0%,
-                rgba(255,120,80,0) 70%
-              )`
-            }}
-          />
-        )}
+        {/* Glow halo — scales with brightness */}
+        <div
+          className={`absolute rounded-full ${lit ? 'animate-pulse' : ''}`}
+          style={{
+            top: `-${glowOffset}px`,
+            left: `-${glowOffset}px`,
+            right: `-${glowOffset}px`,
+            bottom: `-${glowOffset}px`,
+            opacity: glow,
+            transition: warmUp,
+            background: `radial-gradient(
+              circle at center,
+              rgba(255,120,80,0.3) 0%,
+              rgba(255,120,80,0) 70%
+            )`
+          }}
+        />
       </div>
     </div>
   );

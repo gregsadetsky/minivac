@@ -113,7 +113,10 @@ export default function MinivacPanel({
                     <PortPair holeIds={[`${num}A`, `${num}A`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">A</div>
                   </div>
-                  <Light isOn={isPowerOn && (simState?.lights[num - 1] || false)} />
+                  <Light
+                    isOn={isPowerOn && (simState?.lights[num - 1] || false)}
+                    brightness={isPowerOn ? simState?.lightBrightness[num - 1] : 0}
+                  />
                   <div className="flex flex-col items-center gap-0.5">
                     <PortPair holeIds={[`${num}B`, `${num}B`]} />
                     <div className="text-neutral-300 font-mono text-[10px] font-bold">B</div>
@@ -188,7 +191,10 @@ export default function MinivacPanel({
             <div className="flex gap-9 -mt-2">
               {columns.map(num => (
                 <div key={`indicator-${num}`} className="flex justify-center" style={{ width: '120px' }}>
-                  <Light isOn={isPowerOn && (simState?.relayIndicatorLights[num - 1] || false)} />
+                  <Light
+                    isOn={isPowerOn && (simState?.relayIndicatorLights[num - 1] || false)}
+                    brightness={isPowerOn ? simState?.relayIndicatorBrightness[num - 1] : 0}
+                  />
                 </div>
               ))}
             </div>

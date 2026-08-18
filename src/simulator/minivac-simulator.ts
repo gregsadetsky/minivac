@@ -35,6 +35,10 @@ const BULB_IV_COEFF = 0.0208;
 const BULB_IV_EXPONENT = 0.625;
 const BULB_COLD_RESISTANCE = 14;  // Ohms, measured with ohmmeter — floor of the curve
 const BULB_INITIAL_RESISTANCE = BULB_COLD_RESISTANCE;  // bulbs start cold, like reality
+// full brightness = bulb directly across the supply (measured 13.11V @ 100mA).
+// luminous output of an incandescent scales ~V^3.4 (standard approximation, not measured)
+const BULB_NOMINAL_VOLTS = 13.1;
+const BULB_LUMINOSITY_EXPONENT = 3.4;
 const LIGHT_ON_CURRENT = 0.010;  // 10mA threshold — still a guess, not measured
 const WIRE_RESISTANCE = 0.1;  // Ohms — not measured, kept as is
 
@@ -50,6 +54,11 @@ const MOTOR_STEP_TIME = 187.5;  // milliseconds per step
 function bulbResistanceAtVoltage(volts: number): number {
   const r = Math.pow(Math.abs(volts), 1 - BULB_IV_EXPONENT) / BULB_IV_COEFF;
   return Math.max(BULB_COLD_RESISTANCE, r);
+}
+
+// relative luminance (0-1) of a bulb operating at the given voltage
+function bulbBrightnessAtVoltage(volts: number): number {
+  return Math.min(1, Math.pow(Math.abs(volts) / BULB_NOMINAL_VOLTS, BULB_LUMINOSITY_EXPONENT));
 }
 
 /**
@@ -95,6 +104,8 @@ export interface MinivacState {
   buttons: boolean[];
   lights: boolean[];
   relayIndicatorLights: boolean[];
+  lightBrightness: number[];  // 0-1 relative luminance per light
+  relayIndicatorBrightness: number[];  // 0-1 relative luminance per relay indicator lamp
   slides: string[];
   motor: {
     position: number;
@@ -117,6 +128,8 @@ export class MinivacSimulator {
   private relayOverrides!: Array<boolean | null>;  // Manual override states (null = no override)
   private lightStates!: boolean[];
   private relayIndicatorLightStates!: boolean[];
+  private lightBrightness!: number[];
+  private relayIndicatorBrightness!: number[];
   private bulbResistances!: Record<string, number>;  // per-bulb, keys LIGHT1-6 / LAMP1-6
   private slideStates!: boolean[];
   public motorPosition!: number;
@@ -353,6 +366,12 @@ export class MinivacSimulator {
             bulbsConverged = false;
           }
           this.bulbResistances[key] = newR;
+          const brightness = bulbBrightnessAtVoltage(volts);
+          if (key.startsWith('LIGHT')) {
+            this.lightBrightness[i - 1] = brightness;
+          } else {
+            this.relayIndicatorBrightness[i - 1] = brightness;
+          }
         }
       }
 
@@ -528,6 +547,8 @@ export class MinivacSimulator {
       buttons: [...this.buttonStates],
       lights: [...this.lightStates],
       relayIndicatorLights: [...this.relayIndicatorLightStates],
+      lightBrightness: [...this.lightBrightness],
+      relayIndicatorBrightness: [...this.relayIndicatorBrightness],
       slides: this.slideStates.map(s => s ? 'right' : 'left'),
       motor: {
         position: this.motorPosition,
@@ -616,6 +637,8 @@ export class MinivacSimulator {
     this.relayOverrides = [null, null, null, null, null, null];
     this.lightStates = [false, false, false, false, false, false];
     this.relayIndicatorLightStates = [false, false, false, false, false, false];
+    this.lightBrightness = [0, 0, 0, 0, 0, 0];
+    this.relayIndicatorBrightness = [0, 0, 0, 0, 0, 0];
     this.bulbResistances = {};
     for (let i = 1; i <= 6; i++) {
       this.bulbResistances[`LIGHT${i}`] = BULB_INITIAL_RESISTANCE;
