@@ -92,8 +92,10 @@ export default function MinivacPanel({
         onPointerUp={handleMouseUp}
       >
         <div className="flex gap-0">
-          {/* LEFT PANEL - 6 columns */}
-          <div className="flex flex-col gap-2 pr-3">
+          {/* LEFT PANEL - 6 columns. pl-8: the real machine has ~1in between the frame
+              and the first hole column; blue stripes compensate with -ml-8 to keep
+              bleeding to the panel edge */}
+          <div className="flex flex-col gap-2 pl-8 pr-3">
             {/* Row: Numbers */}
             <div className="flex gap-9">
               {columns.map(num => (
@@ -124,7 +126,7 @@ export default function MinivacPanel({
             <div className="text-white font-sans font-bold text-sm tracking-wider text-center">BINARY OUTPUT</div>
 
             {/* Blue section with + and - ports - full width */}
-            <div className="bg-[#84B6C7] py-2 flex gap-9">
+            <div className="bg-[#84B6C7] py-2 flex gap-9 -ml-8 pl-8">
               {columns.map(num => (
                 <div key={`power-${num}`} className="flex justify-center gap-9" style={{ width: '120px' }}>
                   <div className="flex flex-col items-center gap-0.5">
@@ -238,7 +240,7 @@ export default function MinivacPanel({
             </div>
 
             {/* Blue section with COMMON - full width */}
-            <div className="bg-[#84B6C7] py-2 flex gap-9">
+            <div className="bg-[#84B6C7] py-2 flex gap-9 -ml-8 pl-8">
               {columns.map(num => (
                 <div key={`common-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <PortPair label="COMMON" holeCount={4} holeIds={[`${num}com`, `${num}com`, `${num}com`, `${num}com`]} />
@@ -317,7 +319,7 @@ export default function MinivacPanel({
             </div>
 
             {/* Blue section empty - full width */}
-            <div className="bg-[#84B6C7] py-2 h-3" />
+            <div className="bg-[#84B6C7] py-2 h-3 -ml-8" />
 
             {/* BINARY INPUT label */}
             <div className="text-white font-sans font-bold text-sm tracking-wider text-center">BINARY INPUT</div>
@@ -417,17 +419,17 @@ export default function MinivacPanel({
             </div>
 
             {/* Matrix and Power section */}
-            <div className="relative flex py-4 items-center" style={{ height: '250px' }}>
+            <div className="relative flex py-2 items-center" style={{ height: '250px' }}>
               {/* Matrix space - 78% */}
               <div className="flex items-center justify-center" style={{ width: '78%' }}>
-                <div className="flex items-center justify-center" style={{ gap: '10px' }}>
+                <div className="flex items-center justify-center" style={{ gap: '12px' }}>
                   {/* Group 10 - 6 holes */}
                   <MatrixConnector6 label="10" holeIds={['M10', 'M10', 'M10', 'M10', 'M10', 'M10']} />
 
                   {/* 3x3 Matrix grid with tic-tac-toe lines */}
                   <div className="relative flex items-center justify-center">
                     <div className="relative">
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-3 gap-5">
                         {[1, 2, 3, 8, 9, 4, 7, 6, 5].map((num) => (
                           <MatrixConnector key={num} label={num.toString()} holeIds={[`M${num}t`, `M${num}t`, `M${num}b`, `M${num}b`]} />
                         ))}
@@ -499,13 +501,14 @@ export default function MinivacPanel({
               <div className="absolute text-white font-sans font-bold text-sm tracking-wider" style={{ bottom: '4px', left: '16px' }}>MATRIX</div>
             </div>
 
-            {/* Blue separator */}
-            <div className="bg-[#84B6C7] h-[3px]" />
+            {/* Blue separator — a fat band on the real machine (~0.2in) */}
+            <div className="bg-[#84B6C7] h-3 -mx-3" />
 
-            {/* Decimal wheel section */}
-            <div className="py-6 px-1 flex" style={{ gap: '4px' }}>
+            {/* Decimal wheel section — fills remaining panel height so the dial centers
+                vertically like on the real machine */}
+            <div className="flex-1 px-1 flex items-center" style={{ gap: '4px' }}>
               {/* Left side: 16 ARM and 17/18/19 RUN/STOP */}
-              <div className="flex flex-col gap-9" style={{ paddingTop: '90px' }}>
+              <div className="flex flex-col gap-9">
                 {/* 16 ARM */}
                 <div className="flex items-center gap-2">
                   <div className="text-neutral-300 font-mono text-[10px] font-bold w-4 text-right">16</div>
@@ -553,8 +556,12 @@ export default function MinivacPanel({
               </div>
             </div>
 
-            {/* DECIMAL INPUT-OUTPUT label */}
-            <div className="text-white font-sans font-bold text-sm tracking-wider text-center pb-2">DECIMAL INPUT-OUTPUT</div>
+            {/* DECIMAL INPUT-OUTPUT label — centered under the wheel, not the panel,
+                so it gets a spacer matching the 16-19 jack column width */}
+            <div className="flex pb-2">
+              <div style={{ width: '100px' }} />
+              <div className="flex-1 text-white font-sans font-bold text-sm tracking-wider text-center">DECIMAL INPUT-OUTPUT</div>
+            </div>
           </div>
         </div>
 
