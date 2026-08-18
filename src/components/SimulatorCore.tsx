@@ -227,9 +227,8 @@ export default function SimulatorCore({
       }
 
       // Detect relay state changes and play the matching (pull-in vs release) sound.
-      // Each direction plays at most once per update; when both happen at the same
-      // time (e.g. the 3-bit counter), the release is staggered slightly so the two
-      // clicks read as distinct mechanical events instead of a smeared overlap.
+      // Each direction plays at most once per update; simultaneous pull-in and
+      // release just play together.
       if (enableAudio && previousRelayStates.current.length > 0) {
         let anyPullIn = false;
         let anyRelease = false;
@@ -240,13 +239,7 @@ export default function SimulatorCore({
           }
         }
         if (anyPullIn) relayOnSound.current?.play();
-        if (anyRelease) {
-          if (anyPullIn) {
-            setTimeout(() => relayOffSound.current?.play(), 60);
-          } else {
-            relayOffSound.current?.play();
-          }
-        }
+        if (anyRelease) relayOffSound.current?.play();
       }
       previousRelayStates.current = [...newState.relays];
 
