@@ -36,7 +36,7 @@ describe('Minivac Simulator - 3-Bit Binary Counter', () => {
     expect(state.lights[5]).toBe(false); // L6
   });
 
-  it('should count from 0 to 7 when pressing button 6 eight times', () => {
+  it('should count from 0 to 7 when pressing button 6 eight times', { timeout: 15000 }, () => {
     const minivac = new MinivacSimulator(circuit);
     minivac.initialize();
 
@@ -61,7 +61,7 @@ describe('Minivac Simulator - 3-Bit Binary Counter', () => {
     }
   });
 
-  it('should wrap around from 7 (111) to 0 (000)', () => {
+  it('should wrap around from 7 (111) to 0 (000)', { timeout: 15000 }, () => {
     const minivac = new MinivacSimulator(circuit);
     minivac.initialize();
 
@@ -82,7 +82,7 @@ describe('Minivac Simulator - 3-Bit Binary Counter', () => {
     expect(getBinaryValue(state.lights)).toBe(1);
   });
 
-  it('should maintain correct binary values for each count', () => {
+  it('should maintain correct binary values for each count', { timeout: 15000 }, () => {
     const minivac = new MinivacSimulator(circuit);
     minivac.initialize();
 

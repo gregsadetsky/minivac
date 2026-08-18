@@ -13,14 +13,17 @@ const SUPPLY_VOLTAGE = 13.3;  // Volts, measured open-circuit (was 12, a guess)
 const SUPPLY_INTERNAL_RESISTANCE = 1.8;  // Ohms
 const RELAY_COIL_RESISTANCE = 55;  // Ohms, measured (was 400, a guess)
 // bench-measured on the coil: picks up at ~5.0-5.1V (~90mA), drops out at ~1.6-1.7V (~30mA).
-// pickup bracketed by bulb-free coil-series tests on the device: 2 coils in series
-// (~119mA in this model) pick up, 3 in series (~80mA) do not. matches the bench static
-// measurement (~90mA at 5.0-5.1V). dropout as measured (1.6-1.7V ≈ 30mA).
-// circuits driving a coil through a bulb pick up via cold-bulb inrush (a dark bulb sits
-// at cold resistance, so first contact passes ~187mA), then hold via dropout hysteresis
-// while the bulb warms — but a coil behind an ALREADY-WARM bulb (~77-80mA steady) will
-// not pick up, in the model or (per these measurements) on the device.
-const RELAY_PICKUP_CURRENT = 0.090;
+// pickup measurements on the real device don't fully agree with each other:
+//   - bench slow-ramp on one coil: clicks at 5.0-5.1V ≈ 90mA
+//   - 3 coils in series (~80mA each): "at the limit — really no"
+//   - coil behind an ALREADY-WARM bulb (~73-80mA model current): picks up reliably,
+//     verified 2026-08-17 by shorting the coil with a button, bulb hot, then releasing —
+//     relay clicks and its contacts drive a light
+// the last two bracket ~80mA from opposite sides; a single threshold can't do both
+// (per-relay variance would explain it, unproven). realistic circuits look like the
+// warm-bulb case, so the threshold sits below it; the 3-coil-series edge case is
+// knowingly mispredicted. dropout as measured (1.6-1.7V ≈ 30mA).
+const RELAY_PICKUP_CURRENT = 0.070;
 const RELAY_DROPOUT_CURRENT = 0.030;
 
 // bulb i-v curve, bench-measured 2026-08-17: I(A) = 0.0208 * V^0.625

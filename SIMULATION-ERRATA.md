@@ -13,13 +13,13 @@ measured values + relay hysteresis. still unexplained; needs wiring on the real 
 
 ---
 
-## elevator circuit vs measured relay pickup (2026-08-17)
+## elevator circuit vs measured relay pickup (2026-08-17) — RESOLVED by device test
 
-with measured values (13.3V supply, 55Ω coil, real bulb i-v curve, pickup bracketed
-80-119mA by coils-in-series tests on the device), the three-floor elevator circuit
-cannot work: it drives relay 4 through an already-warm indicator lamp at ~77mA steady,
-below pickup. the 5 elevator tests fail against the measured model, and the model
-predicts the circuit would also fail on a real Minivac. needs device verification
-(the relay stage can be checked without the motor: wire it, press a call button,
-listen for relay 4) — then either the circuit gets redesigned (drive coils E-F
-directly, lamp separately) or we learn the model is missing something.
+the measured model briefly predicted the elevator circuit couldn't work (relay driven
+through an already-warm bulb at ~77mA, vs ~90mA bench pickup / 3-coils-in-series
+failing at ~80mA). tested on the real device: a coil behind a warm bulb DOES pick up
+reliably (coil shorted via button, bulb hot, button released → relay clicks, contacts
+verified by driving a light). so pickup measurements bracket ~80mA inconsistently —
+possibly per-relay variance — and the sim threshold is set at 70mA, below the
+warm-bulb case. elevator tests pass. the 3-coils-in-series edge case is knowingly
+mispredicted (sim: works, device: doesn't).
