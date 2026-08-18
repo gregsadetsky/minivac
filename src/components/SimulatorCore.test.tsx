@@ -12,27 +12,21 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
+import cktsimSource from '../../public/cktsimvsp_sn.js?raw';
 import SimulatorCore from './SimulatorCore';
 import type { MinivacSimulator } from '../simulator/minivac-simulator';
 
-// in jsdom the circuit engine isn't loaded via script tag — inject it into window
-// the same way the node loader does (see simulator-loader-universal.ts)
+// in jsdom the circuit engine isn't loaded via script tag — evaluate its source here.
+// the script assigns `cktsim = (function(){...})()` without var, so in non-strict
+// mode the result lands on globalThis; mirror it onto window for the browser loader.
 beforeAll(() => {
-  const code = readFileSync(path.join(process.cwd(), 'public/cktsimvsp_sn.js'), 'utf8');
-  const context = {
-    i18n: {
-      ckt_alert1: 'Warning!!! Circuit has a voltage source loop or shorted source.',
-      ckt_alert2: 'Warning!!! Simulator might produce meaningless results with illegal circuits.',
-    },
-    alert: () => {},
-    cktsim: undefined,
+  const i18n = {
+    ckt_alert1: 'Warning!!! Circuit has a voltage source loop or shorted source.',
+    ckt_alert2: 'Warning!!! Simulator might produce meaningless results with illegal circuits.',
   };
-  vm.createContext(context);
-  vm.runInContext(code, context);
-  (window as unknown as { cktsim: unknown }).cktsim = context.cktsim;
+  new Function('i18n', 'alert', cktsimSource)(i18n, () => {});
+  (window as unknown as { cktsim: unknown }).cktsim =
+    (globalThis as unknown as { cktsim: unknown }).cktsim;
 });
 
 const howls = vi.hoisted(() => {
