@@ -7,7 +7,7 @@ import { loadSimulator, T_VOLTAGE, alerts, type Circuit } from './simulator-load
 import { parseMinivacNotation } from './circuit-notation-parser';
 
 // Minivac component specifications
-// measured on a real Minivac 601, 2026-08-17 — see REAL-DEVICE-MEASUREMENTS.md
+// measured on a real Minivac 601 with a multimeter and bench supply, 2026-08-17
 const SUPPLY_VOLTAGE = 13.3;  // Volts, measured open-circuit (was 12, a guess)
 // derived from measured sag: 13.3->13.15 V at ~100mA (1.5 Ohm), 13.3->12.88 V at ~230mA (1.8 Ohm)
 const SUPPLY_INTERNAL_RESISTANCE = 1.8;  // Ohms

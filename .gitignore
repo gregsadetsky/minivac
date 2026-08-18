@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .claude
 .DS_Store
+
+# local measurement notes, not for the repo
+REAL-DEVICE-MEASUREMENTS.md
