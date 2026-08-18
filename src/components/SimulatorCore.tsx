@@ -17,7 +17,8 @@ export interface SimulatorCoreProps {
 
   // Behavior
   enableAudio?: boolean;
-  audioSrc?: string;
+  audioSrcOn?: string;   // relay pull-in click (recorded from a real Minivac 601)
+  audioSrcOff?: string;  // relay release click
   muted?: boolean;
 
   // Callbacks
@@ -32,7 +33,8 @@ export default function SimulatorCore({
   cableOffsetX = 0,
   cableOffsetY = 0,
   enableAudio = true,
-  audioSrc = '/relay-click.mp3',
+  audioSrcOn = '/relay-on.mp3',
+  audioSrcOff = '/relay-off.mp3',
   muted = false,
   onStateChange,
   onSimulatorReady
@@ -41,7 +43,8 @@ export default function SimulatorCore({
   const [simulator, setSimulator] = React.useState<MinivacSimulator | null>(null);
   const [simState, setSimState] = React.useState<MinivacState | null>(null);
   const previousRelayStates = React.useRef<boolean[]>([]);
-  const relayClickSound = React.useRef<Howl | null>(null);
+  const relayOnSound = React.useRef<Howl | null>(null);
+  const relayOffSound = React.useRef<Howl | null>(null);
 
   // Power state (true = on, false = off)
   const [isPowerOn, setIsPowerOn] = React.useState(true);
@@ -58,43 +61,51 @@ export default function SimulatorCore({
   // Use cable management hook
   const cableManagement = useCableManagement(containerRef, scale, cableOffsetX, cableOffsetY);
 
-  // Initialize relay click sound (only if audio enabled)
+  // Initialize relay click sounds (only if audio enabled)
   React.useEffect(() => {
     if (enableAudio) {
-      relayClickSound.current = new Howl({
-        src: [audioSrc],
+      relayOnSound.current = new Howl({
+        src: [audioSrcOn],
+        volume: 0.5,
+        mute: muted
+      });
+      relayOffSound.current = new Howl({
+        src: [audioSrcOff],
         volume: 0.5,
         mute: muted
       });
     }
     return () => {
-      relayClickSound.current?.unload();
+      relayOnSound.current?.unload();
+      relayOffSound.current?.unload();
     };
-  }, [enableAudio, audioSrc, muted]);
+  }, [enableAudio, audioSrcOn, audioSrcOff, muted]);
 
   // Update mute state when muted prop changes
   React.useEffect(() => {
-    if (relayClickSound.current) {
-      if (muted) {
-        // When muting, just mute immediately
-        relayClickSound.current.mute(true);
-      } else {
-        // When unmuting, start at 0 volume and ramp up to avoid loud clicks
-        relayClickSound.current.volume(0);
-        relayClickSound.current.mute(false);
+    const sounds = [relayOnSound.current, relayOffSound.current].filter(Boolean) as Howl[];
+    if (sounds.length === 0) return;
+    if (muted) {
+      // When muting, just mute immediately
+      sounds.forEach(s => s.mute(true));
+    } else {
+      // When unmuting, start at 0 volume and ramp up to avoid loud clicks
+      sounds.forEach(s => {
+        s.volume(0);
+        s.mute(false);
+      });
 
-        // Resume audio context (required for browser autoplay policies)
-        if (typeof window !== 'undefined') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const ctx = (window as any).Howler?.ctx;
-          if (ctx && ctx.state === 'suspended') {
-            ctx.resume();
-          }
+      // Resume audio context (required for browser autoplay policies)
+      if (typeof window !== 'undefined') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ctx = (window as any).Howler?.ctx;
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume();
         }
-
-        // Ramp volume from 0 to 0.5 over 100ms
-        relayClickSound.current.fade(0, 0.5, 100);
       }
+
+      // Ramp volume from 0 to 0.5 over 100ms
+      sounds.forEach(s => s.fade(0, 0.5, 100));
     }
   }, [muted]);
 
@@ -215,12 +226,25 @@ export default function SimulatorCore({
         return; // Stop animation loop
       }
 
-      // Detect relay state changes and play sound
+      // Detect relay state changes and play the matching (pull-in vs release) sound.
+      // Each direction plays at most once per update; when both happen at the same
+      // time (e.g. the 3-bit counter), the release is staggered slightly so the two
+      // clicks read as distinct mechanical events instead of a smeared overlap.
       if (enableAudio && previousRelayStates.current.length > 0) {
+        let anyPullIn = false;
+        let anyRelease = false;
         for (let i = 0; i < newState.relays.length; i++) {
           if (newState.relays[i] !== previousRelayStates.current[i]) {
-            relayClickSound.current?.play();
-            break; // Only play once per update even if multiple relays change
+            if (newState.relays[i]) anyPullIn = true;
+            else anyRelease = true;
+          }
+        }
+        if (anyPullIn) relayOnSound.current?.play();
+        if (anyRelease) {
+          if (anyPullIn) {
+            setTimeout(() => relayOffSound.current?.play(), 60);
+          } else {
+            relayOffSound.current?.play();
           }
         }
       }

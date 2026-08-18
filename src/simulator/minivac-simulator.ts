@@ -381,15 +381,17 @@ export class MinivacSimulator {
 
       if (!changed && bulbsConverged) {
         // Check for short circuit only at the converged (warm-bulb) solution — cold-bulb
-        // warm-up inrush legitimately exceeds 1A for the first iterations. A true short
-        // is limited only by supply internal + wire resistance (~7A), well above this.
+        // warm-up inrush legitimately exceeds this for the first iterations. At real
+        // measured currents a busy panel draws ~1A (e.g. 3 coils + 3 lights ≈ 0.97A) and
+        // everything-on computes ~2.2A, while a true short is limited only by supply
+        // internal + wire resistance (≥ ~4.6A, typically ~6.6A).
         const powerCurrent = Math.abs(results['I(V_POWER)'] || 0);
-        if (powerCurrent > 1.0) {
+        if (powerCurrent > 3.5) {
           const message = 'SHORT CIRCUIT DETECTED!';
           if (!alerts.includes(message)) {
             alerts.push(message);
           }
-          console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <0.7A)`);
+          console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <2.5A)`);
         }
         if (this.verbose) console.log('  Relay states and bulb resistances stable!');
         return true;
