@@ -93,7 +93,7 @@ export default function MinivacPanel({
       >
         <div className="flex gap-0">
           {/* LEFT PANEL - 6 columns */}
-          <div className="flex flex-col gap-3 pr-3">
+          <div className="flex flex-col gap-2 pr-3">
             {/* Row: Numbers */}
             <div className="flex gap-9">
               {columns.map(num => (
@@ -121,7 +121,7 @@ export default function MinivacPanel({
             </div>
 
             {/* BINARY OUTPUT label */}
-            <div className="text-white font-sans font-bold text-base tracking-wider text-center">BINARY OUTPUT</div>
+            <div className="text-white font-sans font-bold text-sm tracking-wider text-center">BINARY OUTPUT</div>
 
             {/* Blue section with + and - ports - full width */}
             <div className="bg-[#84B6C7] py-2 flex gap-9">
@@ -161,6 +161,7 @@ export default function MinivacPanel({
                 <div key={`relay-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <div style={{ marginLeft: '10px' }}>
                     <Relay
+                      height={70}
                       isEnergized={isPowerOn && (simState?.relays[num - 1] || false)}
                       onPointerDown={() => {
                         if (!simulator) return;
@@ -191,7 +192,7 @@ export default function MinivacPanel({
             </div>
 
             {/* STORAGE/PROCESSING label */}
-            <div className="text-white font-sans font-bold text-base tracking-wider text-center">STORAGE/PROCESSING</div>
+            <div className="text-white font-sans font-bold text-sm tracking-wider text-center">STORAGE/PROCESSING</div>
 
             {/* Row: N.O. ARM N.C. with G H J */}
             <div className="flex gap-9">
@@ -246,7 +247,7 @@ export default function MinivacPanel({
             </div>
 
             {/* SECONDARY STORAGE label */}
-            <div className="text-white font-sans font-bold text-base tracking-wider text-center">SECONDARY STORAGE</div>
+            <div className="text-white font-sans font-bold text-sm tracking-wider text-center">SECONDARY STORAGE</div>
 
             {/* Row: R S T with arrows */}
             <div className="flex gap-9">
@@ -319,7 +320,7 @@ export default function MinivacPanel({
             <div className="bg-[#84B6C7] py-2 h-3" />
 
             {/* BINARY INPUT label */}
-            <div className="text-white font-sans font-bold text-base tracking-wider text-center">BINARY INPUT</div>
+            <div className="text-white font-sans font-bold text-sm tracking-wider text-center">BINARY INPUT</div>
 
             {/* Row: X Y Z with N.O. ARM N.C. */}
             <div className="flex gap-9">
@@ -349,6 +350,7 @@ export default function MinivacPanel({
               {columns.map(num => (
                 <div key={`button-${num}`} className="flex justify-center" style={{ width: '120px' }}>
                   <PushButton
+                    size={44}
                     pressed={simState?.buttons[num - 1]}
                     onPress={() => {
                       if (simulator) {
@@ -383,11 +385,12 @@ export default function MinivacPanel({
           {/* SEPARATOR */}
           <div className="w-[3px] bg-[#84B6C7]" />
 
-          {/* RIGHT PANEL */}
-          <div className="flex flex-col px-3" style={{ width: '450px' }}>
+          {/* RIGHT PANEL — measured 6.28in vs left 16.875in on the real device,
+              i.e. 0.372 of the left panel's 912px ≈ 340px */}
+          <div className="flex flex-col px-3" style={{ width: '340px' }}>
             {/* Title section */}
             <div className="flex flex-col items-center gap-1">
-              <div className="text-white font-sans text-6xl font-bold tracking-wider" style={{ marginTop: '27px' }}>Minivac 601</div>
+              <div className="text-white font-sans text-5xl font-bold tracking-wider" style={{ marginTop: '27px' }}>Minivac 601</div>
               <div className="text-neutral-400 font-mono text-xs">Simulator by Greg Technology</div>
             </div>
 
@@ -414,17 +417,17 @@ export default function MinivacPanel({
             </div>
 
             {/* Matrix and Power section */}
-            <div className="relative flex py-4 items-center" style={{ height: '320px' }}>
+            <div className="relative flex py-4 items-center" style={{ height: '250px' }}>
               {/* Matrix space - 78% */}
               <div className="flex items-center justify-center" style={{ width: '78%' }}>
-                <div className="flex items-center justify-center" style={{ gap: '24px' }}>
+                <div className="flex items-center justify-center" style={{ gap: '10px' }}>
                   {/* Group 10 - 6 holes */}
                   <MatrixConnector6 label="10" holeIds={['M10', 'M10', 'M10', 'M10', 'M10', 'M10']} />
 
                   {/* 3x3 Matrix grid with tic-tac-toe lines */}
                   <div className="relative flex items-center justify-center">
                     <div className="relative">
-                      <div className="grid grid-cols-3 gap-8">
+                      <div className="grid grid-cols-3 gap-4">
                         {[1, 2, 3, 8, 9, 4, 7, 6, 5].map((num) => (
                           <MatrixConnector key={num} label={num.toString()} holeIds={[`M${num}t`, `M${num}t`, `M${num}b`, `M${num}b`]} />
                         ))}
@@ -493,16 +496,16 @@ export default function MinivacPanel({
               </div>
 
               {/* MATRIX label at bottom left */}
-              <div className="absolute text-white font-sans font-bold text-base tracking-wider" style={{ bottom: '4px', left: '16px' }}>MATRIX</div>
+              <div className="absolute text-white font-sans font-bold text-sm tracking-wider" style={{ bottom: '4px', left: '16px' }}>MATRIX</div>
             </div>
 
             {/* Blue separator */}
             <div className="bg-[#84B6C7] h-[3px]" />
 
             {/* Decimal wheel section */}
-            <div className="py-6 px-4 flex" style={{ gap: '10px' }}>
+            <div className="py-6 px-1 flex" style={{ gap: '4px' }}>
               {/* Left side: 16 ARM and 17/18/19 RUN/STOP */}
-              <div className="flex flex-col gap-12" style={{ paddingTop: '120px' }}>
+              <div className="flex flex-col gap-9" style={{ paddingTop: '90px' }}>
                 {/* 16 ARM */}
                 <div className="flex items-center gap-2">
                   <div className="text-neutral-300 font-mono text-[10px] font-bold w-4 text-right">16</div>
@@ -527,11 +530,12 @@ export default function MinivacPanel({
 
               {/* Decimal wheel with rotary knob in center */}
               <div className="relative flex-1 flex items-center justify-center">
-                <DecimalWheel diameter={320} currentValue={simState?.motor.position || 0} angle={simState?.motor.angle || 0} />
+                {/* real dial ring ≈ 4.65in ≈ 250px, knob arrow span 1.5in ≈ 80px */}
+                <DecimalWheel diameter={235} currentValue={simState?.motor.position || 0} angle={simState?.motor.angle || 0} />
                 {/* Rotary knob centered - rotates to point at current motor position */}
                 <div className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
                   <RotaryKnob
-                    size={100}
+                    size={80}
                     angle={simState?.motor.angle || 0}
                     isInteractive={!simState?.motor.running}
                     onChange={(newAngle) => {
@@ -550,7 +554,7 @@ export default function MinivacPanel({
             </div>
 
             {/* DECIMAL INPUT-OUTPUT label */}
-            <div className="text-white font-sans font-bold text-base tracking-wider text-center pb-2">DECIMAL INPUT-OUTPUT</div>
+            <div className="text-white font-sans font-bold text-sm tracking-wider text-center pb-2">DECIMAL INPUT-OUTPUT</div>
           </div>
         </div>
 
