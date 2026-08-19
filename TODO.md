@@ -1,17 +1,12 @@
-- wheel animation spurts, PROFILED 2026-08-18: one elevator resimulate = 33ms, of which
-  dc()=29.4ms, finalize=2.1ms, build=0.9ms — the matrix solve is 90% of the cost, in ONE
-  relaxation iteration. inside cktsim's find_solution: (a) it refuses to converge on the
-  first newton iteration, so even our purely-linear circuits pay >=2 load+LU cycles;
-  (b) mat_solve is dense with per-call array allocation. DIAGNOSED AND FIXED
-  2026-08-18 (briefly reverted, then re-applied): zero-initial-residual pathology —
-  voltage-source-only circuits start at KCL residual exactly 0, so ~1e-13 float noise
-  after the first exact newton step read as "divergence", the exact solution was
-  undone, and 0.3V step-limiting burned ~12 extra iterations (14 instead of 2,
-  ~3x slower). fix = "+res_check_abs" epsilon in find_solution's increase check in
-  public/cktsimvsp_sn.js — documented inline there with the original line for easy
-  revert. gated debug_newton trace hook also in the file for re-diagnosis.
-  worker caveat discussed: relay reactions would lag the wheel by ~1 frame round-trip;
-  mitigate by making the worker's motor angle authoritative
+- wheel animation RESOLVED 2026-08-19 (was: spurts). full chain, each step measured:
+  solver 14 newton iters on a zero-residual float pathology (epsilon fix, 3x) ->
+  full-panel react renders at 120fps at idle (state-signature gate) -> renders from
+  invisible float wiggle (quantized) -> 30-70ms per render (static rows as constant
+  elements + memoized dynamic rows) -> per-frame allocation churn (sim stateVersion
+  gate) -> knob rotation through react (direct dom transform) -> live blur(4px) on the
+  rotating knob shadow re-filtering on the gpu every frame (gradient instead).
+  final devtools trace: median 8.3ms, p99 17ms, 4 gaps >25ms in 17s, all remaining
+  blips are shared-gpu-process tasks outside the app
 - capacitors in the UI: panel jacks + a resistor-placement UI + RAF loop calling
   stepTime(dt, substepped) when any cap is wired. small cap circuits solve fast enough
   for 60fps; big circuits + caps want the web worker first
