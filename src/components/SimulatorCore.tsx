@@ -218,10 +218,39 @@ export default function SimulatorCore({
     let rafId: number;
     let isRunning = true;
 
+    // TEMP perf instrumentation: log frame-gap and sim-solve variability
+    let lastFrameAt = 0;
+    let statFrames = 0;
+    let statWorstGap = 0;
+    let statWorstSim = 0;
+    let statSimTotal = 0;
+    let statWindowStart = performance.now();
+
     const frame = () => {
       if (!isRunning) return;
 
+      const frameStart = performance.now();
+      const gap = lastFrameAt ? frameStart - lastFrameAt : 0;
+      lastFrameAt = frameStart;
+
       const newState = simulator.getState();
+
+      const simMs = performance.now() - frameStart;
+      statFrames++;
+      statSimTotal += simMs;
+      if (gap > statWorstGap) statWorstGap = gap;
+      if (simMs > statWorstSim) statWorstSim = simMs;
+      if (simMs > 5 || gap > 30) {
+        console.log(`[perf] frame gap=${gap.toFixed(1)}ms sim=${simMs.toFixed(1)}ms motor=${newState.motor.running ? 'RUN' : 'stop'} pos=${newState.motor.position}`);
+      }
+      if (frameStart - statWindowStart > 1000) {
+        console.log(`[perf 1s] frames=${statFrames} avgSim=${(statSimTotal / statFrames).toFixed(1)}ms worstSim=${statWorstSim.toFixed(1)}ms worstGap=${statWorstGap.toFixed(1)}ms`);
+        statFrames = 0;
+        statWorstGap = 0;
+        statWorstSim = 0;
+        statSimTotal = 0;
+        statWindowStart = frameStart;
+      }
 
       // Check for short circuit and auto power-off
       if (newState.alerts && newState.alerts.some(alert => alert.includes('SHORT CIRCUIT'))) {
