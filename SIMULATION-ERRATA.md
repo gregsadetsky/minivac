@@ -25,6 +25,11 @@ both ends + again → drops → buzz. whether a given unit buzzes or toggles cle
 on that relay's individual pickup vs ~75mA — per-relay variance (which book VII's
 per-relay bias-calibration chart, p8-9, shows the manufacturer knew about).
 
+measured on the device: replacing the 5N/6E wire with a meter during the buzzing press
+reads 172mA; the sim computes 158mA for the same point (79mA coil-through-light-6 repick
+path + 79mA relay-6 indicator lamp) — 9% agreement, and reading at/above the relay-out
+figure implies the armature spends essentially the whole buzz in the out phase.
+
 refinement from further device testing: the real circuit DOES function as a flip-flop —
 it toggles reliably, deterministically alternating nobuzz/buzz presses; every buzzing
 (1→0) press ends with relay 6 out and light 6 off. presumably the chattering armature
