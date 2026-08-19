@@ -204,8 +204,11 @@ describe('Multivac: 1-of-8 decoder tree (2 machines), both engines', () => {
 });
 
 describe('Multivac: 8x4 register file with addressed write (10 machines)', () => {
-  it('writes, holds, overwrites and clears every row (sparse)', { timeout: 300000 }, () => {
-    setSolverEngine('sparse');
+  const env = (globalThis as { process?: { env?: Record<string, string> } }).process?.env || {};
+  const heavy = env.MINIVAC_MASS === '1' ? it : it.skip;
+
+  function runFullExercise(engine: SolverEngine) {
+    setSolverEngine(engine);
     const { m, row, setAddr, setData, write, setPiece, lineFull, collision } = makeRegisterFile();
     const model = Array(8).fill(0);
     const checkAll = (label: string) => {
@@ -251,6 +254,14 @@ describe('Multivac: 8x4 register file with addressed write (10 machines)', () =>
     setPiece(0);
     expect(collision()).toBe(0);
     checkAll('piece wiggles never touch storage');
+  }
+
+  it('writes, holds, overwrites and clears every row (sparse)', { timeout: 300000 }, () => {
+    runFullExercise('sparse');
+  });
+
+  heavy('full exercise under the dense oracle (MINIVAC_MASS=1)', { timeout: 3600000 }, () => {
+    runFullExercise('cktsim');
   });
 
   // short ambient-engine sample: THIS is the register-file test the
