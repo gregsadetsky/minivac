@@ -50,10 +50,14 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    is proven; the write group is 4 relays/row because every cell needs BOTH
    a private data gate and a private hold-break (see tie-point note above).
    the full field (10x20) is ~35-70 machines later.
-5. GAME-TICK SEQUENCER — ring counter FSM: spawn -> fall -> collide? -> lock ->
-   line-clear -> repeat. reuses counter + decoder.
-6. COLLISION / LINE LOGIC — collision = OR-reduction of (piece AND field) row;
-   line-full = series-contact AND of 10 bits (cheap!). reuses comparator ideas.
+5. DONE 2026-08-19 — GAME-TICK SEQUENCER — 5-state one-hot ring counter
+   (the shift register bent into a ring), seeded by holding START through
+   one clock rise (multivac-ring-sequencer.test.ts).
+6. DONE 2026-08-19 — COLLISION / LINE LOGIC — standalone 256-combo
+   exhaustive (multivac-collision-line.test.ts) AND composed onto the
+   stored register file through the cells' spare second contact sets
+   (multivac-register-file.test.ts). line-full = series-contact AND;
+   collision = OR of per-bit piece-AND-cell series branches.
 7. VERTICAL SLICE: "mini-tetris" 4x8 field, one piece type (1x1 or domino),
    gravity + stacking + line clear, ~15-25 machines. THE milestone that proves
    composition. only then scale the field.
