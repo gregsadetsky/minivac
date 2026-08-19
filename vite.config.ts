@@ -17,6 +17,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         simulator: resolve(__dirname, 'simulator.html'),
+        tetris: resolve(__dirname, 'tetris.html'),
       },
     },
   },
