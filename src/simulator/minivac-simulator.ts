@@ -153,8 +153,15 @@ export class MinivacSimulator {
   private lastMotorUpdateTime!: number | null;
   private lastMotorContactState!: boolean;  // Track if motor arm was making contact
   public verbose: boolean = false;
+  // Multivac: number of ganged machines in one circuit (wires may cross machines via
+  // "b.3G" notation; supplies are per-machine, negative rails are common). All state
+  // arrays are flat, length 6*machineCount; machine m section s = index m*6+s-1.
+  private machineCount: number;
+  // relaxation iterations of the last solve — the relay cascade depth (settle metric)
+  public lastRelaxationIterations = 0;
 
-  constructor(circuitNotation: string[], verbose = false) {
+  constructor(circuitNotation: string[], verbose = false, machineCount = 1) {
+    this.machineCount = machineCount;
     this.wires = parseMinivacNotation(circuitNotation);
     this.verbose = verbose;
     this.reset(); // Initialize all state to defaults
@@ -163,42 +170,58 @@ export class MinivacSimulator {
     }
   }
 
+  private get sectionCount(): number {
+    return 6 * this.machineCount;
+  }
+
+  // global 1-based section index → node-name prefix + per-machine section number
+  private _loc(i: number): { p: string; sec: number } {
+    const machine = Math.floor((i - 1) / 6);
+    return { p: machine === 0 ? '' : `m${machine}.`, sec: ((i - 1) % 6) + 1 };
+  }
+
   private _buildCircuit(): { circuit: Circuit; builder: CircuitBuilder } {
     const cktsim = loadSimulator();
     const ckt = new cktsim.Circuit();
     const builder = new CircuitBuilder(ckt);
 
-    // Power supply: ideal source behind measured internal resistance
-    const vsrcNode = builder.getNode('Power_Source_Internal');
+    // Power supplies: one ideal source behind measured internal resistance PER MACHINE
+    // (negative rails are common — see the parser note on Power_Negative)
     const gnd = ckt.gnd_node();
-    ckt.v(vsrcNode, gnd, SUPPLY_VOLTAGE.toString(), 'V_POWER');
-    builder.addResistor('Power_Source_Internal', 'Power_Positive', SUPPLY_INTERNAL_RESISTANCE, 'V_POWER_INTERNAL_R');
-
-    // Add all 6 lights
-    for (let i = 1; i <= 6; i++) {
-      const lightA = `Light${i}_A`;
-      const lightB = `Light${i}_B`;
-      const probeNode = `Light${i}_Probe`;
-      builder.addCurrentProbe(lightA, probeNode, `LIGHT${i}_PROBE`);
-      builder.addResistor(probeNode, lightB, this.bulbResistances[`LIGHT${i}`], `LIGHT${i}`);
+    for (let m = 0; m < this.machineCount; m++) {
+      const p = m === 0 ? '' : `m${m}.`;
+      const vsrcNode = builder.getNode(`${p}Power_Source_Internal`);
+      ckt.v(vsrcNode, gnd, SUPPLY_VOLTAGE.toString(), `${p}V_POWER`);
+      builder.addResistor(`${p}Power_Source_Internal`, `${p}Power_Positive`, SUPPLY_INTERNAL_RESISTANCE, `${p}V_POWER_INTERNAL_R`);
     }
 
-    // Add all 6 relays
-    for (let i = 1; i <= 6; i++) {
-      const lampInput = `Relay${i}_IndicatorLamp_Input`;
-      const lampProbeNode = `Relay${i}_LampProbe`;
-      const coilInput = `Relay${i}_Coil_Input`;
-      const coilOutput = `Relay${i}_Coil_Output`;
-      const coilProbeNode = `Relay${i}_CoilProbe`;
+    // Add all lights
+    for (let i = 1; i <= this.sectionCount; i++) {
+      const { p, sec } = this._loc(i);
+      const lightA = `${p}Light${sec}_A`;
+      const lightB = `${p}Light${sec}_B`;
+      const probeNode = `${p}Light${sec}_Probe`;
+      builder.addCurrentProbe(lightA, probeNode, `${p}LIGHT${sec}_PROBE`);
+      builder.addResistor(probeNode, lightB, this.bulbResistances[`${p}LIGHT${sec}`], `${p}LIGHT${sec}`);
+    }
 
-      builder.addCurrentProbe(lampInput, lampProbeNode, `RELAY${i}_INDICATOR_LAMP_PROBE`);
-      builder.addResistor(lampProbeNode, coilInput, this.bulbResistances[`LAMP${i}`], `RELAY${i}_INDICATOR_LAMP`);
-      builder.addCurrentProbe(coilInput, coilProbeNode, `RELAY${i}_COIL_PROBE`);
-      builder.addResistor(coilProbeNode, coilOutput, RELAY_COIL_RESISTANCE, `RELAY${i}_COIL`);
+    // Add all relays
+    for (let i = 1; i <= this.sectionCount; i++) {
+      const { p, sec } = this._loc(i);
+      const lampInput = `${p}Relay${sec}_IndicatorLamp_Input`;
+      const lampProbeNode = `${p}Relay${sec}_LampProbe`;
+      const coilInput = `${p}Relay${sec}_Coil_Input`;
+      const coilOutput = `${p}Relay${sec}_Coil_Output`;
+      const coilProbeNode = `${p}Relay${sec}_CoilProbe`;
 
-      const h1 = `Relay${i}_Contact1_Common`;
-      const g1 = `Relay${i}_Contact1_NO`;
-      const j1 = `Relay${i}_Contact1_NC`;
+      builder.addCurrentProbe(lampInput, lampProbeNode, `${p}RELAY${sec}_INDICATOR_LAMP_PROBE`);
+      builder.addResistor(lampProbeNode, coilInput, this.bulbResistances[`${p}LAMP${sec}`], `${p}RELAY${sec}_INDICATOR_LAMP`);
+      builder.addCurrentProbe(coilInput, coilProbeNode, `${p}RELAY${sec}_COIL_PROBE`);
+      builder.addResistor(coilProbeNode, coilOutput, RELAY_COIL_RESISTANCE, `${p}RELAY${sec}_COIL`);
+
+      const h1 = `${p}Relay${sec}_Contact1_Common`;
+      const g1 = `${p}Relay${sec}_Contact1_NO`;
+      const j1 = `${p}Relay${sec}_Contact1_NC`;
 
       // Use override state if present, otherwise use simulated relay state
       const effectiveRelayState = this.relayOverrides[i - 1] !== null
@@ -206,50 +229,52 @@ export class MinivacSimulator {
         : this.relayStates[i - 1];
 
       if (effectiveRelayState) {
-        builder.addWire(h1, g1, `RELAY${i}_CONTACT1_NO_CLOSED`);
+        builder.addWire(h1, g1, `${p}RELAY${sec}_CONTACT1_NO_CLOSED`);
       } else {
-        builder.addWire(h1, j1, `RELAY${i}_CONTACT1_NC_CLOSED`);
+        builder.addWire(h1, j1, `${p}RELAY${sec}_CONTACT1_NC_CLOSED`);
       }
 
-      const l2 = `Relay${i}_Contact2_Common`;
-      const k2 = `Relay${i}_Contact2_NO`;
-      const n2 = `Relay${i}_Contact2_NC`;
+      const l2 = `${p}Relay${sec}_Contact2_Common`;
+      const k2 = `${p}Relay${sec}_Contact2_NO`;
+      const n2 = `${p}Relay${sec}_Contact2_NC`;
 
       if (effectiveRelayState) {
-        builder.addWire(l2, k2, `RELAY${i}_CONTACT2_NO_CLOSED`);
+        builder.addWire(l2, k2, `${p}RELAY${sec}_CONTACT2_NO_CLOSED`);
       } else {
-        builder.addWire(l2, n2, `RELAY${i}_CONTACT2_NC_CLOSED`);
+        builder.addWire(l2, n2, `${p}RELAY${sec}_CONTACT2_NC_CLOSED`);
       }
     }
 
-    // Add all 6 pushbuttons
-    for (let i = 1; i <= 6; i++) {
-      const y = `Button${i}_Common`;
-      const x = `Button${i}_NormallyOpen`;
-      const z = `Button${i}_NormallyClosed`;
+    // Add all pushbuttons
+    for (let i = 1; i <= this.sectionCount; i++) {
+      const { p, sec } = this._loc(i);
+      const y = `${p}Button${sec}_Common`;
+      const x = `${p}Button${sec}_NormallyOpen`;
+      const z = `${p}Button${sec}_NormallyClosed`;
 
       if (this.buttonStates[i - 1]) {
-        builder.addWire(y, x, `BUTTON${i}_NO_CLOSED`);
+        builder.addWire(y, x, `${p}BUTTON${sec}_NO_CLOSED`);
       } else {
-        builder.addWire(y, z, `BUTTON${i}_NC_CLOSED`);
+        builder.addWire(y, z, `${p}BUTTON${sec}_NC_CLOSED`);
       }
     }
 
-    // Add all 6 slide switches
-    for (let i = 1; i <= 6; i++) {
-      const s = `Slide${i}_Common1`;
-      const r = `Slide${i}_Left1`;
-      const t = `Slide${i}_Right1`;
-      const v = `Slide${i}_Common2`;
-      const u = `Slide${i}_Left2`;
-      const w = `Slide${i}_Right2`;
+    // Add all slide switches
+    for (let i = 1; i <= this.sectionCount; i++) {
+      const { p, sec } = this._loc(i);
+      const s = `${p}Slide${sec}_Common1`;
+      const r = `${p}Slide${sec}_Left1`;
+      const t = `${p}Slide${sec}_Right1`;
+      const v = `${p}Slide${sec}_Common2`;
+      const u = `${p}Slide${sec}_Left2`;
+      const w = `${p}Slide${sec}_Right2`;
 
       if (this.slideStates[i - 1]) {
-        builder.addWire(s, t, `SLIDE${i}_SET1_RIGHT`);
-        builder.addWire(v, w, `SLIDE${i}_SET2_RIGHT`);
+        builder.addWire(s, t, `${p}SLIDE${sec}_SET1_RIGHT`);
+        builder.addWire(v, w, `${p}SLIDE${sec}_SET2_RIGHT`);
       } else {
-        builder.addWire(s, r, `SLIDE${i}_SET1_LEFT`);
-        builder.addWire(v, u, `SLIDE${i}_SET2_LEFT`);
+        builder.addWire(s, r, `${p}SLIDE${sec}_SET1_LEFT`);
+        builder.addWire(v, u, `${p}SLIDE${sec}_SET2_LEFT`);
       }
     }
 
@@ -293,14 +318,15 @@ export class MinivacSimulator {
     // Internal capacitors, one per section that is actually wired to.
     // Backward-Euler companion: stored-voltage source in series with dt/C.
     const wiredNodes = new Set(this.wires.flat().concat(this.externalResistors.flatMap(r => [r[0], r[1]])));
-    for (let i = 1; i <= 6; i++) {
-      const capNode = `Capacitor_${i}`;
+    for (let i = 1; i <= this.sectionCount; i++) {
+      const { p, sec } = this._loc(i);
+      const capNode = `${p}Capacitor_${sec}`;
       if (!wiredNodes.has(capNode)) continue;
-      const probeNode = `Capacitor_${i}_Probe`;
-      const srcNode = `Capacitor_${i}_Source`;
-      builder.addCurrentProbe(capNode, probeNode, `CAP${i}_PROBE`);
-      builder.addResistor(probeNode, srcNode, this.capDtSeconds / CAPACITOR_FARADS[i - 1], `CAP${i}_REQ`);
-      ckt.v(builder.getNode(srcNode), gnd, this.capVoltages[i - 1].toString(), `CAP${i}_V`);
+      const probeNode = `${p}Capacitor_${sec}_Probe`;
+      const srcNode = `${p}Capacitor_${sec}_Source`;
+      builder.addCurrentProbe(capNode, probeNode, `${p}CAP${sec}_PROBE`);
+      builder.addResistor(probeNode, srcNode, this.capDtSeconds / CAPACITOR_FARADS[sec - 1], `${p}CAP${sec}_REQ`);
+      ckt.v(builder.getNode(srcNode), gnd, this.capVoltages[i - 1].toString(), `${p}CAP${sec}_V`);
     }
 
     return { circuit: ckt, builder };
@@ -364,8 +390,9 @@ export class MinivacSimulator {
       // Extract new relay states and currents
       const newRelayStates: boolean[] = [];
       const newRelayCurrents: number[] = [];
-      for (let i = 1; i <= 6; i++) {
-        const current = Math.abs(results[`I(RELAY${i}_COIL_PROBE)`] || 0);
+      for (let i = 1; i <= this.sectionCount; i++) {
+        const { p, sec } = this._loc(i);
+        const current = Math.abs(results[`I(${p}RELAY${sec}_COIL_PROBE)`] || 0);
         // hysteresis: an energized relay holds down to the (lower) dropout current
         const energized = pinnedChatter.has(i - 1)
           ? false
@@ -382,13 +409,13 @@ export class MinivacSimulator {
       // Check if relay states changed
       let changed = false;
       const flippedNow: number[] = [];
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < this.sectionCount; i++) {
         if (this.relayStates[i] !== newRelayStates[i]) {
           changed = true;
           flippedNow.push(i);
-          const current = Math.abs(results[`I(RELAY${i+1}_COIL_PROBE)`] || 0);
           if (this.verbose) {
-            console.log(`  Relay ${i + 1}: ${this.relayStates[i] ? 'ON' : 'OFF'} -> ${newRelayStates[i] ? 'ON' : 'OFF'} (${(current * 1000).toFixed(3)} mA)`);
+            const { p, sec } = this._loc(i + 1);
+            console.log(`  Relay ${p}${sec}: ${this.relayStates[i] ? 'ON' : 'OFF'} -> ${newRelayStates[i] ? 'ON' : 'OFF'} (${newRelayCurrents[i].toFixed(3)} mA)`);
           }
         }
       }
@@ -411,23 +438,26 @@ export class MinivacSimulator {
       }
 
       // Extract light states
-      for (let i = 1; i <= 6; i++) {
-        const current = Math.abs(results[`I(LIGHT${i}_PROBE)`] || 0);
+      for (let i = 1; i <= this.sectionCount; i++) {
+        const { p, sec } = this._loc(i);
+        const current = Math.abs(results[`I(${p}LIGHT${sec}_PROBE)`] || 0);
         this.lightStates[i - 1] = current >= LIGHT_ON_CURRENT;
       }
 
       // Extract relay indicator light states
-      for (let i = 1; i <= 6; i++) {
-        const current = Math.abs(results[`I(RELAY${i}_INDICATOR_LAMP_PROBE)`] || 0);
+      for (let i = 1; i <= this.sectionCount; i++) {
+        const { p, sec } = this._loc(i);
+        const current = Math.abs(results[`I(${p}RELAY${sec}_INDICATOR_LAMP_PROBE)`] || 0);
         this.relayIndicatorLightStates[i - 1] = current >= LIGHT_ON_CURRENT;
       }
 
       // Relax bulb resistances toward the measured i-v curve at their present voltage
       let bulbsConverged = true;
-      for (let i = 1; i <= 6; i++) {
+      for (let i = 1; i <= this.sectionCount; i++) {
+        const { p, sec } = this._loc(i);
         const probes: Array<[string, string]> = [
-          [`LIGHT${i}`, `I(LIGHT${i}_PROBE)`],
-          [`LAMP${i}`, `I(RELAY${i}_INDICATOR_LAMP_PROBE)`],
+          [`${p}LIGHT${sec}`, `I(${p}LIGHT${sec}_PROBE)`],
+          [`${p}LAMP${sec}`, `I(${p}RELAY${sec}_INDICATOR_LAMP_PROBE)`],
         ];
         for (const [key, probe] of probes) {
           const oldR = this.bulbResistances[key];
@@ -440,7 +470,7 @@ export class MinivacSimulator {
           }
           this.bulbResistances[key] = newR;
           const brightness = bulbBrightnessAtVoltage(volts);
-          if (key.startsWith('LIGHT')) {
+          if (key.includes('LIGHT')) {
             this.lightBrightness[i - 1] = brightness;
           } else {
             this.relayIndicatorBrightness[i - 1] = brightness;
@@ -480,15 +510,19 @@ export class MinivacSimulator {
         // measured currents a busy panel draws ~1A (e.g. 3 coils + 3 lights ≈ 0.97A) and
         // everything-on computes ~2.2A, while a true short is limited only by supply
         // internal + wire resistance (≥ ~4.6A, typically ~6.6A).
-        const powerCurrent = Math.abs(results['I(V_POWER)'] || 0);
-        if (powerCurrent > 3.5) {
-          const message = 'SHORT CIRCUIT DETECTED!';
-          if (!alerts.includes(message)) {
-            alerts.push(message);
+        for (let m = 0; m < this.machineCount; m++) {
+          const p = m === 0 ? '' : `m${m}.`;
+          const powerCurrent = Math.abs(results[`I(${p}V_POWER)`] || 0);
+          if (powerCurrent > 3.5) {
+            const message = 'SHORT CIRCUIT DETECTED!';
+            if (!alerts.includes(message)) {
+              alerts.push(message);
+            }
+            console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <2.5A)`);
           }
-          console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <2.5A)`);
         }
         if (this.verbose) console.log('  Relay states and bulb resistances stable!');
+        this.lastRelaxationIterations = iteration + 1;
         return true;
       }
 
@@ -496,6 +530,7 @@ export class MinivacSimulator {
     }
 
     // Maximum iterations reached - likely relay oscillation
+    this.lastRelaxationIterations = maxIterations;
     const message = 'RELAY OSCILLATION DETECTED!';
     if (!alerts.includes(message)) {
       alerts.push(message);
@@ -531,48 +566,66 @@ export class MinivacSimulator {
     const dt = dtMs / 1000;
     this.capDtSeconds = dt;
     this._simulate();
-    for (let i = 1; i <= 6; i++) {
-      const current = this.lastResults?.[`I(CAP${i}_PROBE)`];
+    for (let i = 1; i <= this.sectionCount; i++) {
+      const { p, sec } = this._loc(i);
+      const current = this.lastResults?.[`I(${p}CAP${sec}_PROBE)`];
       if (current !== undefined) {
-        this.capVoltages[i - 1] += (current * dt) / CAPACITOR_FARADS[i - 1];
+        this.capVoltages[i - 1] += (current * dt) / CAPACITOR_FARADS[sec - 1];
       }
     }
     this.capDtSeconds = CAP_EVENT_DT_SECONDS;
   }
 
-  pressButton(buttonNum: number): void {
+  pressButton(buttonNum: number, machine = 0): void {
     if (buttonNum < 1 || buttonNum > 6) {
       throw new Error(`Invalid button number: ${buttonNum}`);
     }
-    if (this.verbose) console.log(`\n🔘 Press button ${buttonNum}`);
-    this.buttonStates[buttonNum - 1] = true;
+    if (this.verbose) console.log(`\n🔘 Press button ${buttonNum} (machine ${machine})`);
+    this.buttonStates[machine * 6 + buttonNum - 1] = true;
     this._simulate();
     if (this.verbose) this._printState();
   }
 
-  releaseButton(buttonNum: number): void {
+  releaseButton(buttonNum: number, machine = 0): void {
     if (buttonNum < 1 || buttonNum > 6) {
       throw new Error(`Invalid button number: ${buttonNum}`);
     }
-    if (this.verbose) console.log(`\n🔘 Release button ${buttonNum}`);
-    this.buttonStates[buttonNum - 1] = false;
+    if (this.verbose) console.log(`\n🔘 Release button ${buttonNum} (machine ${machine})`);
+    this.buttonStates[machine * 6 + buttonNum - 1] = false;
     this._simulate();
     if (this.verbose) this._printState();
   }
 
-  setSlide(slideNum: number, position: 'left' | 'right'): void {
+  setSlide(slideNum: number, position: 'left' | 'right', machine = 0): void {
     if (slideNum < 1 || slideNum > 6) {
       throw new Error(`Invalid slide number: ${slideNum}`);
     }
+    const idx = machine * 6 + slideNum - 1;
     const newState = position === 'right';
-    const oldState = this.slideStates[slideNum - 1];
+    const oldState = this.slideStates[idx];
 
     if (oldState !== newState) {
-      if (this.verbose) console.log(`\n🔀 Slide switch ${slideNum} moved to ${position.toUpperCase()}`);
-      this.slideStates[slideNum - 1] = newState;
+      if (this.verbose) console.log(`\n🔀 Slide switch ${slideNum} (machine ${machine}) moved to ${position.toUpperCase()}`);
+      this.slideStates[idx] = newState;
       this._simulate();
       if (this.verbose) this._printState();
     }
+  }
+
+  /** Per-machine slice of the flat state arrays (for multivac tests/tools). */
+  getMachineState(machine: number): {
+    relays: boolean[]; lights: boolean[]; relayIndicatorLights: boolean[];
+    buttons: boolean[]; relayCurrents: number[];
+  } {
+    const a = machine * 6;
+    const b = a + 6;
+    return {
+      relays: this.relayStates.slice(a, b),
+      lights: this.lightStates.slice(a, b),
+      relayIndicatorLights: this.relayIndicatorLightStates.slice(a, b),
+      buttons: this.buttonStates.slice(a, b),
+      relayCurrents: this.relayCurrents.slice(a, b),
+    };
   }
 
   // Calculate motor position from current angle
@@ -739,21 +792,23 @@ export class MinivacSimulator {
 
   // Reset simulator to initial state (all relays off, buttons up, motor at position 0)
   reset(): void {
-    this.buttonStates = [false, false, false, false, false, false];
-    this.relayStates = [false, false, false, false, false, false];
-    this.relayCurrents = [0, 0, 0, 0, 0, 0];
-    this.relayOverrides = [null, null, null, null, null, null];
-    this.lightStates = [false, false, false, false, false, false];
-    this.relayIndicatorLightStates = [false, false, false, false, false, false];
-    this.lightBrightness = [0, 0, 0, 0, 0, 0];
-    this.relayIndicatorBrightness = [0, 0, 0, 0, 0, 0];
-    this.capVoltages = [0, 0, 0, 0, 0, 0];
+    const n = this.sectionCount;
+    this.buttonStates = new Array(n).fill(false);
+    this.relayStates = new Array(n).fill(false);
+    this.relayCurrents = new Array(n).fill(0);
+    this.relayOverrides = new Array(n).fill(null);
+    this.lightStates = new Array(n).fill(false);
+    this.relayIndicatorLightStates = new Array(n).fill(false);
+    this.lightBrightness = new Array(n).fill(0);
+    this.relayIndicatorBrightness = new Array(n).fill(0);
+    this.capVoltages = new Array(n).fill(0);
     this.bulbResistances = {};
-    for (let i = 1; i <= 6; i++) {
-      this.bulbResistances[`LIGHT${i}`] = BULB_INITIAL_RESISTANCE;
-      this.bulbResistances[`LAMP${i}`] = BULB_INITIAL_RESISTANCE;
+    for (let i = 1; i <= n; i++) {
+      const { p, sec } = this._loc(i);
+      this.bulbResistances[`${p}LIGHT${sec}`] = BULB_INITIAL_RESISTANCE;
+      this.bulbResistances[`${p}LAMP${sec}`] = BULB_INITIAL_RESISTANCE;
     }
-    this.slideStates = [false, false, false, false, false, false];
+    this.slideStates = new Array(n).fill(false);
     this.motorPosition = 0;
     this.motorAngle = 0;
     this.motorRunning = false;

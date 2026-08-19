@@ -10,6 +10,17 @@
  * @throws Error if identifier is invalid
  */
 export function parseTerminalIdentifier(identifier: string): string {
+  // Multivac machine prefix: "b.3G" = jack 3G on machine b (machines a-h → 0-7).
+  // Machine a is unprefixed internally for full backward compatibility. All
+  // machines share a common negative rail (as if their − terminals were patched
+  // together), so Power_Negative is never prefixed.
+  const machineMatch = identifier.trim().match(/^([a-h])\.(.+)$/);
+  if (machineMatch) {
+    const machineIndex = machineMatch[1].charCodeAt(0) - 97;
+    const inner = parseTerminalIdentifier(machineMatch[2]);
+    if (machineIndex === 0 || inner === 'Power_Negative') return inner;
+    return `m${machineIndex}.${inner}`;
+  }
   const trimmed = identifier.trim();
 
   // Power rails
