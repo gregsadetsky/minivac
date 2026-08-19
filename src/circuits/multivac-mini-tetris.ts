@@ -166,10 +166,19 @@ export function tetrisCircuit(): {
     // while a write is in flight (that pollution cost this file a draft:
     // a lock at row 6 wrote row 7's content into row 6).
     const pc = PRESSCUT(Math.floor(i / 2));
+    const p2c = P2CUT(Math.floor(i / 2));
     const [pArm, pNc] = i % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
     w.push(`${comOf(s)}/${comOf(MIRA(i))}`);
     w.push(`${comOf(MIRA(i))}/${R(MIRA(i), 'E')}`, `${R(MIRA(i), 'F')}/${minusOf(MIRA(i))}`);
-    w.push(`${comOf(MIRA(i))}/${R(pc, pArm)}`, `${R(pc, pNc)}/${comOf(MIRB(i))}`);
+    // the collision mirrors' coil feed runs through TWO cut contacts in
+    // series: PRESSCUT (drops them for the press) and P2CUT (drops them for
+    // the phase-2 top write — the row below the token must not touch the
+    // rails then either). PRESSCUT's coils cannot simply double-feed from
+    // the phase-2 rail: a coil jack is a tie point, and that wire would tie
+    // rail A to the phase-2 rail permanently, firing the top write on every
+    // ordinary press.
+    w.push(`${comOf(MIRA(i))}/${R(pc, pArm)}`, `${R(pc, pNc)}/${R(p2c, pArm)}`);
+    w.push(`${R(p2c, pNc)}/${comOf(MIRB(i))}`);
     w.push(`${comOf(MIRB(i))}/${R(MIRB(i), 'E')}`, `${R(MIRB(i), 'F')}/${minusOf(MIRB(i))}`);
     w.push(`${comOf(MIRB(i))}/${R(MIRB2(i), 'E')}`, `${R(MIRB2(i), 'F')}/${minusOf(MIRB2(i))}`);
   }
@@ -416,6 +425,46 @@ export function tetrisCircuit(): {
   w.push(`${R(P2S, 'G')}/${tap(p2railA, p2aUse)}`);
   w.push(`${R(P2S, 'J')}/${tap(resetRail, rrUse)}`);
   w.push(`${tap(p2railA, p2aUse)}/${R(P2CLR, 'E')}`, `${R(P2CLR, 'F')}/${minusOf(P2CLR)}`);
+
+  // ---------- vertical pieces: the phase-2 write ----------
+  // The top write may NOT re-power the press rails: the token row's mirrorA
+  // would re-fire that row's breakers and put its freshly-written content
+  // back on the rails — straight into the top row's open gates (the exact
+  // pollution class this whole file exists to avoid; the token row can hold
+  // stack content beside the piece). So phase 2 mirrors the press's power
+  // chain with its own depth-aligned relays, and ONLY row r-1's W group
+  // fires, via the TOPW mirrors:
+  //   p2railA (tick via LKS.G -> P2S.G)   -> depth-1 coils
+  //   depth 1: P2GATE, P2CLR, the P2CUT bank (collision sense dies wave 2)
+  //   p2break / p2gate rails = + via P2GATE's two sets (one rail per
+  //                            contact — the 1961 lesson, as ever)
+  //   depth 2: row r-1's W group fires via TOPW(r); P2COL fires
+  //   column feed = + via P2COL onto colFan's spare 6th hole
+  // Release unwinds exactly like the press (same depths), so the fresh top
+  // row hands off from its gates to its re-closed holds without a gap.
+  w.push(`${tap(p2railA, p2aUse)}/${R(P2GATE, 'E')}`, `${R(P2GATE, 'F')}/${minusOf(P2GATE)}`);
+  for (let x = 0; x < 4; x++) {
+    w.push(`${tap(p2railA, p2aUse)}/${R(P2CUT(x), 'E')}`, `${R(P2CUT(x), 'F')}/${minusOf(P2CUT(x))}`);
+  }
+  const p2break = takeGroups(2);
+  const p2gate = takeGroups(3);
+  for (const g of [p2break, p2gate]) {
+    for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
+  }
+  const p2bUse = { n: 0 }, p2gUse = { n: 0 };
+  w.push(`${plusOf(P2GATE)}/${R(P2GATE, 'H')}`, `${R(P2GATE, 'G')}/${tap(p2break, p2bUse)}`);
+  w.push(`${plusOf(P2GATE)}/${R(P2GATE, 'L')}`, `${R(P2GATE, 'K')}/${tap(p2gate, p2gUse)}`);
+  w.push(`${tap(p2gate, p2gUse)}/${R(P2COL, 'E')}`, `${R(P2COL, 'F')}/${minusOf(P2COL)}`);
+  w.push(`${plusOf(P2COL)}/${R(P2COL, 'L')}`, `${R(P2COL, 'K')}/${colFan}`);
+  // TOPW(r) routes the triggers to row r-1. The gate com (comA) is 4/4
+  // full, but a com is one node: the trigger enters through W(r-1,0)'s coil
+  // jack spare hole instead. Backfeed out of that node dead-ends at open
+  // contacts in every phase (mirrorA of r-1 is off while the token is at r;
+  // the decoder leaf dead-ends at the released WRITE button).
+  for (let r = 1; r < 8; r++) {
+    w.push(`${tap(p2gate, p2gUse)}/${R(TOPW(r), 'H')}`, `${R(TOPW(r), 'G')}/${R(W(r - 1, 0), 'E')}`);
+    w.push(`${tap(p2break, p2bUse)}/${R(TOPW(r), 'L')}`, `${R(TOPW(r), 'K')}/${comOf(W(r - 1, 2))}`);
+  }
 
   return { wires: w, rails: dataRails };
 }

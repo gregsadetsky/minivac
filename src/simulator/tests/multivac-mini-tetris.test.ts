@@ -189,6 +189,50 @@ function dropPiece(
   expect(g.field(), `${label}: field after reset`).toEqual(model);
 }
 
+// vertical drop (VMODE up): the bottom cell is the token, so the fall and
+// the bottom-row write are dropPiece's rhythm exactly; then one extra tick —
+// phase 2 — writes row rest-1 through the TOPW mirrors while the token
+// still selects the row, and the reset runs a tick late. A line completed
+// by the BOTTOM write clears as usual; one completed by the TOP write does
+// NOT (the clear machinery is token-row-addressed and the LINE chain is
+// rail-A-rooted) — a documented limit of this rung, pinned by the tests;
+// the field-scaling rung's row collapse replaces the clear machinery anyway.
+function dropVertical(
+  g: ReturnType<typeof makeGame>,
+  mask: number,
+  model: number[],
+  label: string
+) {
+  let rest = 7;
+  for (let r = 0; r < 7; r++) {
+    if (model[r + 1] & mask) {
+      rest = r;
+      break;
+    }
+  }
+  expect(rest, `${label}: the helper needs a mid-field rest row`).toBeGreaterThan(0);
+  g.setMask(mask);
+  g.tick();
+  expect(g.tokenAt(), `${label}: spawned`).toEqual([0]);
+  expect(g.field(), `${label}: spawn does not touch the field`).toEqual(model);
+  for (let r = 1; r <= rest; r++) {
+    g.tick();
+    expect(g.tokenAt(), `${label}: token at ${r}`).toEqual([r]);
+    if (r === rest) {
+      model[r] |= mask;
+      if (model[r] === 15) model[r] = 0; // bottom-write clear, as ever
+    }
+    expect(g.field(), `${label}: field after tick to ${r}`).toEqual(model);
+  }
+  g.tick(); // phase 2: the top write; the token survives to select the row
+  model[rest - 1] |= mask; // NO clear here even at 15 (top-full stays)
+  expect(g.tokenAt(), `${label}: token survives phase 2`).toEqual([rest]);
+  expect(g.field(), `${label}: top row written`).toEqual(model);
+  g.tick(); // reset, one tick late
+  expect(g.tokenAt(), `${label}: token gone`).toEqual([]);
+  expect(g.field(), `${label}: field after reset`).toEqual(model);
+}
+
 describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
   it('gravity, stacking, and a line clear (sparse)', { timeout: 600000 }, () => {
     setSolverEngine('sparse');
@@ -438,6 +482,105 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
     expect(g.tokenAt(), 'and the next spawn still works').toEqual([0]);
   });
 
+  // THE vertical acceptance bar: pollution. During phase 2 the write rails
+  // may carry ONLY the mask and the top row's own readback. The two leak
+  // classes get disjoint bit signatures:
+  // - floor flavor: the token row's mirrorA re-firing (its readback would
+  //   put the just-written bottom row on the rails) -> top shows col 2.
+  // - stack flavor: the collision mirrors surviving phase 2 (the row BELOW
+  //   the token on the rails) -> top shows row 6's cols 0/3; the token
+  //   row's rebound -> top shows col 3 from row 5. Correct = mask alone.
+  it('vertical pieces: both rows written, no pollution, squares stack (sparse)', { timeout: 600000 }, () => {
+    setSolverEngine('sparse');
+    const g = makeGame();
+    const relayOn = (n: number) =>
+      g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0;
+    const model = Array(8).fill(0);
+    g.operatorWrite(7, 0b0100);
+    model[7] = 0b0100;
+    g.operatorWrite(6, 0b1010);
+    model[6] = 0b1010;
+    g.m.setSlide((VMODE % 6) + 1, 'right', Math.floor(VMODE / 6));
+    g.pressStart();
+
+    // floor pollution test: col 0 is open all the way down (row 7 holds
+    // col 2, but a cell only blocks the row above it)
+    dropVertical(g, 0b0001, model, 'v-floor');
+    expect(g.row(7), 'bottom = old | mask').toBe(0b0101);
+    expect(g.row(6), 'top = old | mask — no bottom-row leak').toBe(0b1011);
+
+    // stack pollution test: col 1 collides at row 5 (row 6 holds col 1);
+    // row 5 pre-loaded with col 3 so a token-row rebound has a signature
+    g.operatorWrite(5, 0b1000);
+    model[5] = 0b1000;
+    dropVertical(g, 0b0010, model, 'v-stack');
+    expect(g.row(6), 'the row below the token is untouched').toBe(0b1011);
+    expect(g.row(5), 'bottom = old | mask').toBe(0b1010);
+    expect(g.row(4), 'top = mask alone — no leak from rows 5 or 6').toBe(0b0010);
+
+    // a 2-wide mask with VMODE up is a 2x2 square: rests on row 5's col 3
+    dropVertical(g, 0b1100, model, 'v-square');
+    expect(g.row(4)).toBe(0b1110);
+    expect(g.row(3)).toBe(0b1100);
+    expect(relayOn(P2M), 'sequencer idle again').toBe(0);
+    expect(relayOn(P2S)).toBe(0);
+  });
+
+  it('vertical pieces: bottom-write clears, top-full stays, row-0 clip (sparse)', { timeout: 600000 }, () => {
+    setSolverEngine('sparse');
+    const g = makeGame();
+    const vmode = (on: boolean) =>
+      g.m.setSlide((VMODE % 6) + 1, on ? 'right' : 'left', Math.floor(VMODE / 6));
+    const model = Array(8).fill(0);
+    g.operatorWrite(7, 0b1110);
+    model[7] = 0b1110;
+    vmode(true);
+    g.pressStart();
+
+    // the bottom write completes row 7 -> clears as ever; the top write
+    // still lands: the piece's upper cell survives its own line clear
+    dropVertical(g, 0b0001, model, 'v-clear');
+    expect(g.row(7), 'bottom line cleared').toBe(0);
+    expect(g.row(6), 'top cell survives the clear below it').toBe(0b0001);
+
+    // the TOP write completes row 6 -> must NOT clear (token-row-addressed
+    // clear machinery; documented limit of this rung)
+    g.operatorWrite(6, 0b0110);
+    model[6] = 0b0111;
+    dropVertical(g, 0b1000, model, 'v-topfull');
+    expect(g.row(7)).toBe(0b1000);
+    expect(g.row(6), 'top-completed line stays full').toBe(0b1111);
+
+    // the game continues over the full row; stack col 0 to the ceiling:
+    // rests at 5, then 3, then 1 — each vertical drop eats two rows
+    dropVertical(g, 0b0001, model, 'v-stack-1'); // rows 5+4
+    dropVertical(g, 0b0001, model, 'v-stack-2'); // rows 3+2
+    dropVertical(g, 0b0001, model, 'v-stack-3'); // rows 1+0 (top at the edge)
+    expect(g.row(1)).toBe(0b0001);
+    expect(g.row(0)).toBe(0b0001);
+
+    // row-0 clip: row 1 now holds col 0, so the next col-0 spawn collides
+    // at row 0 immediately — a merged spawn+press. Phase 2 finds no TOPW(0)
+    // and writes nothing (the top cell is clipped at the edge); then reset.
+    g.setColumn(0);
+    g.tick(); // spawn straight into the press at row 0
+    model[0] = 0b0001; // (already set) bottom write is idempotent here
+    expect(g.tokenAt(), 'clip: merged spawn+lock at row 0').toEqual([0]);
+    expect(g.field()).toEqual(model);
+    g.tick(); // phase 2: clipped — nothing above row 0
+    expect(g.tokenAt(), 'clip: token survives the no-op phase 2').toEqual([0]);
+    expect(g.field(), 'clip: nothing written above the field').toEqual(model);
+    g.tick(); // reset
+    expect(g.tokenAt()).toEqual([]);
+    expect(g.field()).toEqual(model);
+
+    // and the machine still plays: a plain horizontal drop at col 3 rests
+    // on the full row 6, joining col 0 already stored at row 5
+    vmode(false);
+    dropPiece(g, 0b1000, model, 'game goes on');
+    expect(g.row(5)).toBe(0b1001);
+  });
+
   const heavy = MASS ? it : it.skip;
   heavy('short scenario under the dense oracle (MINIVAC_MASS=1)', { timeout: 3600000 }, () => {
     setSolverEngine('cktsim');
@@ -448,5 +591,13 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
     g.pressStart();
     dropPiece(g, 0b0001, model, 'dense drop');
     expect(g.row(7)).toBe(0b0111);
+    // one short vertical under the oracle too: rests at row 1 (row 2
+    // pre-filled), so it is spawn + one fall + phase 2 + reset
+    g.operatorWrite(2, 0b0010);
+    model[2] = 0b0010;
+    g.m.setSlide((VMODE % 6) + 1, 'right', Math.floor(VMODE / 6));
+    dropVertical(g, 0b0010, model, 'dense vertical');
+    expect(g.row(1)).toBe(0b0010);
+    expect(g.row(0)).toBe(0b0010);
   });
 });
