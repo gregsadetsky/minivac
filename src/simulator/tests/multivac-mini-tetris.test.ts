@@ -230,6 +230,81 @@ describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
     expect(g.row(7), 'line cleared on lock').toBe(0);
   });
 
+  // seeded random gameplay, model-checked EVERY tick. This adds what the
+  // scripted scenarios cannot: mid-fall steering (the collision target
+  // changes while the piece falls), spawns straight onto a tall stack
+  // (merged spawn+lock), and whatever stack shapes the seed builds. Note
+  // the hardware does not check sideways moves into an occupied cell (the
+  // piece may overlap; the eventual lock ORs, so the write is a no-op for
+  // that bit) — the model mirrors the machine, not tournament rules.
+  it('random gameplay: seeded drops with mid-fall steering (sparse)', { timeout: 900000 }, () => {
+    setSolverEngine('sparse');
+    const lcg = (seed: number) => {
+      let s = seed >>> 0;
+      return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+    };
+    const rnd = lcg(20260819);
+    const DROPS = parseInt(env.MINIVAC_TETRIS_DROPS || '14', 10);
+
+    const g = makeGame();
+    const model = Array(8).fill(0);
+    let token = -1; // falling piece's row, -1 = none
+    let col = 0;
+    let resetPending = false; // the tick after a lock is always a reset
+    let spawnArmed = false;
+    let locks = 0;
+    let clears = 0;
+    let ticks = 0;
+
+    const lockAt = (r: number) => {
+      model[r] |= 1 << col;
+      if (model[r] === 15) {
+        model[r] = 0; // CLEARP zeroes the row as the press releases
+        clears++;
+      }
+      locks++;
+      resetPending = true;
+    };
+
+    g.pressStart();
+    spawnArmed = true;
+    while (locks < DROPS) {
+      if (rnd() < 0.45) {
+        col = Math.floor(rnd() * 4);
+        g.setColumn(col);
+      }
+      // model what this tick must do, then let the relays do it. Landing
+      // and locking are one tick (the mid-tick collide re-route); a PURE
+      // lock tick only exists when steering put a block under an already
+      // falling piece between ticks (collide pre-armed).
+      const resting = () => token === 7 || ((model[token + 1] >> col) & 1) === 1;
+      if (resetPending) {
+        token = -1;
+        resetPending = false;
+        spawnArmed = true;
+      } else if (token >= 0) {
+        if (resting()) lockAt(token); // pre-armed collide: no movement
+        else {
+          token++;
+          if (resting()) lockAt(token); // merged landing + lock
+        }
+      } else if (spawnArmed) {
+        token = 0;
+        spawnArmed = false;
+        if (resting()) lockAt(0); // spawn straight onto the stack
+      }
+      g.tick();
+      ticks++;
+      expect(g.field(), `tick ${ticks} field (col ${col})`).toEqual(model);
+      expect(g.tokenAt(), `tick ${ticks} token`).toEqual(token >= 0 ? [token] : []);
+    }
+    // the seed is fixed, so the run is deterministic (14 drops = 106 ticks,
+    // 0 clears — line-clear coverage lives in the scripted tests above;
+    // raise MINIVAC_TETRIS_DROPS for longer random runs)
+    console.log(`random gameplay: ${ticks} ticks, ${locks} locks, ${clears} line clears`);
+    expect(locks).toBe(DROPS);
+  });
+
   const heavy = MASS ? it : it.skip;
   heavy('short scenario under the dense oracle (MINIVAC_MASS=1)', { timeout: 3600000 }, () => {
     setSolverEngine('cktsim');

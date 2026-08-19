@@ -137,6 +137,15 @@ document.addEventListener('keydown', e => {
       ticks++;
     });
   } else if (e.key === 'Enter') {
+    // the machine has no interlock here: START arms the SPAWN latch
+    // unconditionally, and pressing it mid-fall would make the next ring
+    // tick inject a SECOND token (two pieces falling, both rows OR-written
+    // on the lock). A 1961 operator wouldn't press it mid-game; we guard
+    // the key instead of spending 8 relay contacts on an interlock.
+    if (tokenRow() >= 0) {
+      render('a piece is already falling');
+      return;
+    }
     act('start', () => {
       const b = TETRIS_IO.start;
       sim.pressButton(b.button, b.machine);

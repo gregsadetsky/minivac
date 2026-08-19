@@ -74,13 +74,24 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    open (one rail per contact); rails powering relay coils must die
    relay-timed, depth-aligned with the contacts they race.
 8. PERF GATE — MEASURED 2026-08-19 at the 25-machine tetris scale: sparse
-   ~160ms/solve (isolated 25-machine cascade, 26 solves / 4.2s; cloud box,
-   some background load). a game tick is ~3-9 solves, so mini-tetris runs
-   ~0.5-1.4s/tick — fine for tests, marginal for a live browser game, and
-   the full 10x20 field (~35-70 machines) extrapolates to multi-second
-   ticks. VERDICT: substructuring (per-machine Thevenin reduction at used
-   jacks; interface system = only the cross-wires) is REQUIRED before the
-   full field, not optional. that is the next solver rung.
+   ~160-200ms/solve; a game tick = 2 relaxations x ~3 waves = ~1.1-1.3s
+   (merged lock ticks ~2-3s). breakdown per solve: build 5.6ms, finalize
+   ~0ms, dc() 198ms — the NONLINEAR dc solve dominates (bulb curve =>
+   newton iterations from a cold start every solve), NOT stamping/rebuild.
+   playability math: classic gravity is ~1 cell/s, so the current page is
+   already at the edge of playable; soft-drop feel wants ~5-10 ticks/s =
+   5-10x; the 10x20 field (~35-70 machines) wants ~30-50x.
+   LEVERS, in order of risk (try each before the next):
+   a. warm-start newton from the previous relaxation solve's voltages —
+      consecutive solves differ by one contact; no caching to invalidate,
+      same fixed point (guard: suite + oracle, watch for operating-point
+      flips on bistable nodes).
+   b. reuse the symbolic factorization / pivot order across newton
+      iterations (same sparsity within one dc()).
+   c. substructuring (per-machine thevenin reduction at used jacks) — the
+      big lever, only if a+b fall short at the full field. NOT required at
+      the current scale; the earlier "required" verdict here overstated it
+      before the dc-vs-build breakdown was measured.
 
 ## display/input notes
 
