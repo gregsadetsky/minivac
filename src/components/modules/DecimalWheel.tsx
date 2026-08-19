@@ -20,7 +20,7 @@ export default function DecimalWheel({
   const holeRadius = diameter / 2 - holeSize / 2 - 7;
   const outerRadius = holeRadius + holeSize / 2 + 5;
   const innerRadius = holeRadius * 0.46 + 9;
-  const labelRadius = (innerRadius + holeRadius - holeSize / 2) / 2 + 5;
+  const labelRadius = (innerRadius + holeRadius - holeSize / 2) / 2 + 2;
 
   const segments = 16;
   const segmentAngle = 360 / segments;
