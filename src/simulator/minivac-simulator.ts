@@ -6,15 +6,22 @@
 import { loadSimulator, T_VOLTAGE, alerts, type Circuit } from './simulator-loader-universal';
 import { parseMinivacNotation, parseTerminalIdentifier } from './circuit-notation-parser';
 import { SparseCircuit } from './sparse-circuit';
+import { FastCircuit } from './fast-circuit';
 
 // Solver engine. DEFAULT IS 'sparse' (validated equivalent to the vendored dense
 // cktsim solver: full suite green under both, 5000 random circuits / 10,001
 // snapshots / zero mismatches / max diff 1.4e-10 mA; 11-26x faster). The dense
 // engine remains permanently available as the ORACLE — escape hatch:
 // MINIVAC_SOLVER=dense (or =cktsim), or setSolverEngine('cktsim').
-export type SolverEngine = 'cktsim' | 'sparse';
+// 'fast' is the typed-array rewrite of the sparse engine (same pivot policy,
+// flat-array elimination — see fast-circuit.ts): MINIVAC_SOLVER=fast, or
+// setSolverEngine('fast').
+export type SolverEngine = 'cktsim' | 'sparse' | 'fast';
 const envSolver = (globalThis as { process?: { env?: Record<string, string> } }).process?.env?.MINIVAC_SOLVER;
-let solverEngine: SolverEngine = (envSolver === 'cktsim' || envSolver === 'dense') ? 'cktsim' : 'sparse';
+let solverEngine: SolverEngine =
+  (envSolver === 'cktsim' || envSolver === 'dense') ? 'cktsim'
+  : envSolver === 'fast' ? 'fast'
+  : 'sparse';
 export function setSolverEngine(engine: SolverEngine): void {
   solverEngine = engine;
 }
@@ -199,7 +206,9 @@ export class MinivacSimulator {
   private _buildCircuit(): { circuit: Circuit; builder: CircuitBuilder } {
     const ckt = solverEngine === 'sparse'
       ? (new SparseCircuit() as unknown as Circuit)
-      : new (loadSimulator().Circuit)();
+      : solverEngine === 'fast'
+        ? (new FastCircuit() as unknown as Circuit)
+        : new (loadSimulator().Circuit)();
     const builder = new CircuitBuilder(ckt);
 
     // Power supplies: one ideal source behind measured internal resistance PER MACHINE
