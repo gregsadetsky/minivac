@@ -391,7 +391,7 @@ describe('Multivac: mini-tetris (28 machines)', () => {
         mask = (width === 2 ? 0b11 : 0b1) << pos;
         g.setMask(mask);
       }
-      if (rnd() < 0.15) {
+      if (rnd() < 0.3) {
         vertical = !vertical;
         g.m.setSlide((VMODE % 6) + 1, vertical ? 'right' : 'left', Math.floor(VMODE / 6));
       }
