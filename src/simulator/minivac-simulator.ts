@@ -310,7 +310,13 @@ export class MinivacSimulator {
 
     let iteration = 0;
     // bulb relaxation (1% tolerance) needs ~5 iterations on top of relay settling
-    const maxIterations = 15;
+    const maxIterations = 20;
+    // a relay still flipping between iterations at this point is genuinely chattering
+    // (verified on a real Minivac 601: the book IV single-input flip-flop physically
+    // buzzes at this exact condition). a buzzing armature never seats its contacts,
+    // so chattering relays are pinned de-energized and the rest of the circuit settles.
+    const chatterPinIteration = 14;
+    const pinnedChatter = new Set<number>();  // relay indices (0-based) pinned off
 
     while (iteration < maxIterations) {
       if (this.verbose) console.log(`\n=== Iteration ${iteration + 1} ===`);
@@ -346,9 +352,11 @@ export class MinivacSimulator {
       for (let i = 1; i <= 6; i++) {
         const current = Math.abs(results[`I(RELAY${i}_COIL_PROBE)`] || 0);
         // hysteresis: an energized relay holds down to the (lower) dropout current
-        const energized = this.relayStates[i - 1]
-          ? current >= RELAY_DROPOUT_CURRENT
-          : current >= RELAY_PICKUP_CURRENT;
+        const energized = pinnedChatter.has(i - 1)
+          ? false
+          : this.relayStates[i - 1]
+            ? current >= RELAY_DROPOUT_CURRENT
+            : current >= RELAY_PICKUP_CURRENT;
         newRelayStates.push(energized);
         newRelayCurrents.push(current * 1000);  // Store in mA
       }
@@ -358,9 +366,11 @@ export class MinivacSimulator {
 
       // Check if relay states changed
       let changed = false;
+      const flippedNow: number[] = [];
       for (let i = 0; i < 6; i++) {
         if (this.relayStates[i] !== newRelayStates[i]) {
           changed = true;
+          flippedNow.push(i);
           const current = Math.abs(results[`I(RELAY${i+1}_COIL_PROBE)`] || 0);
           if (this.verbose) {
             console.log(`  Relay ${i + 1}: ${this.relayStates[i] ? 'ON' : 'OFF'} -> ${newRelayStates[i] ? 'ON' : 'OFF'} (${(current * 1000).toFixed(3)} mA)`);
@@ -369,6 +379,21 @@ export class MinivacSimulator {
       }
 
       this.relayStates = newRelayStates;
+
+      // Relays still flipping this deep into the relaxation are chattering — buzz them
+      // (alert, since the real machine audibly buzzes here) and pin them de-energized
+      // so the rest of the circuit can settle.
+      if (changed && iteration >= chatterPinIteration) {
+        const message = 'RELAY OSCILLATION DETECTED!';
+        if (!alerts.includes(message)) {
+          alerts.push(message);
+          console.warn(`${message} Relay(s) ${flippedNow.map(i => i + 1).join(', ')} are chattering; resolving to de-energized (a buzzing armature never seats its contacts)`);
+        }
+        for (const i of flippedNow) {
+          pinnedChatter.add(i);
+          this.relayStates[i] = false;
+        }
+      }
 
       // Extract light states
       for (let i = 1; i <= 6; i++) {
