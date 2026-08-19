@@ -4,7 +4,7 @@
  */
 
 import { loadSimulator, T_VOLTAGE, alerts, type Circuit } from './simulator-loader-universal';
-import { parseMinivacNotation } from './circuit-notation-parser';
+import { parseMinivacNotation, parseTerminalIdentifier } from './circuit-notation-parser';
 
 // Minivac component specifications
 // measured on a real Minivac 601 with a multimeter and bench supply, 2026-08-17
@@ -48,6 +48,15 @@ const MOTOR_R1 = 100;  // Ohms
 const MOTOR_R2 = 100;  // Ohms
 const MOTOR_RUN_CURRENT = 0.010;  // 10mA threshold
 const MOTOR_STEP_TIME = 187.5;  // milliseconds per step
+
+// Internal capacitors behind the CAPACITOR jacks (book VII, p12):
+// 500uF on sections 1-5, 1000uF on section 6. One terminal is the jack, the other is −.
+const CAPACITOR_FARADS = [500e-6, 500e-6, 500e-6, 500e-6, 500e-6, 1000e-6];
+// Capacitors are simulated with a backward-Euler companion model: a voltage source at
+// the stored voltage in series with dt/C. For instantaneous (event) solves — button
+// presses etc. — dt is tiny, making the companion resistance negligible, i.e. the
+// capacitor momentarily behaves as an ideal voltage source, which is physically right.
+const CAP_EVENT_DT_SECONDS = 1e-4;
 
 // resistance of a bulb operating at the given voltage, per the measured i-v curve:
 // R = V / I(V) = V^(1-0.625) / 0.0208, floored at the measured cold resistance
@@ -131,6 +140,10 @@ export class MinivacSimulator {
   private lightBrightness!: number[];
   private relayIndicatorBrightness!: number[];
   private bulbResistances!: Record<string, number>;  // per-bulb, keys LIGHT1-6 / LAMP1-6
+  private capVoltages!: number[];  // stored voltage of each section's internal capacitor
+  private capDtSeconds = CAP_EVENT_DT_SECONDS;  // timestep for the capacitor companion model
+  private externalResistors: Array<[string, string, number]> = [];  // [node1, node2, ohms]
+  private lastResults: Record<string, number> | null = null;
   private slideStates!: boolean[];
   public motorPosition!: number;
   public motorAngle!: number;  // Continuous angle in degrees (0° is north/top)
@@ -270,6 +283,25 @@ export class MinivacSimulator {
       builder.addWire(term1, term2, `USER_WIRE_${i + 1}`);
     }
 
+    // External resistors (book VII kit: clipped between jacks)
+    for (let i = 0; i < this.externalResistors.length; i++) {
+      const [n1, n2, ohms] = this.externalResistors[i];
+      builder.addResistor(n1, n2, ohms, `EXT_RESISTOR_${i + 1}`);
+    }
+
+    // Internal capacitors, one per section that is actually wired to.
+    // Backward-Euler companion: stored-voltage source in series with dt/C.
+    const wiredNodes = new Set(this.wires.flat().concat(this.externalResistors.flatMap(r => [r[0], r[1]])));
+    for (let i = 1; i <= 6; i++) {
+      const capNode = `Capacitor_${i}`;
+      if (!wiredNodes.has(capNode)) continue;
+      const probeNode = `Capacitor_${i}_Probe`;
+      const srcNode = `Capacitor_${i}_Source`;
+      builder.addCurrentProbe(capNode, probeNode, `CAP${i}_PROBE`);
+      builder.addResistor(probeNode, srcNode, this.capDtSeconds / CAPACITOR_FARADS[i - 1], `CAP${i}_REQ`);
+      ckt.v(builder.getNode(srcNode), gnd, this.capVoltages[i - 1].toString(), `CAP${i}_V`);
+    }
+
     return { circuit: ckt, builder };
   }
 
@@ -298,6 +330,7 @@ export class MinivacSimulator {
 
       if (this.verbose) console.log('Running DC analysis...');
       const results = circuit.dc();
+      this.lastResults = results;
 
       if (!results) {
         console.error('❌ DC analysis failed!');
@@ -430,6 +463,41 @@ export class MinivacSimulator {
     if (this.verbose) console.log('⚠️  Maximum iterations reached');
     console.warn(`${message} Circuit did not stabilize after ${maxIterations} iterations (relays may be oscillating)`);
     return false;
+  }
+
+  /**
+   * Add an external resistor between two jacks (book VII kit resistors),
+   * e.g. addExternalResistor('1J', '1X', 22).
+   */
+  addExternalResistor(term1: string, term2: string, ohms: number): void {
+    this.externalResistors.push([
+      parseTerminalIdentifier(term1),
+      parseTerminalIdentifier(term2),
+      ohms,
+    ]);
+  }
+
+  /** Stored voltage of a section's internal capacitor (for tests/debugging). */
+  getCapVoltage(sectionNum: number): number {
+    return this.capVoltages[sectionNum - 1];
+  }
+
+  /**
+   * Advance simulated time by dtMs, letting capacitors charge/discharge.
+   * Uses the backward-Euler companion (series dt/C) for the solve, then
+   * integrates each capacitor's current into its stored voltage.
+   */
+  stepTime(dtMs: number): void {
+    const dt = dtMs / 1000;
+    this.capDtSeconds = dt;
+    this._simulate();
+    for (let i = 1; i <= 6; i++) {
+      const current = this.lastResults?.[`I(CAP${i}_PROBE)`];
+      if (current !== undefined) {
+        this.capVoltages[i - 1] += (current * dt) / CAPACITOR_FARADS[i - 1];
+      }
+    }
+    this.capDtSeconds = CAP_EVENT_DT_SECONDS;
   }
 
   pressButton(buttonNum: number): void {
@@ -639,6 +707,7 @@ export class MinivacSimulator {
     this.relayIndicatorLightStates = [false, false, false, false, false, false];
     this.lightBrightness = [0, 0, 0, 0, 0, 0];
     this.relayIndicatorBrightness = [0, 0, 0, 0, 0, 0];
+    this.capVoltages = [0, 0, 0, 0, 0, 0];
     this.bulbResistances = {};
     for (let i = 1; i <= 6; i++) {
       this.bulbResistances[`LIGHT${i}`] = BULB_INITIAL_RESISTANCE;

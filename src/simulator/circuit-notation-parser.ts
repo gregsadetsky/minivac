@@ -55,6 +55,14 @@ export function parseTerminalIdentifier(identifier: string): string {
     return `Common_${num}`;
   }
 
+  // Capacitor jacks — the free terminal of the section's internal capacitor
+  // (500uF on sections 1-5, 1000uF on section 6; the other terminal is at −).
+  // See book VII ("Advanced Experiments"), notes on capacitors, page 12.
+  const capMatch = trimmed.match(/^([1-6])cap$/i);
+  if (capMatch) {
+    return `Capacitor_${capMatch[1]}`;
+  }
+
   if (trimmed.length < 2) {
     throw new Error(`Invalid terminal identifier: "${identifier}"`);
   }
