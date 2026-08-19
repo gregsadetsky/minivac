@@ -269,12 +269,7 @@ cktsim = (function() {
 		    if (this.ntypes[i] == T_VOLTAGE)
 			abssum_rhs += Math.abs(rhs[i]);
 
-		// Note (minivac 2026-08-18): the increase check needs an absolute epsilon.
-		// In circuits driven only by voltage sources the initial KCL residual is
-		// exactly 0, so after ONE exact Newton step the ~1e-13 float noise reads as
-		// "residual increased", the exact solution is undone, and v_newt_lim
-		// creep-limiting burns ~12 extra iterations on purely linear circuits.
-		if ((iter>0)&&(use_limiting==false)&&(abssum_old+res_check_abs<abssum_rhs)) {
+		if ((iter>0)&&(use_limiting==false)&&(abssum_old<abssum_rhs)) {
 		    // old norm(rhs)<norm(rhs), undo last iter + start limiting
 		    for (var i = this.N - 1; i >= 0; --i)
 			soln[i] -= d_sol[i];

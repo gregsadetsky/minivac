@@ -2,12 +2,17 @@
   dc()=29.4ms, finalize=2.1ms, build=0.9ms — the matrix solve is 90% of the cost, in ONE
   relaxation iteration. inside cktsim's find_solution: (a) it refuses to converge on the
   first newton iteration, so even our purely-linear circuits pay >=2 load+LU cycles;
-  (b) mat_solve is dense with per-call array allocation. FIXED 2026-08-18: the real
-  culprit was a zero-initial-residual pathology — voltage-source-only circuits start at
-  KCL residual exactly 0, so float noise after the first exact newton step read as
-  "divergence", the solution was undone, and 0.3V step-limiting burned ~12 iterations.
-  one-line epsilon fix in cktsimvsp_sn.js: 14 -> 2 iterations, resimulate 33ms -> ~11ms.
-  if more speed is ever needed: optimize mat_solve (typed arrays), then web worker.
+  (b) mat_solve is dense with per-call array allocation. DIAGNOSED 2026-08-18, fix
+  REVERTED by choice (keep original solver math, just in case): the culprit is a
+  zero-initial-residual pathology — voltage-source-only circuits start at KCL residual
+  exactly 0, so ~1e-13 float noise after the first exact newton step reads as
+  "divergence", the exact solution is undone, and 0.3V step-limiting burns ~12 extra
+  iterations. verified fix (14 -> 2 iterations, resimulate 33ms -> ~11ms, full suite
+  green): in public/cktsimvsp_sn.js find_solution, change
+      if ((iter>0)&&(use_limiting==false)&&(abssum_old<abssum_rhs)) {
+  to
+      if ((iter>0)&&(use_limiting==false)&&(abssum_old+res_check_abs<abssum_rhs)) {
+  the gated debug_newton trace hook is still in the file for re-diagnosis.
   worker caveat discussed: relay reactions would lag the wheel by ~1 frame round-trip;
   mitigate by making the worker's motor angle authoritative
 - capacitors in the UI: panel jacks + a resistor-placement UI + RAF loop calling
