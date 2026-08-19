@@ -18,6 +18,11 @@
   clock-mirror relay per bit (multivac-shift-register.test.ts)
 - 4-bit ripple-carry adder: 3 machines, 15 relays, parity-ladder sum +
   kill/generate/propagate carry, 256/256 (multivac-adder.test.ts)
+- 1-of-8 decoder tree + 8x4 register file with addressed write: 68 relays,
+  12 machines, per-cell private hold-break contacts — a shared per-row hold
+  rail hit the tie-point law (a cell being set backfed the broken rail
+  through its own hold contact and kept its clearing sibling alive)
+  (multivac-register-file.test.ts)
 
 ## THE LAW (cost us two debugging sessions, also bit the 1961 book authors)
 
@@ -40,9 +45,11 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
 3. DONE 2026-08-19 — RIPPLE-CARRY ADDER (4-bit) — score/position arithmetic.
    sum = XOR3 parity ladder, carry = comparator-style kill/generate/propagate;
    256 pairs exhaustive under both engines (multivac-adder.test.ts).
-4. DECODER + REGISTER FILE — 1-of-8 decoder (relay tree), then 8 rows x 4 bits
-   with addressed write. this is the playfield storage pattern. the full field
-   (10x20) is ~35-70 machines later; prove the addressing pattern small first.
+4. DONE 2026-08-19 — DECODER + REGISTER FILE — 1-of-8 relay tree + 8x4 with
+   addressed write (multivac-register-file.test.ts). the addressing pattern
+   is proven; the write group is 4 relays/row because every cell needs BOTH
+   a private data gate and a private hold-break (see tie-point note above).
+   the full field (10x20) is ~35-70 machines later.
 5. GAME-TICK SEQUENCER — ring counter FSM: spawn -> fall -> collide? -> lock ->
    line-clear -> repeat. reuses counter + decoder.
 6. COLLISION / LINE LOGIC — collision = OR-reduction of (piece AND field) row;
