@@ -25,12 +25,14 @@ export class SparseCircuit {
     return -1;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   node(name: string, _ntype: number): number {
     const idx = this.nodeCount++;
     if (name) this.names[name] = idx;
     return idx;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   r(n1: number, n2: number, value: string, _name: string): void {
     this.resistors.push([n1, n2, parseFloat(value)]);
   }
