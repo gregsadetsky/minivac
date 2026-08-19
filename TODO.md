@@ -1,7 +1,12 @@
-- wheel animation spurts (measured 2026-08-18): one elevator resimulate = ~33ms, and the
-  motor triggers ~3 per 187ms step (break/position/make), all blocking the RAF thread.
-  real fix = move the simulator to a web worker (animation decoupled from solving);
-  alternative = profile/speed up the solve itself (rebuild + MNA each iteration)
+- wheel animation spurts, PROFILED 2026-08-18: one elevator resimulate = 33ms, of which
+  dc()=29.4ms, finalize=2.1ms, build=0.9ms — the matrix solve is 90% of the cost, in ONE
+  relaxation iteration. inside cktsim's find_solution: (a) it refuses to converge on the
+  first newton iteration, so even our purely-linear circuits pay >=2 load+LU cycles;
+  (b) mat_solve is dense with per-call array allocation. speedup paths, in order:
+  allow first-iteration convergence for linear circuits (~2x, small change), optimize
+  mat_solve (typed arrays, reuse — likely large), and only then a web worker if needed.
+  worker caveat discussed: relay reactions would lag the wheel by ~1 frame round-trip;
+  mitigate by making the worker's motor angle authoritative
 - capacitors in the UI: panel jacks + a resistor-placement UI + RAF loop calling
   stepTime(dt, substepped) when any cap is wired. small cap circuits solve fast enough
   for 60fps; big circuits + caps want the web worker first
