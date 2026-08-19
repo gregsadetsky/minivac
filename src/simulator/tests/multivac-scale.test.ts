@@ -19,6 +19,37 @@ function cascadeCircuit(k: number): string[] {
   return w;
 }
 
+describe('Multivac scale: 32 machines, sparse only (roadmap rung 1 perf point)', () => {
+  // cktsim at 16 machines already takes ~1 min (the test below anchors engine
+  // equivalence); at 32 the dense solve is minutes-long, so past 16 we trust
+  // the oracle transitively and run sparse alone.
+  it('32-relay cascade settles past the letter-alias range', { timeout: 120000 }, () => {
+    setSolverEngine('sparse');
+    const K = 32;
+    const m = new MinivacSimulator(cascadeCircuit(K), false, K);
+    m.initialize();
+    const allOn = () => Array.from({ length: K }, (_, i) => m.getMachineState(i).relays[0]);
+
+    const t0 = performance.now();
+    m.setSlide(1, 'right', 0);
+    const settleMs = performance.now() - t0;
+
+    const after = allOn();
+    expect(after.every(r => r), `all 32 on, got ${after.map(r => (r ? 1 : 0)).join('')}`).toBe(true);
+    expect(m.lastRelaxationIterations).toBeGreaterThanOrEqual(K);
+    expect(m.getState().alerts).toEqual([]);
+    // perf point: a 32-deep cascade is 32 sequential sparse solves in one
+    // interaction. generous runaway guard only — wall-clock asserts flake
+    // under parallel test workers (2026-08-19: whole test ~18s incl. init;
+    // the 16-machine sparse test runs ~2.5s on the same box).
+    expect(settleMs, `32-machine cascade settled in ${settleMs.toFixed(0)}ms`).toBeLessThan(60000);
+
+    m.setSlide(1, 'left', 0);
+    expect(allOn().every(r => !r), 'all off again').toBe(true);
+    expect(m.getState().alerts).toEqual([]);
+  });
+});
+
 describe('Multivac scale: 16 machines, numeric prefixes, both engines', () => {
   for (const engine of ['sparse', 'cktsim'] as SolverEngine[]) {
     it(`16-relay cross-machine cascade settles correctly (${engine})`, { timeout: 300000 }, () => {
