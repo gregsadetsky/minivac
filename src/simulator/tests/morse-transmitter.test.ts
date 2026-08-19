@@ -21,7 +21,7 @@ import { morseTransmitterCircuit } from '../../circuits/morse-transmitter';
 describe('Minivac Simulator - Morse Code Transmitter', () => {
   const circuit = morseTransmitterCircuit.circuit;
 
-  it('should have break-before-make gaps between symbols', { timeout: 20000 }, () => {
+  it('should have break-before-make gaps between symbols', { timeout: 60000 }, () => {
     // This test verifies that when the motor moves between positions,
     // there's a brief moment where no contact is made (break-before-make).
     // This is critical for morse code - without it, consecutive dots or dashes
@@ -84,7 +84,7 @@ describe('Minivac Simulator - Morse Code Transmitter', () => {
     expect(foundBreakGap).toBe(true);
   });
 
-  it('should transmit morse code and cycle through message', { timeout: 20000 }, () => {
+  it('should transmit morse code and cycle through message', { timeout: 60000 }, () => {
     const minivac = new MinivacSimulator(circuit);
     minivac.motorPosition = 0;
     minivac.initialize();

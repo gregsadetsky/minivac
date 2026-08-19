@@ -19,8 +19,8 @@ export default function DecimalWheel({
   const centerY = diameter / 2;
   const outerRadius = diameter / 2 - 2;
   const holeRadius = outerRadius - holeSize / 2 - 3;
-  const innerRadius = holeRadius * 0.46;
-  const labelRadius = (innerRadius + holeRadius - holeSize / 2) / 2;
+  const innerRadius = holeRadius * 0.46 + 5;
+  const labelRadius = (innerRadius + holeRadius - holeSize / 2) / 2 + 2;
 
   const segments = 16;
   const segmentAngle = 360 / segments;
@@ -123,9 +123,9 @@ export default function DecimalWheel({
                 y={y}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                fill="#e8e8e8"
-                fontSize="16"
-                fontFamily="sans-serif"
+                fill="#d0d0d0"
+                fontSize="14"
+                fontFamily="'Courier New', monospace"
                 fontWeight="bold"
               >
                 {i}
