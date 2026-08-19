@@ -2,9 +2,12 @@
   dc()=29.4ms, finalize=2.1ms, build=0.9ms — the matrix solve is 90% of the cost, in ONE
   relaxation iteration. inside cktsim's find_solution: (a) it refuses to converge on the
   first newton iteration, so even our purely-linear circuits pay >=2 load+LU cycles;
-  (b) mat_solve is dense with per-call array allocation. speedup paths, in order:
-  allow first-iteration convergence for linear circuits (~2x, small change), optimize
-  mat_solve (typed arrays, reuse — likely large), and only then a web worker if needed.
+  (b) mat_solve is dense with per-call array allocation. FIXED 2026-08-18: the real
+  culprit was a zero-initial-residual pathology — voltage-source-only circuits start at
+  KCL residual exactly 0, so float noise after the first exact newton step read as
+  "divergence", the solution was undone, and 0.3V step-limiting burned ~12 iterations.
+  one-line epsilon fix in cktsimvsp_sn.js: 14 -> 2 iterations, resimulate 33ms -> ~11ms.
+  if more speed is ever needed: optimize mat_solve (typed arrays), then web worker.
   worker caveat discussed: relay reactions would lag the wheel by ~1 frame round-trip;
   mitigate by making the worker's motor angle authoritative
 - capacitors in the UI: panel jacks + a resistor-placement UI + RAF loop calling
