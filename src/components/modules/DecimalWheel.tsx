@@ -17,10 +17,10 @@ export default function DecimalWheel({
   // full band from inner to outer circle.
   const centerX = diameter / 2;
   const centerY = diameter / 2;
-  const outerRadius = diameter / 2 - 2;
-  const holeRadius = outerRadius - holeSize / 2 - 3;
-  const innerRadius = holeRadius * 0.46 + 5;
-  const labelRadius = (innerRadius + holeRadius - holeSize / 2) / 2 + 2;
+  const holeRadius = diameter / 2 - holeSize / 2 - 7;
+  const outerRadius = holeRadius + holeSize / 2 + 5;
+  const innerRadius = holeRadius * 0.46 + 9;
+  const labelRadius = (innerRadius + holeRadius - holeSize / 2) / 2 + 5;
 
   const segments = 16;
   const segmentAngle = 360 / segments;
@@ -75,7 +75,7 @@ export default function DecimalWheel({
             r={outerRadius}
             fill="none"
             stroke="#c8c8c8"
-            strokeWidth="2"
+            strokeWidth="1.25"
           />
 
           {/* Inner circle */}
@@ -85,7 +85,7 @@ export default function DecimalWheel({
             r={innerRadius}
             fill="none"
             stroke="#c8c8c8"
-            strokeWidth="2"
+            strokeWidth="1.25"
           />
 
           {/* Radial separator lines */}
@@ -105,7 +105,7 @@ export default function DecimalWheel({
                 x2={x2}
                 y2={y2}
                 stroke="#c8c8c8"
-                strokeWidth="1.5"
+                strokeWidth="1"
               />
             );
           })}

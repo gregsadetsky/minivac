@@ -546,7 +546,7 @@ export default function MinivacPanel({
               <div className="relative flex-1 flex items-center justify-center">
                 {/* measured: hole ring 9.4cm of the 16cm square → 196px at this scale;
                     knob 3.9cm ≈ 80px */}
-                <DecimalWheel diameter={200} currentValue={simState?.motor.position || 0} angle={simState?.motor.angle || 0} />
+                <DecimalWheel diameter={204} currentValue={simState?.motor.position || 0} angle={simState?.motor.angle || 0} />
                 {/* Rotary knob centered - rotates to point at current motor position */}
                 <div className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
                   <RotaryKnob
