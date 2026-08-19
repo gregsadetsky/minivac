@@ -7,6 +7,12 @@
  *   MINIVAC_MASS=1 npx vitest --run src/simulator/tests/fast-mass-validation.test.ts
  *   MINIVAC_MASS=1 MASS_CASES=10000 ...          (more cases)
  *   MINIVAC_SOLVER=fast npm run test -- --run    (whole suite under fast engine)
+ *
+ * Results on 2026-08-19 (run incrementally: 5 -> 50 -> 500 -> 5000 cases):
+ * 5000 cases / 10,001 snapshots, zero mismatches, max current disagreement
+ * 1.1e-10 mA (sparse's record on the same sweep: 1.4e-10). Full suite green
+ * under MINIVAC_SOLVER=fast (177 passed / 8 skipped). Perf at 25 machines:
+ * 159ms -> 9.6ms per solve (16.7x); a mini-tetris game tick 1223ms -> 68ms.
  */
 
 import { describe, expect, it, afterEach } from 'vitest';
