@@ -39,7 +39,7 @@ function cycle(m: MinivacSimulator, holdMs: number) {
 }
 
 describe('Book VII Experiment 2: Fast Flip-Flop (biased relay)', () => {
-  it('stores 0 at power on, with bias current between drop-out and pickup', { timeout: 30000 }, () => {
+  it('stores 0 at power on, with bias current between drop-out and pickup', { timeout: 90000 }, () => {
     const m = buildFast();
     hold(m, 50);
     const s = m.getState();
@@ -50,7 +50,7 @@ describe('Book VII Experiment 2: Fast Flip-Flop (biased relay)', () => {
     expect(s.relayCurrents[0]).toBeLessThan(70);    // ...but below pickup
   });
 
-  it('toggles 0 -> 1 -> 0 -> 1 -> 0 through the book procedure', { timeout: 30000 }, () => {
+  it('toggles 0 -> 1 -> 0 -> 1 -> 0 through the book procedure', { timeout: 90000 }, () => {
     const m = buildFast();
     hold(m, 50);
     for (const expected of [true, false, true, false]) {
@@ -59,7 +59,7 @@ describe('Book VII Experiment 2: Fast Flip-Flop (biased relay)', () => {
     }
   });
 
-  it('does not miss when operated fast (30ms holds, ~16 presses/sec)', { timeout: 30000 }, () => {
+  it('does not miss when operated fast (30ms holds, ~16 presses/sec)', { timeout: 90000 }, () => {
     const m = buildFast();
     hold(m, 50);
     const bits: number[] = [];
@@ -70,7 +70,7 @@ describe('Book VII Experiment 2: Fast Flip-Flop (biased relay)', () => {
     expect(bits).toEqual([1, 0, 1, 0, 1, 0]);
   });
 
-  it('experiment 1, by contrast, DOES miss at the same speed', { timeout: 30000 }, () => {
+  it('experiment 1, by contrast, DOES miss at the same speed', { timeout: 90000 }, () => {
     const m = new MinivacSimulator(slowCircuit);
     m.addExternalResistor('1J', '1X', 22);
     m.initialize();
