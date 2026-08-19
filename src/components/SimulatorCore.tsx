@@ -251,44 +251,13 @@ export default function SimulatorCore({
     // first frame to process state regardless of version coincidence
     lastStateVersion.current = -1;
 
-    // TEMP perf instrumentation: log frame-gap and sim-solve variability
-    let lastFrameAt = 0;
-    let statFrames = 0;
-    let statWorstGap = 0;
-    let statWorstSim = 0;
-    let statSimTotal = 0;
-    let statRenders = 0;
-    let statWindowStart = performance.now();
-
     const frame = () => {
       if (!isRunning) return;
-
-      const frameStart = performance.now();
-      const gap = lastFrameAt ? frameStart - lastFrameAt : 0;
-      lastFrameAt = frameStart;
 
       // advance motor time; only build a fresh state object when a solve happened —
       // getState() every frame at 120fps allocates ~10 arrays/frame of pure GC churn
       const version = simulator.tick();
       motorAngleStore.current!.set(simulator.motorAngle);
-
-      const simMs = performance.now() - frameStart;
-      statFrames++;
-      statSimTotal += simMs;
-      if (gap > statWorstGap) statWorstGap = gap;
-      if (simMs > statWorstSim) statWorstSim = simMs;
-      if (simMs > 5 || gap > 30) {
-        console.log(`[perf] frame gap=${gap.toFixed(1)}ms sim=${simMs.toFixed(1)}ms v=${version}`);
-      }
-      if (frameStart - statWindowStart > 1000) {
-        console.log(`[perf 1s] frames=${statFrames} renders=${statRenders} avgSim=${(statSimTotal / statFrames).toFixed(1)}ms worstSim=${statWorstSim.toFixed(1)}ms worstGap=${statWorstGap.toFixed(1)}ms`);
-        statFrames = 0;
-        statRenders = 0;
-        statWorstGap = 0;
-        statWorstSim = 0;
-        statSimTotal = 0;
-        statWindowStart = frameStart;
-      }
 
       if (version === lastStateVersion.current) {
         rafId = requestAnimationFrame(frame);
@@ -347,17 +316,7 @@ export default function SimulatorCore({
         alerts: newState.alerts,
       });
       if (signature !== lastStateSignature.current) {
-        // TEMP: log which state fields drove this render
-        try {
-          const prev = JSON.parse(lastStateSignature.current || '{}');
-          const next = JSON.parse(signature);
-          const changed = Object.keys(next).filter(
-            k => JSON.stringify(next[k]) !== JSON.stringify(prev[k])
-          );
-          console.log(`[render] changed: ${changed.join(', ')}`);
-        } catch { /* first frame */ }
         lastStateSignature.current = signature;
-        statRenders++;
         setSimState(newState);
         onStateChange?.(newState);
       }

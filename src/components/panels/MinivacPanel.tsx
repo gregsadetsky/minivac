@@ -531,8 +531,9 @@ const CablesLayer = React.memo(
   (p, n) => p.cables === n.cables && p.isDraggingWire === n.isDraggingWire && p.onCableClick === n.onCableClick
 );
 
-// The motor angle changes every animation frame while running; subscribing just the
-// knob to it keeps the rest of the panel from re-rendering at display rate.
+// The motor angle changes every animation frame while running. React is bypassed
+// entirely for the rotation: the store writes the wrapper's transform straight to
+// the DOM, so a turning motor costs zero React work per frame.
 function LiveRotaryKnob({
   store,
   size,
@@ -544,8 +545,19 @@ function LiveRotaryKnob({
   isInteractive: boolean;
   onChange: (angle: number) => void;
 }) {
-  const angle = React.useSyncExternalStore(store.subscribe, store.getSnapshot);
-  return <RotaryKnob size={size} angle={angle} isInteractive={isInteractive} onChange={onChange} />;
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const apply = () => {
+      if (ref.current) ref.current.style.transform = `rotate(${store.getSnapshot()}deg)`;
+    };
+    apply();
+    return store.subscribe(apply);
+  }, [store]);
+  return (
+    <div ref={ref} style={{ willChange: 'transform' }}>
+      <RotaryKnob size={size} angle={0} isInteractive={isInteractive} onChange={onChange} />
+    </div>
+  );
 }
 
 interface MinivacPanelProps {
