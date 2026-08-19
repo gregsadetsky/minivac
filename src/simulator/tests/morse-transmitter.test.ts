@@ -26,62 +26,51 @@ describe('Minivac Simulator - Morse Code Transmitter', () => {
     // there's a brief moment where no contact is made (break-before-make).
     // This is critical for morse code - without it, consecutive dots or dashes
     // would appear as one continuous signal.
+    //
+    // The gap is a function of motor ANGLE (commutator geometry: 20° of
+    // contact per 22.5° position, 1.25° dead zone each side), not of wall
+    // time. This test used to sample the free-running motor every 10ms and
+    // hope a sample landed inside each ~2.5° gap; under parallel suite load
+    // the worker gets descheduled and its samples straddle every gap (the
+    // known wall-clock flake class — it went near-deterministic when the
+    // multivac suite grew, 2026-08-19). Driving the angle deterministically
+    // checks the same electrical property at every position boundary.
     const minivac = new MinivacSimulator(circuit);
     minivac.updateMotorAngle(0);
     minivac.initialize();
 
-    // Press button 6 to start transmission
-    minivac.pressButton(6);
+    minivac.pressButton(6); // energize the transmission path
+    minivac.pause(); // freeze wall-clock motor advance; the sweep drives the angle
 
-    // Sample at high frequency to catch the brief OFF periods
-    const samples: Array<{ pos: number; L5: boolean; L6: boolean; angle: number }> = [];
-    const stepDelay = 10; // Sample every 10ms (much faster than position changes)
-    const maxSamples = 300; // Just need enough to find a few gaps
-
-    for (let i = 0; i < maxSamples; i++) {
+    const step = 0.5; // degrees; the 2.5° dead zone spans ~5 samples
+    const lit: boolean[] = [];
+    for (let a = 0; a <= 360; a += step) {
+      minivac.updateMotorAngle(a);
+      minivac.resimulate();
       const state = minivac.getState();
-      samples.push({
-        pos: state.motor.position,
-        L5: state.lights[4], // dash
-        L6: state.lights[5], // dot
-        angle: state.motor.angle,
-      });
-
-      if (!state.motor.running) {
-        break;
-      }
-
-      const now = Date.now();
-      while (Date.now() - now < stepDelay) {
-        // Busy wait
-      }
+      lit.push(state.lights[4] || state.lights[5]);
     }
-
     minivac.releaseButton(6);
 
-    // Find sequences where we transition from one position to the next
-    // and verify there's a gap where both lights are OFF
-    let foundBreakGap = false;
-    let gapCount = 0;
-    for (let i = 1; i < samples.length - 1; i++) {
-      const prev = samples[i - 1];
-      const curr = samples[i];
-      const next = samples[i + 1];
-
-      // Look for pattern: light ON -> light OFF -> light ON (as position changes)
-      const prevLightOn = prev.L5 || prev.L6;
-      const currLightOff = !curr.L5 && !curr.L6;
-      const nextLightOn = next.L5 || next.L6;
-
-      if (prevLightOn && currLightOff && nextLightOn) {
-        foundBreakGap = true;
-        gapCount++;
-        if (gapCount >= 3) break; // Found enough examples
+    // Break-before-make gaps are SHORT off-runs bounded by lit samples
+    // (long off-runs are legitimate letter spacing in the message).
+    const maxGapSamples = Math.ceil(4 / step); // anything under 4° is a contact gap
+    let breakGaps = 0;
+    let i = 0;
+    while (i < lit.length) {
+      if (!lit[i]) {
+        const start = i;
+        while (i < lit.length && !lit[i]) i++;
+        const bounded = start > 0 && i < lit.length;
+        if (bounded && i - start <= maxGapSamples) breakGaps++;
+      } else {
+        i++;
       }
     }
 
-    // Should find at least one break gap in the morse transmission
-    expect(foundBreakGap).toBe(true);
+    // JOHN has runs of consecutive lit symbols (J = .---, H = ....), so a
+    // full revolution must show several break gaps between lit positions
+    expect(breakGaps).toBeGreaterThanOrEqual(3);
   });
 
   it('should transmit morse code and cycle through message', { timeout: 60000 }, () => {
