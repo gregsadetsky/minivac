@@ -24,6 +24,13 @@
  * break is per-cell — + from the cell's own section, through a private W''
  * or W''' contact, into the cell's hold arm. No shared hold node exists.
  *
+ * Rung 6 composition also lives here: the detectors read STORED state
+ * through the cells' spare second contact sets. line-full on row 2 = series
+ * chain of its four cells' NO contacts; collision on row 3 = four
+ * piece-AND-cell series branches joined on a free M11 group (piece = 4
+ * slide-driven relays on m11's spare sections). The standalone exhaustive
+ * version is multivac-collision-line.test.ts.
+ *
  * The full exercise below runs sparse-pinned: at 12 machines a single dense
  * pass over ~90 interactions costs minutes (cf. the 16-machine cascade at
  * ~52s under cktsim), so the dense oracle instead covers the short
@@ -121,8 +128,25 @@ function registerFileCircuit(): string[] {
   return w;
 }
 
+function playfieldCircuit(): string[] {
+  const w = registerFileCircuit();
+  // line-full on row 2 (cells at m7.3-6): series AND through the cells'
+  // spare second contact sets, light at the end of the chain
+  w.push('m7.3+/m7.3L', 'm7.3K/m7.4L', 'm7.4K/m7.5L', 'm7.5K/m7.6L');
+  w.push('m7.6K/m11.3A', 'm11.3B/m11.3-');
+  // piece register: 4 slide-driven relays on m11's spare sections 3-6
+  for (let j = 0; j < 4; j++) {
+    const s = `m11.${3 + j}`;
+    w.push(`${s}+/${s}S`, `${s}T/${s}E`, `${s}F/${s}-`);
+    // collision branch: + -> piece contact -> row-3 cell contact -> join
+    w.push(`${s}+/${s}H`, `${s}G/m8.${1 + j}L`, `m8.${1 + j}K/m8.M11`);
+  }
+  w.push('m8.M11/m11.4A', 'm11.4B/m11.4-'); // collision light
+  return w;
+}
+
 function makeRegisterFile() {
-  const wires = registerFileCircuit();
+  const wires = playfieldCircuit();
   assertJackCapacity(wires);
   const m = new MinivacSimulator(wires, false, 12);
   m.initialize();
@@ -148,7 +172,12 @@ function makeRegisterFile() {
     expect(m.lastRelaxationIterations).toBeLessThanOrEqual(10);
     expect(m.getState().alerts).toEqual([]);
   };
-  return { m, row, setAddr, setData, write };
+  const setPiece = (v: number) => {
+    for (let j = 0; j < 4; j++) m.setSlide(3 + j, (v >> j) & 1 ? 'right' : 'left', 11);
+  };
+  const lineFull = () => (m.getMachineState(11).lights[2] ? 1 : 0);
+  const collision = () => (m.getMachineState(11).lights[3] ? 1 : 0);
+  return { m, row, setAddr, setData, write, setPiece, lineFull, collision };
 }
 
 describe('Multivac: 1-of-8 decoder tree (2 machines), both engines', () => {
@@ -177,7 +206,7 @@ describe('Multivac: 1-of-8 decoder tree (2 machines), both engines', () => {
 describe('Multivac: 8x4 register file with addressed write (10 machines)', () => {
   it('writes, holds, overwrites and clears every row (sparse)', { timeout: 300000 }, () => {
     setSolverEngine('sparse');
-    const { m, row, setAddr, setData, write } = makeRegisterFile();
+    const { m, row, setAddr, setData, write, setPiece, lineFull, collision } = makeRegisterFile();
     const model = Array(8).fill(0);
     const checkAll = (label: string) => {
       for (let r = 0; r < 8; r++) expect(row(r), `${label}: row ${r}`).toBe(model[r]);
@@ -203,13 +232,32 @@ describe('Multivac: 8x4 register file with addressed write (10 machines)', () =>
     checkAll('immune to slide wiggles');
     // one relay per cell: the whole file is parallel-readable state
     expect(m.getMachineState(11).relays.length).toBe(6);
+
+    // rung 6 composition: detectors read the STORED rows
+    expect(lineFull(), `line light with row 2 = ${model[2]}`).toBe(0);
+    write(2, 15);
+    model[2] = 15;
+    checkAll('filled row 2');
+    expect(lineFull(), 'line-full fires on a full stored row').toBe(1);
+    write(2, 7);
+    model[2] = 7;
+    expect(lineFull(), 'line-full clears when a hole appears').toBe(0);
+
+    expect(row(3), 'row 3 as stored').toBe(2);
+    setPiece(0b0010);
+    expect(collision(), 'piece overlaps stored row 3').toBe(1);
+    setPiece(0b1101);
+    expect(collision(), 'disjoint piece does not collide').toBe(0);
+    setPiece(0);
+    expect(collision()).toBe(0);
+    checkAll('piece wiggles never touch storage');
   });
 
   // short ambient-engine sample: THIS is the register-file test the
   // MINIVAC_SOLVER=dense oracle pass exercises end to end (the full sweep
   // above would cost minutes per pass at 10 machines under cktsim)
   it('write/hold/clear sample (ambient engine)', { timeout: 600000 }, () => {
-    const { row, write } = makeRegisterFile();
+    const { row, write, setPiece, lineFull, collision } = makeRegisterFile();
     write(0, 0b1011);
     write(5, 0b0110);
     expect(row(0), 'row 0 after two writes').toBe(0b1011);
@@ -220,5 +268,14 @@ describe('Multivac: 8x4 register file with addressed write (10 machines)', () =>
     for (let r = 0; r < 8; r++) {
       if (r !== 0 && r !== 5) expect(row(r), `row ${r} never written`).toBe(0);
     }
+    // detectors on stored state, dense-oracle covered
+    write(2, 15);
+    expect(lineFull(), 'line-full on stored row 2').toBe(1);
+    write(2, 14);
+    expect(lineFull(), 'line no longer full').toBe(0);
+    setPiece(0b1000);
+    expect(collision(), 'row 3 is empty').toBe(0);
+    write(3, 0b1000);
+    expect(collision(), 'piece meets stored row 3').toBe(1);
   });
 });
