@@ -11,16 +11,16 @@ export default function DecimalWheel({
   diameter = 240,
   holeSize = 10
 }: DecimalWheelProps) {
-  // Geometry measured on a real Minivac 601 (motor section 16x16cm):
-  // hole-pair ring at R=4.7cm is the OUTERMOST feature, sitting on the bare panel
-  // outside the outer circle (R≈4.3cm ≈ 0.9R). Numbers fill the band between the
-  // outer circle and an inner circle around the knob (R≈2.2cm ≈ 0.46R).
+  // Geometry measured on a real Minivac 601 (motor section 16x16cm, hole-pair ring
+  // at R=4.7cm): from the center out — knob, inner circle, numbers band, hole pairs,
+  // and the outermost circle CONTAINS the holes, with the wedge lines spanning the
+  // full band from inner to outer circle.
   const centerX = diameter / 2;
   const centerY = diameter / 2;
-  const holeRadius = diameter / 2 - holeSize / 2 - 1; // outermost: holes on the panel
-  const outerRadius = holeRadius * 0.9;
+  const outerRadius = diameter / 2 - 2;
+  const holeRadius = outerRadius - holeSize / 2 - 3;
   const innerRadius = holeRadius * 0.46;
-  const labelRadius = (innerRadius + outerRadius) / 2;
+  const labelRadius = (innerRadius + holeRadius - holeSize / 2) / 2;
 
   const segments = 16;
   const segmentAngle = 360 / segments;
