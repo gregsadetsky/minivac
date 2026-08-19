@@ -53,6 +53,7 @@ export default function SimulatorCore({
   const [simState, setSimState] = React.useState<MinivacState | null>(null);
   const previousRelayStates = React.useRef<boolean[]>([]);
   const lastStateSignature = React.useRef<string>('');
+  const lastStateVersion = React.useRef<number>(-1);
   const motorAngleStore = React.useRef<MotorAngleStore | null>(null);
   if (!motorAngleStore.current) {
     let angle = 0;
@@ -246,6 +247,10 @@ export default function SimulatorCore({
     let rafId: number;
     let isRunning = true;
 
+    // a (re)started loop may be watching a different simulator instance — force the
+    // first frame to process state regardless of version coincidence
+    lastStateVersion.current = -1;
+
     // TEMP perf instrumentation: log frame-gap and sim-solve variability
     let lastFrameAt = 0;
     let statFrames = 0;
@@ -262,7 +267,10 @@ export default function SimulatorCore({
       const gap = lastFrameAt ? frameStart - lastFrameAt : 0;
       lastFrameAt = frameStart;
 
-      const newState = simulator.getState();
+      // advance motor time; only build a fresh state object when a solve happened —
+      // getState() every frame at 120fps allocates ~10 arrays/frame of pure GC churn
+      const version = simulator.tick();
+      motorAngleStore.current!.set(simulator.motorAngle);
 
       const simMs = performance.now() - frameStart;
       statFrames++;
@@ -270,7 +278,7 @@ export default function SimulatorCore({
       if (gap > statWorstGap) statWorstGap = gap;
       if (simMs > statWorstSim) statWorstSim = simMs;
       if (simMs > 5 || gap > 30) {
-        console.log(`[perf] frame gap=${gap.toFixed(1)}ms sim=${simMs.toFixed(1)}ms motor=${newState.motor.running ? 'RUN' : 'stop'} pos=${newState.motor.position}`);
+        console.log(`[perf] frame gap=${gap.toFixed(1)}ms sim=${simMs.toFixed(1)}ms v=${version}`);
       }
       if (frameStart - statWindowStart > 1000) {
         console.log(`[perf 1s] frames=${statFrames} renders=${statRenders} avgSim=${(statSimTotal / statFrames).toFixed(1)}ms worstSim=${statWorstSim.toFixed(1)}ms worstGap=${statWorstGap.toFixed(1)}ms`);
@@ -281,6 +289,14 @@ export default function SimulatorCore({
         statSimTotal = 0;
         statWindowStart = frameStart;
       }
+
+      if (version === lastStateVersion.current) {
+        rafId = requestAnimationFrame(frame);
+        return;
+      }
+      lastStateVersion.current = version;
+
+      const newState = simulator.getState();
 
       // Check for short circuit and auto power-off
       if (newState.alerts && newState.alerts.some(alert => alert.includes('SHORT CIRCUIT'))) {

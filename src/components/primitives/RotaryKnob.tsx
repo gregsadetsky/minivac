@@ -121,6 +121,9 @@ export default function RotaryKnob({
             inset 0 -1px 2px rgba(0,0,0,0.4)
           `,
           transform: `rotate(${angle}deg)`,
+          // own compositor layer: the knob rotates every frame while the motor runs,
+          // and without this the rotation repaints the (gradient/shadow-heavy) region
+          willChange: 'transform',
           // Disable transition when controlled externally (motor) or when dragging
           transition: (isDragging || controlledAngle !== undefined) ? 'none' : 'transform 0.1s ease-out'
         }}

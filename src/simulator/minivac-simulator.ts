@@ -140,6 +140,7 @@ export class MinivacSimulator {
   private lightBrightness!: number[];
   private relayIndicatorBrightness!: number[];
   private bulbResistances!: Record<string, number>;  // per-bulb, keys LIGHT1-6 / LAMP1-6
+  private stateVersion = 0;  // bumped on every solve; lets the UI skip idle frames cheaply
   private capVoltages!: number[];  // stored voltage of each section's internal capacitor
   private capDtSeconds = CAP_EVENT_DT_SECONDS;  // timestep for the capacitor companion model
   private externalResistors: Array<[string, string, number]> = [];  // [node1, node2, ohms]
@@ -305,8 +306,22 @@ export class MinivacSimulator {
     return { circuit: ckt, builder };
   }
 
+  /**
+   * Advance the motor by wall-clock time (resimulating if its position or contact
+   * state changed) and return the state version. The version bumps on every solve,
+   * so the UI can skip all per-frame allocation when nothing has changed —
+   * getState() builds a fresh ~10-array object, which at 120fps is pure GC churn.
+   */
+  tick(): number {
+    if (this._updateMotorPosition()) {
+      this._simulate();
+    }
+    return this.stateVersion;
+  }
+
   private _simulate(): boolean {
     alerts.length = 0;
+    this.stateVersion++;
 
     let iteration = 0;
     // bulb relaxation (1% tolerance) needs ~5 iterations on top of relay settling
