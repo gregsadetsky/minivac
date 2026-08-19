@@ -331,6 +331,15 @@ export default function SimulatorCore({
         alerts: newState.alerts,
       });
       if (signature !== lastStateSignature.current) {
+        // TEMP: log which state fields drove this render
+        try {
+          const prev = JSON.parse(lastStateSignature.current || '{}');
+          const next = JSON.parse(signature);
+          const changed = Object.keys(next).filter(
+            k => JSON.stringify(next[k]) !== JSON.stringify(prev[k])
+          );
+          console.log(`[render] changed: ${changed.join(', ')}`);
+        } catch { /* first frame */ }
         lastStateSignature.current = signature;
         statRenders++;
         setSimState(newState);
