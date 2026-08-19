@@ -12,7 +12,7 @@
  */
 
 export const fullAdderCircuit = {
-  name: 'Full Adder (Book 2-4)',
+  name: 'Full Adder',
   description: 'Slide 6 = A, button 6 = B, hold relay 6 = carry in; light 6 = sum, light 5 = carry',
   circuit: [
     '5A/6U', '5B/5-', '5C/6S', '5F/5-', '5G/6J',

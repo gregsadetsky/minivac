@@ -1,3 +1,10 @@
+- wheel animation spurts (measured 2026-08-18): one elevator resimulate = ~33ms, and the
+  motor triggers ~3 per 187ms step (break/position/make), all blocking the RAF thread.
+  real fix = move the simulator to a web worker (animation decoupled from solving);
+  alternative = profile/speed up the solve itself (rebuild + MNA each iteration)
+- capacitors in the UI: panel jacks + a resistor-placement UI + RAF loop calling
+  stepTime(dt, substepped) when any cap is wired. small cap circuits solve fast enough
+  for 60fps; big circuits + caps want the web worker first
 - show reduced versions of minivac - just relay + button + light
 - hold button for long time to lock, click again to unlock (mobile equivalent of shift-click latch, which is done)
 - drag cables on mobile

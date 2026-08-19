@@ -16,7 +16,7 @@
  */
 
 export const threeBitAdderCircuit = {
-  name: '3-Bit Adder (Book 2-4)',
+  name: '3-Bit Adder',
   description: 'Slides 4-6 = first number (left = 1), hold buttons 4-6 = second; result on lights 3-6',
   circuit: [
     '2C/3G', '2F/3F', '2G/4S', '2H/4Y', '2K/4W', '2L/2+', '2N/4U', '3A/M10',
