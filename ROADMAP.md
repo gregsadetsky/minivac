@@ -23,6 +23,11 @@
   rail hit the tie-point law (a cell being set backfed the broken rail
   through its own hold contact and kept its clearing sibling alive)
   (multivac-register-file.test.ts)
+- 5-state one-hot ring sequencer, 3 machines (multivac-ring-sequencer.test.ts)
+- collision + line-full logic: 256-combo exhaustive + composed onto stored
+  rows (multivac-collision-line.test.ts, multivac-register-file.test.ts)
+- MINI-TETRIS: 4x8 field, gravity, stacking, line clear — 145 relays,
+  25 machines, pure wiring (multivac-mini-tetris.test.ts)
 
 ## THE LAW (cost us two debugging sessions, also bit the 1961 book authors)
 
@@ -58,9 +63,16 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    stored register file through the cells' spare second contact sets
    (multivac-register-file.test.ts). line-full = series-contact AND;
    collision = OR of per-bit piece-AND-cell series branches.
-7. VERTICAL SLICE: "mini-tetris" 4x8 field, one piece type (1x1 or domino),
-   gravity + stacking + line clear, ~15-25 machines. THE milestone that proves
-   composition. only then scale the field.
+7. DONE 2026-08-19 — VERTICAL SLICE: "mini-tetris" 4x8 field, 1x1 piece,
+   gravity + stacking + line clear (no collapse yet), 145 relays across 25
+   machines, every game decision in relay contacts
+   (multivac-mini-tetris.test.ts). THE composition milestone. six new
+   tie-point/latch lessons paid for and documented in the file header —
+   the big ones: a latch contact feeding + into a com latches everything
+   wired to that com (set paths need private isolating contacts); two wires
+   on one contact-output jack tie their rails together with the contact
+   open (one rail per contact); rails powering relay coils must die
+   relay-timed, depth-aligned with the contacts they race.
 8. PERF GATE: when slices pass ~20 machines, measure; if sparse fill grows,
    next lever is substructuring (per-machine Thevenin reduction at used jacks —
    interface system is only the cross-wires).
