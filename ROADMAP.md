@@ -73,9 +73,14 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    on one contact-output jack tie their rails together with the contact
    open (one rail per contact); rails powering relay coils must die
    relay-timed, depth-aligned with the contacts they race.
-8. PERF GATE: when slices pass ~20 machines, measure; if sparse fill grows,
-   next lever is substructuring (per-machine Thevenin reduction at used jacks —
-   interface system is only the cross-wires).
+8. PERF GATE — MEASURED 2026-08-19 at the 25-machine tetris scale: sparse
+   ~160ms/solve (isolated 25-machine cascade, 26 solves / 4.2s; cloud box,
+   some background load). a game tick is ~3-9 solves, so mini-tetris runs
+   ~0.5-1.4s/tick — fine for tests, marginal for a live browser game, and
+   the full 10x20 field (~35-70 machines) extrapolates to multi-second
+   ticks. VERDICT: substructuring (per-machine Thevenin reduction at used
+   jacks; interface system = only the cross-wires) is REQUIRED before the
+   full field, not optional. that is the next solver rung.
 
 ## display/input notes
 
