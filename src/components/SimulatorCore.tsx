@@ -43,6 +43,7 @@ export default function SimulatorCore({
   const [simulator, setSimulator] = React.useState<MinivacSimulator | null>(null);
   const [simState, setSimState] = React.useState<MinivacState | null>(null);
   const previousRelayStates = React.useRef<boolean[]>([]);
+  const lastStateSignature = React.useRef<string>('');
   const relayOnSound = React.useRef<Howl | null>(null);
   const relayOffSound = React.useRef<Howl | null>(null);
 
@@ -277,8 +278,15 @@ export default function SimulatorCore({
       }
       previousRelayStates.current = [...newState.relays];
 
-      setSimState(newState);
-      onStateChange?.(newState);
+      // Only re-render when the state actually changed — at idle the state is
+      // identical every frame, and pushing a fresh object into React 60-120x/s
+      // reconciles the whole panel for nothing (measured: rhythmic ~66ms GC stalls).
+      const signature = JSON.stringify(newState);
+      if (signature !== lastStateSignature.current) {
+        lastStateSignature.current = signature;
+        setSimState(newState);
+        onStateChange?.(newState);
+      }
 
       // Request next frame
       rafId = requestAnimationFrame(frame);
