@@ -136,6 +136,11 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    NEXT for pieces: rotation = just remapping the four shape slides
    (1x2 <-> 2x1 is already the up-arrow cycle); L/S/T shapes need
    per-column row offsets — real circuit work, likely after rung 10.
+   gates 2026-08-19: npm run check green + full suite green under dense
+   AND fast (181 tests each), MASS dense-oracle tetris scenario with a
+   vertical drop green (15.2 min), random gameplay 74 ticks / 14 locks
+   (8 vertical) model-checked every tick, /tetris/ page playwright-verified
+   on the preview build (vertical drop, 2x2 square, auto-bookkeeping).
 10. FIELD SCALING: 10x20 with row collapse after a line clear (rows above
    shift down = the stored-row shift machinery). this is where the rung-8a
    solver rewrite becomes necessary rather than nice.
