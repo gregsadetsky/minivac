@@ -68,7 +68,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -335,6 +335,50 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
     // for longer random runs.
     console.log(`random gameplay: ${ticks} ticks, ${locks} locks, ${clears} line clears`);
     expect(locks).toBe(DROPS);
+  });
+
+  // rung 9b groundwork: the TOPW mirrors (one per row 1-7, a parallel coil
+  // on each slave's mirror com) are the phase-2 row selectors — TOPW(r)
+  // closed will route the top-cell write to row r-1. Before any routing
+  // exists they must (a) track the token row exactly and (b) not disturb
+  // the game: the extra coil on every slave com changes the hold-path load,
+  // which is precisely the kind of change that can drop a relay below
+  // pickup. A full drop with the mirrors watched pins both.
+  it('vertical prep: TOPW mirrors track the token row, VMODE follows its slide (sparse)', { timeout: 600000 }, () => {
+    setSolverEngine('sparse');
+    const g = makeGame();
+    const relayOn = (n: number) =>
+      g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0;
+    const topwState = () => Array.from({ length: 7 }, (_, i) => relayOn(TOPW(i + 1)));
+
+    expect(relayOn(VMODE), 'VMODE starts off').toBe(0);
+    g.m.setSlide((VMODE % 6) + 1, 'right', Math.floor(VMODE / 6));
+    expect(relayOn(VMODE), 'VMODE follows its slide up').toBe(1);
+    expect(topwState(), 'no token, no TOPW').toEqual([0, 0, 0, 0, 0, 0, 0]);
+
+    const model = Array(8).fill(0);
+    g.setColumn(0);
+    g.pressStart();
+    g.tick(); // spawn: token at row 0 — which has no TOPW
+    expect(g.tokenAt()).toEqual([0]);
+    expect(topwState(), 'token at 0: all TOPW open').toEqual([0, 0, 0, 0, 0, 0, 0]);
+    for (let r = 1; r <= 7; r++) {
+      g.tick();
+      expect(g.tokenAt(), `token at ${r}`).toEqual([r]);
+      expect(topwState(), `TOPW(${r}) alone tracks the token`).toEqual(
+        Array.from({ length: 7 }, (_, i) => (i + 1 === r ? 1 : 0))
+      );
+    }
+    // row 7 is the floor: that last tick was the merged landing + lock
+    model[7] = 0b0001;
+    expect(g.field(), 'lock wrote the bottom row as before').toEqual(model);
+    g.tick(); // reset: token dies, mirrors must all drop
+    expect(g.tokenAt()).toEqual([]);
+    expect(topwState(), 'token gone, TOPW all open').toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(g.field()).toEqual(model);
+
+    g.m.setSlide((VMODE % 6) + 1, 'left', Math.floor(VMODE / 6));
+    expect(relayOn(VMODE), 'VMODE follows its slide down').toBe(0);
   });
 
   const heavy = MASS ? it : it.skip;

@@ -35,7 +35,22 @@ export const PRESSCUT = (x: number) => 139 + x; // 4 relays: drop the collision 
 export const RAILGATE2 = 143; // second-hop rail power, aligns rail life with the W group
 export const RSTM2 = 144; // clears the CLEARP latch during the reset tick
 export const CPSET = 145; // isolates CLEARP's set path from the LINE chain
-export const MACHINES = 25; // relay 145 -> m24.2
+// ---- vertical pieces ("phase-2 top write", roadmap rung 9b) ----
+// a vertical piece = the column mask, two cells tall. The bottom cell IS the
+// token (collision unchanged: the bottom leads). The lock press writes the
+// bottom row through the existing path, untouched; a P2 master/slave pair
+// then turns the NEXT tick into phase 2 — a second, private write of row
+// r-1 through the TOPW mirrors — and the reset moves to the tick after.
+export const VMODE = 146; // piece-shape mode relay (slide-driven)
+export const TOPW = (r: number) => 146 + r; // r=1..7: slave-r mirrors, route the phase-2 triggers to row r-1
+export const P2M = 154; // phase-2 master: latched by a vertical lock press
+export const P2S = 155; // phase-2 slave: the resetrail branch contact (two-phase, like LKS)
+export const P2CLR = 156; // breaks P2M's latch during phase 2 (like RSTM for LKM)
+export const P2GATE = 157; // phase-2 READGATE: powers the two trigger rails
+export const P2COL = 158; // phase-2 RAILGATE2: powers the column feed
+export const TICKM2 = 159; // second tick mirror: clocks P2M -> P2S (TICKM's contacts are spoken for)
+export const P2CUT = (x: number) => 160 + x; // 4 relays: drop the collision mirrors during phase 2
+export const MACHINES = 28; // relay 163 -> m27.2
 
 export function tetrisCircuit(): {
   wires: string[];
@@ -354,6 +369,17 @@ export function tetrisCircuit(): {
   // START arms SPAWN directly: a button IS a private contact, so it may
   // feed the com without a leak (unpressed = open = dead end for the latch)
   w.push(`${plusOf(SPAWN)}/m1.6Y`, `m1.6X/${comOf(SPAWN)}`);
+
+  // ---------- vertical pieces (rung 9b): mode relay + TOPW mirror bank ----
+  // TOPW(r) is one more parallel coil on slave r's mirror com (its spare 4th
+  // hole): it tracks the token row exactly, and its contacts are the phase-2
+  // row selectors — TOPW(r) closed routes the top write to row r-1's W
+  // group. Row 0 has no TOPW: a vertical lock there clips the top cell.
+  const vsec = `m${Math.floor(VMODE / 6)}.${(VMODE % 6) + 1}`;
+  w.push(`${vsec}+/${vsec}S`, `${vsec}T/${R(VMODE, 'E')}`, `${R(VMODE, 'F')}/${minusOf(VMODE)}`);
+  for (let r = 1; r < 8; r++) {
+    w.push(`${comOf(MIRA(r))}/${R(TOPW(r), 'E')}`, `${R(TOPW(r), 'F')}/${minusOf(TOPW(r))}`);
+  }
 
   return { wires: w, rails: dataRails };
 }
