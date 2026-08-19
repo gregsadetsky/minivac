@@ -6,10 +6,24 @@ It might be a simulator issue (we'd need a real device to test it/see how it act
 
 Related discussion: https://github.com/gregsadetsky/minivac/issues/7
 
-update 2026-08-17: real-device measurements (see REAL-DEVICE-MEASUREMENTS.md) ruled out
-component values as the cause — the circuit behaves identically (stuck after cycle 1,
-oscillation alert while pressed) under the old guessed values, the measured values, and
-measured values + relay hysteresis. still unexplained; needs wiring on the real device.
+update 2026-08-17: real-device measurements ruled out component values as the cause —
+the circuit behaves identically (stuck after cycle 1, oscillation alert while pressed)
+under the old guessed values, the measured values, and measured values + relay hysteresis.
+
+## RESOLVED 2026-08-18 — verified on a real Minivac 601: THE SIMULATOR WAS RIGHT
+
+wired on the real device in stages, behavior matched the simulator at every step, and at
+the second button press RELAY 6 PHYSICALLY CHATTERS AND BUZZES — the circuit as printed
+in Book IV does not toggle.
+
+the mechanism (found via the simulator's iteration trace, confirmed by the device): the
+wires 6G/6F and 6G/6A permanently tie relay 6's coil-out to light 6 (jacks are tie
+points). at the second press, + reaches the coil's other end via 5N/6E. relay 6 on →
+both coil ends at + → ~0mA → drops. but the instant it drops, current flows
++ → coil 6 → light 6 → − at ~71-77mA, which is above this relay's pickup → re-picks →
+both ends + again → drops → buzz. whether a given unit buzzes or toggles depends on
+that relay's individual pickup vs ~75mA — per-relay variance (which book VII's
+per-relay bias-calibration chart, p8-9, shows the manufacturer knew about).
 
 ---
 
