@@ -484,9 +484,9 @@ describe('Multivac: mini-tetris (28 machines)', () => {
 
   // rung 9b sequencing: with VMODE up, a lock is THREE ticks — press (P2M
   // latches), phase 2 (the reset rail stays dark: the token, LKM and LKS
-  // survive one extra tick; P2CLR breaks P2M so the sequence self-limits),
-  // then the normal reset. No write hardware rides phase 2 yet — this pins
-  // the sequencer alone, then a vmode-off lock in the same game proves the
+  // survive one extra tick, and the top write lands; P2CLR breaks P2M so
+  // the sequence self-limits), then the normal reset. The latch states are
+  // this test's subject; then a vmode-off lock in the same game proves the
   // 2-tick rhythm is untouched.
   it('vertical prep: the phase-2 sequencer adds exactly one tick to a lock (sparse)', { timeout: 600000 }, () => {
     setSolverEngine('sparse');
@@ -509,9 +509,10 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     expect(relayOn(P2M), 'the vertical press latched P2M').toBe(1);
     expect(relayOn(P2S), 'P2S copied P2M after the release').toBe(1);
 
-    g.tick(); // phase 2 (a no-op in this increment): reset rail must stay dark
+    g.tick(); // phase 2: the top write lands; the reset rail stays dark
+    model[6] = 0b0001;
     expect(g.tokenAt(), 'token survives phase 2').toEqual([7]);
-    expect(g.field(), 'phase 2 wrote nothing (no write hardware yet)').toEqual(model);
+    expect(g.field(), 'phase 2 wrote the top row').toEqual(model);
     expect(relayOn(P2M), 'P2CLR broke P2M during phase 2').toBe(0);
     expect(relayOn(P2S), 'P2S copied the low master').toBe(0);
     expect(relayOn(LKS), 'LKM survived phase 2, so LKS is still up').toBe(1);
@@ -525,10 +526,11 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     expect(g.tokenAt(), 'spawn re-armed through the extra tick').toEqual([0]);
 
     // same game, vmode DOWN mid-fall: mode is sampled at the press, so this
-    // lock (onto the stack at row 6) is the classic two-tick rhythm
+    // lock (onto the vertical piece's top cell, at row 5) is the classic
+    // two-tick rhythm
     vmode(false);
-    for (let r = 1; r <= 6; r++) g.tick();
-    model[6] = 0b0001;
+    for (let r = 1; r <= 5; r++) g.tick();
+    model[5] = 0b0001;
     expect(g.field(), 'horizontal lock landed on the stack').toEqual(model);
     expect(relayOn(P2M), 'vmode down: no P2M latch').toBe(0);
     g.tick(); // must be the reset immediately
