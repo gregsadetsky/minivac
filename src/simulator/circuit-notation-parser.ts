@@ -10,10 +10,19 @@
  * @throws Error if identifier is invalid
  */
 export function parseTerminalIdentifier(identifier: string): string {
-  // Multivac machine prefix: "b.3G" = jack 3G on machine b (machines a-h → 0-7).
-  // Machine a is unprefixed internally for full backward compatibility. All
-  // machines share a common negative rail (as if their − terminals were patched
-  // together), so Power_Negative is never prefixed.
+  // Multivac machine prefixes. CANONICAL form is numeric: "m12.3G" = jack 3G on
+  // machine 12 (0-based, unbounded) — tetris-scale netlists are machine-generated,
+  // so the index is a number you can compute with. Letters "a."-"h." remain as
+  // legacy aliases for machines 0-7. Machine 0 is unprefixed internally for full
+  // backward compatibility. All machines share a common negative rail (as if
+  // their − terminals were patched together), so Power_Negative is never prefixed.
+  const numericMachine = identifier.trim().match(/^m(\d+)\.(.+)$/);
+  if (numericMachine) {
+    const machineIndex = parseInt(numericMachine[1], 10);
+    const inner = parseTerminalIdentifier(numericMachine[2]);
+    if (machineIndex === 0 || inner === 'Power_Negative') return inner;
+    return `m${machineIndex}.${inner}`;
+  }
   const machineMatch = identifier.trim().match(/^([a-h])\.(.+)$/);
   if (machineMatch) {
     const machineIndex = machineMatch[1].charCodeAt(0) - 97;
