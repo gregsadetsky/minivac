@@ -311,7 +311,20 @@ export default function SimulatorCore({
       // a fresh object into React 60-120x/s reconciled the whole panel for nothing
       // (measured: rhythmic ~66ms GC stalls).
       motorAngleStore.current!.set(newState.motor.angle);
-      const signature = JSON.stringify({ ...newState, motor: { ...newState.motor, angle: 0 } });
+      // signature covers only what the panel visibly renders: relayCurrents and raw
+      // brightness floats wiggle on every solve and would trigger full re-renders
+      // for imperceptible changes, so currents are excluded and brightness quantized
+      const signature = JSON.stringify({
+        relays: newState.relays,
+        buttons: newState.buttons,
+        lights: newState.lights,
+        relayIndicatorLights: newState.relayIndicatorLights,
+        lightBrightness: newState.lightBrightness.map(b => Math.round(b * 50)),
+        relayIndicatorBrightness: newState.relayIndicatorBrightness.map(b => Math.round(b * 50)),
+        slides: newState.slides,
+        motor: { ...newState.motor, angle: 0 },
+        alerts: newState.alerts,
+      });
       if (signature !== lastStateSignature.current) {
         lastStateSignature.current = signature;
         setSimState(newState);
