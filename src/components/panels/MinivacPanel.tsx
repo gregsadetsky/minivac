@@ -423,8 +423,9 @@ export default function MinivacPanel({
               </div>
             </div>
 
-            {/* Matrix and Power section */}
-            <div className="relative flex py-2 items-center" style={{ height: '250px' }}>
+            {/* Matrix and Power section — on the real machine this is a 16x16cm square,
+                same size as the motor square below it */}
+            <div className="relative flex py-2 items-center" style={{ height: '330px' }}>
               {/* Matrix space - 78% */}
               <div className="flex items-center justify-center" style={{ width: '78%' }}>
                 <div className="flex items-center justify-center" style={{ gap: '12px' }}>
@@ -514,9 +515,9 @@ export default function MinivacPanel({
             {/* Blue separator — a fat band on the real machine (~0.2in) */}
             <div className="bg-[#84B6C7] h-3 -mx-3" />
 
-            {/* Decimal wheel section — fills remaining panel height so the dial centers
-                vertically like on the real machine */}
-            <div className="flex-1 px-1 flex items-center" style={{ gap: '4px' }}>
+            {/* Decimal wheel section — the real machine's motor square is 16x16cm with
+                the dial's hole ring at 9.4cm diameter, centered at (9.2cm, 7.3cm) */}
+            <div className="flex-1 px-1 flex items-start" style={{ gap: '4px', paddingTop: '46px' }}>
               {/* Left side: 16 ARM and 17/18/19 RUN/STOP */}
               <div className="flex flex-col gap-9">
                 {/* 16 ARM */}
@@ -543,8 +544,9 @@ export default function MinivacPanel({
 
               {/* Decimal wheel with rotary knob in center */}
               <div className="relative flex-1 flex items-center justify-center">
-                {/* real dial ring ≈ 4.65in ≈ 250px, knob arrow span 1.5in ≈ 80px */}
-                <DecimalWheel diameter={235} currentValue={simState?.motor.position || 0} angle={simState?.motor.angle || 0} />
+                {/* measured: hole ring 9.4cm of the 16cm square → 196px at this scale;
+                    knob 3.9cm ≈ 80px */}
+                <DecimalWheel diameter={196} currentValue={simState?.motor.position || 0} angle={simState?.motor.angle || 0} />
                 {/* Rotary knob centered - rotates to point at current motor position */}
                 <div className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
                   <RotaryKnob

@@ -11,12 +11,16 @@ export default function DecimalWheel({
   diameter = 240,
   holeSize = 10
 }: DecimalWheelProps) {
+  // Geometry measured on a real Minivac 601 (motor section 16x16cm):
+  // hole-pair ring at R=4.7cm is the OUTERMOST feature, sitting on the bare panel
+  // outside the outer circle (R≈4.3cm ≈ 0.9R). Numbers fill the band between the
+  // outer circle and an inner circle around the knob (R≈2.2cm ≈ 0.46R).
   const centerX = diameter / 2;
   const centerY = diameter / 2;
-  const outerRadius = diameter / 2 - 10;
-  const innerRadius = diameter / 2 - 65;
-  const holeRadius = outerRadius - 8; // Holes positioned on outer circle
-  const labelRadius = outerRadius - 40; // Labels positioned between circles
+  const holeRadius = diameter / 2 - holeSize / 2 - 1; // outermost: holes on the panel
+  const outerRadius = holeRadius * 0.9;
+  const innerRadius = holeRadius * 0.46;
+  const labelRadius = (innerRadius + outerRadius) / 2;
 
   const segments = 16;
   const segmentAngle = 360 / segments;
@@ -70,7 +74,7 @@ export default function DecimalWheel({
             cy={centerY}
             r={outerRadius}
             fill="none"
-            stroke="#888"
+            stroke="#c8c8c8"
             strokeWidth="2"
           />
 
@@ -80,7 +84,7 @@ export default function DecimalWheel({
             cy={centerY}
             r={innerRadius}
             fill="none"
-            stroke="#888"
+            stroke="#c8c8c8"
             strokeWidth="2"
           />
 
@@ -100,8 +104,8 @@ export default function DecimalWheel({
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke="#888"
-                strokeWidth="1"
+                stroke="#c8c8c8"
+                strokeWidth="1.5"
               />
             );
           })}
@@ -119,9 +123,9 @@ export default function DecimalWheel({
                 y={y}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                fill="#d0d0d0"
-                fontSize="14"
-                fontFamily="'Courier New', monospace"
+                fill="#e8e8e8"
+                fontSize="16"
+                fontFamily="sans-serif"
                 fontWeight="bold"
               >
                 {i}
