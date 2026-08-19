@@ -5,6 +5,21 @@
 
 import { loadSimulator, T_VOLTAGE, alerts, type Circuit } from './simulator-loader-universal';
 import { parseMinivacNotation, parseTerminalIdentifier } from './circuit-notation-parser';
+import { SparseCircuit } from './sparse-circuit';
+
+// Solver engine: 'cktsim' (vendored dense solver) or 'sparse' (sparse MNA engine,
+// same equations, O(nnz) instead of O(N^3) — matters for multivac scale).
+// Default via env var so the whole test suite can run under either engine.
+export type SolverEngine = 'cktsim' | 'sparse';
+let solverEngine: SolverEngine =
+  (typeof process !== 'undefined' && process.env && process.env.MINIVAC_SOLVER === 'sparse')
+    ? 'sparse' : 'cktsim';
+export function setSolverEngine(engine: SolverEngine): void {
+  solverEngine = engine;
+}
+export function getSolverEngine(): SolverEngine {
+  return solverEngine;
+}
 
 // Minivac component specifications
 // measured on a real Minivac 601 with a multimeter and bench supply, 2026-08-17
@@ -181,8 +196,9 @@ export class MinivacSimulator {
   }
 
   private _buildCircuit(): { circuit: Circuit; builder: CircuitBuilder } {
-    const cktsim = loadSimulator();
-    const ckt = new cktsim.Circuit();
+    const ckt = solverEngine === 'sparse'
+      ? (new SparseCircuit() as unknown as Circuit)
+      : new (loadSimulator().Circuit)();
     const builder = new CircuitBuilder(ckt);
 
     // Power supplies: one ideal source behind measured internal resistance PER MACHINE
