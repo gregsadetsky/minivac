@@ -81,17 +81,21 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    playability math: classic gravity is ~1 cell/s, so the current page is
    already at the edge of playable; soft-drop feel wants ~5-10 ticks/s =
    5-10x; the 10x20 field (~35-70 machines) wants ~30-50x.
+   CORRECTION after reading sparse-circuit.ts: dc() is a SINGLE LINEAR
+   solve — bulbs are re-fit by the outer relaxation, there is no inner
+   newton in the sparse engine. the 198ms is implementation cost: per-row
+   Maps/Sets, a full scan of remaining rows per pivot step, fill-in churn.
    LEVERS, in order of risk (try each before the next):
-   a. warm-start newton from the previous relaxation solve's voltages —
-      consecutive solves differ by one contact; no caching to invalidate,
-      same fixed point (guard: suite + oracle, watch for operating-point
-      flips on bistable nodes).
-   b. reuse the symbolic factorization / pivot order across newton
-      iterations (same sparsity within one dc()).
+   a. rewrite the elimination in sparse-circuit.ts (220 lines) on typed
+      arrays, and reuse the recorded pivot `order` when the sparsity
+      pattern is unchanged (it changes only when a contact flips) —
+      plausibly 10x+; the 5000-random-circuit validator + the dense oracle
+      are the safety net. contained to one file, no electrical changes.
+   b. (cktsim oracle only) warm-start its newton find_solution — irrelevant
+      to the shipping path, skip.
    c. substructuring (per-machine thevenin reduction at used jacks) — the
-      big lever, only if a+b fall short at the full field. NOT required at
-      the current scale; the earlier "required" verdict here overstated it
-      before the dc-vs-build breakdown was measured.
+      big lever, only if (a) falls short at the full 10x20 field. NOT
+      required at the current scale.
 
 ## display/input notes
 

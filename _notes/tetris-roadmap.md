@@ -74,13 +74,28 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    open (one rail per contact); rails powering relay coils must die
    relay-timed, depth-aligned with the contacts they race.
 8. PERF GATE — MEASURED 2026-08-19 at the 25-machine tetris scale: sparse
-   ~160ms/solve (isolated 25-machine cascade, 26 solves / 4.2s; cloud box,
-   some background load). a game tick is ~3-9 solves, so mini-tetris runs
-   ~0.5-1.4s/tick — fine for tests, marginal for a live browser game, and
-   the full 10x20 field (~35-70 machines) extrapolates to multi-second
-   ticks. VERDICT: substructuring (per-machine Thevenin reduction at used
-   jacks; interface system = only the cross-wires) is REQUIRED before the
-   full field, not optional. that is the next solver rung.
+   ~160-200ms/solve; a game tick = 2 relaxations x ~3 waves = ~1.1-1.3s
+   (merged lock ticks ~2-3s). breakdown per solve: build 5.6ms, finalize
+   ~0ms, dc() 198ms — the NONLINEAR dc solve dominates (bulb curve =>
+   newton iterations from a cold start every solve), NOT stamping/rebuild.
+   playability math: classic gravity is ~1 cell/s, so the current page is
+   already at the edge of playable; soft-drop feel wants ~5-10 ticks/s =
+   5-10x; the 10x20 field (~35-70 machines) wants ~30-50x.
+   CORRECTION after reading sparse-circuit.ts: dc() is a SINGLE LINEAR
+   solve — bulbs are re-fit by the outer relaxation, there is no inner
+   newton in the sparse engine. the 198ms is implementation cost: per-row
+   Maps/Sets, a full scan of remaining rows per pivot step, fill-in churn.
+   LEVERS, in order of risk (try each before the next):
+   a. rewrite the elimination in sparse-circuit.ts (220 lines) on typed
+      arrays, and reuse the recorded pivot `order` when the sparsity
+      pattern is unchanged (it changes only when a contact flips) —
+      plausibly 10x+; the 5000-random-circuit validator + the dense oracle
+      are the safety net. contained to one file, no electrical changes.
+   b. (cktsim oracle only) warm-start its newton find_solution — irrelevant
+      to the shipping path, skip.
+   c. substructuring (per-machine thevenin reduction at used jacks) — the
+      big lever, only if (a) falls short at the full 10x20 field. NOT
+      required at the current scale.
 
 ## display/input notes
 
