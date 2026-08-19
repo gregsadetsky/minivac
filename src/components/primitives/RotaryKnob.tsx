@@ -88,7 +88,9 @@ export default function RotaryKnob({
       }}
       onPointerDown={handlePointerDown}
     >
-      {/* Base/shadow */}
+      {/* Base/shadow — soft-edged gradient instead of filter:blur, because a live
+          blur filter inside the per-frame-rotating knob is real GPU work every frame
+          (profiled: GPU-process stalls were the remaining animation hitches) */}
       <div
         className="absolute rounded-full"
         style={{
@@ -96,8 +98,7 @@ export default function RotaryKnob({
           left: '3px',
           width: `${size - 6}px`,
           height: `${size - 6}px`,
-          background: 'rgba(0,0,0,0.5)',
-          filter: 'blur(4px)'
+          background: 'radial-gradient(circle, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.35) 75%, rgba(0,0,0,0) 100%)'
         }}
       />
 
