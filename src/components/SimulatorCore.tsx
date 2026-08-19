@@ -322,7 +322,10 @@ export default function SimulatorCore({
         lightBrightness: newState.lightBrightness.map(b => Math.round(b * 50)),
         relayIndicatorBrightness: newState.relayIndicatorBrightness.map(b => Math.round(b * 50)),
         slides: newState.slides,
-        motor: { ...newState.motor, angle: 0 },
+        // motor.angle goes through the store; motor.position isn't rendered anywhere
+        // (the pointer is the angle, floor lights are just lights) — only `running`
+        // matters visually (knob interactivity)
+        motorRunning: newState.motor.running,
         alerts: newState.alerts,
       });
       if (signature !== lastStateSignature.current) {
