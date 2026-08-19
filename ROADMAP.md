@@ -85,17 +85,21 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    solve — bulbs are re-fit by the outer relaxation, there is no inner
    newton in the sparse engine. the 198ms is implementation cost: per-row
    Maps/Sets, a full scan of remaining rows per pivot step, fill-in churn.
-   LEVERS, in order of risk (try each before the next):
-   a. rewrite the elimination in sparse-circuit.ts (220 lines) on typed
-      arrays, and reuse the recorded pivot `order` when the sparsity
-      pattern is unchanged (it changes only when a contact flips) —
-      plausibly 10x+; the 5000-random-circuit validator + the dense oracle
-      are the safety net. contained to one file, no electrical changes.
-   b. (cktsim oracle only) warm-start its newton find_solution — irrelevant
-      to the shipping path, skip.
-   c. substructuring (per-machine thevenin reduction at used jacks) — the
-      big lever, only if (a) falls short at the full 10x20 field. NOT
-      required at the current scale.
+   LEVER (a) LANDED 2026-08-19: THIRD ENGINE 'fast' (fast-circuit.ts) — a
+   typed-array rewrite of the sparse elimination, same MNA stamps and pivot
+   policy, from-scratch solve per dc() (no caching needed to hit target).
+   measured: 159 -> 9.6 ms/solve (16.7x), tetris tick 1.2s -> ~70-100ms
+   (~13-18x depending on box load), init 289 -> 117ms. validated on the
+   incremental ladder vs the dense oracle: 5 / 50 / 500 / 5000 random
+   circuits, zero mismatches, max current diff 1.1e-10 mA (sparse's own
+   record: 1.4e-10) + 300 adversarial meshes bit-identical + full suite
+   green under MINIVAC_SOLVER=fast. suite default remains 'sparse';
+   /tetris/ runs 'fast'. three engines now, permanently cross-checked
+   (fast-engine.test.ts in every pass, fast-mass-validation MASS-gated).
+   remaining levers if the 10x20 field still wants more:
+   b. pivot-order reuse across dc() calls with identical sparsity.
+   c. substructuring (per-machine thevenin reduction at used jacks) — still
+      the last resort.
 
 9. DONE 2026-08-19 — PIECES, horizontal: a piece is whatever COLUMN MASK the
    slides raise — the lock feed and collision taps already fan per-column
