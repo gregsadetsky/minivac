@@ -252,6 +252,7 @@ export default function SimulatorCore({
     let statWorstGap = 0;
     let statWorstSim = 0;
     let statSimTotal = 0;
+    let statRenders = 0;
     let statWindowStart = performance.now();
 
     const frame = () => {
@@ -272,8 +273,9 @@ export default function SimulatorCore({
         console.log(`[perf] frame gap=${gap.toFixed(1)}ms sim=${simMs.toFixed(1)}ms motor=${newState.motor.running ? 'RUN' : 'stop'} pos=${newState.motor.position}`);
       }
       if (frameStart - statWindowStart > 1000) {
-        console.log(`[perf 1s] frames=${statFrames} avgSim=${(statSimTotal / statFrames).toFixed(1)}ms worstSim=${statWorstSim.toFixed(1)}ms worstGap=${statWorstGap.toFixed(1)}ms`);
+        console.log(`[perf 1s] frames=${statFrames} renders=${statRenders} avgSim=${(statSimTotal / statFrames).toFixed(1)}ms worstSim=${statWorstSim.toFixed(1)}ms worstGap=${statWorstGap.toFixed(1)}ms`);
         statFrames = 0;
+        statRenders = 0;
         statWorstGap = 0;
         statWorstSim = 0;
         statSimTotal = 0;
@@ -319,8 +321,8 @@ export default function SimulatorCore({
         buttons: newState.buttons,
         lights: newState.lights,
         relayIndicatorLights: newState.relayIndicatorLights,
-        lightBrightness: newState.lightBrightness.map(b => Math.round(b * 50)),
-        relayIndicatorBrightness: newState.relayIndicatorBrightness.map(b => Math.round(b * 50)),
+        lightBrightness: newState.lightBrightness.map(b => Math.round(b * 20)),
+        relayIndicatorBrightness: newState.relayIndicatorBrightness.map(b => Math.round(b * 20)),
         slides: newState.slides,
         // motor.angle goes through the store; motor.position isn't rendered anywhere
         // (the pointer is the angle, floor lights are just lights) — only `running`
@@ -330,6 +332,7 @@ export default function SimulatorCore({
       });
       if (signature !== lastStateSignature.current) {
         lastStateSignature.current = signature;
+        statRenders++;
         setSimState(newState);
         onStateChange?.(newState);
       }
