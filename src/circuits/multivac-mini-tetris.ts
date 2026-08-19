@@ -236,7 +236,10 @@ export function tetrisCircuit(): {
   // and unwind its own source (that bug cost the first draft of this file).
   w.push('m1.5+/m1.5S', `m1.5T/${R(LKS, 'H')}`, `m1.5T/${R(TICKM, 'E')}`);
   w.push(`${R(TICKM, 'F')}/${minusOf(TICKM)}`);
-  w.push(`${R(LKS, 'G')}/${tap(resetRail, rrUse)}`, `${R(LKS, 'J')}/${R(COLLIDE, 'H')}`);
+  // LKS.G runs through P2S's branch contact (vertical section below): NC ->
+  // the reset rail as always, NO -> the phase-2 rail. Pre-closed when P2S is
+  // idle, so the normal reset path is unchanged.
+  w.push(`${R(LKS, 'G')}/${R(P2S, 'H')}`, `${R(LKS, 'J')}/${R(COLLIDE, 'H')}`);
   w.push(`${R(COLLIDE, 'G')}/${tap(railA, aUse)}`, `${R(COLLIDE, 'J')}/${ringClkCom(0)}`);
   // LKS: copy from LKM while the tick is low, hold while it is high
   w.push(`${plusOf(TICKM)}/${R(TICKM, 'H')}`, `${R(TICKM, 'J')}/${R(LKM, 'H')}`, `${R(LKM, 'G')}/${comOf(LKS)}`);
@@ -380,6 +383,39 @@ export function tetrisCircuit(): {
   for (let r = 1; r < 8; r++) {
     w.push(`${comOf(MIRA(r))}/${R(TOPW(r), 'E')}`, `${R(TOPW(r), 'F')}/${minusOf(TOPW(r))}`);
   }
+
+  // ---------- vertical pieces: the phase-2 sequencer ----------
+  // A vertical lock is THREE ticks: press (bottom write, P2M latches), phase
+  // 2 (top write; the reset rail stays dark so the token, LKM and any CLEARP
+  // latch survive), reset (as before, one tick late). P2M may never flip
+  // while the line its slave routes is hot, so it is master/slave like
+  // LKM/LKS: P2S copies P2M only while the tick is low and holds while it is
+  // high. TICKM's contacts are all spoken for — TICKM2 is a parallel-coil
+  // second tick mirror (its E jack's spare hole ties the coils).
+  w.push(`${R(TICKM, 'E')}/${R(TICKM2, 'E')}`, `${R(TICKM2, 'F')}/${minusOf(TICKM2)}`);
+  // P2M set = tick-high AND press AND vertical mode, dead-ending at + like
+  // LKM's set: TICKM2.G -> COLLIDEM2's spare set (press-scoped) -> VMODE's
+  // contact (mode-scoped) -> P2M's com. COLLIDEM2 is open outside the press,
+  // so the latched com can never backfeed the tick line through this chain.
+  w.push(`${plusOf(TICKM2)}/${R(TICKM2, 'H')}`, `${R(TICKM2, 'G')}/${R(COLLIDEM2, 'L')}`);
+  w.push(`${R(COLLIDEM2, 'K')}/${R(VMODE, 'H')}`, `${R(VMODE, 'G')}/${comOf(P2M)}`);
+  w.push(`${comOf(P2M)}/${R(P2M, 'E')}`, `${R(P2M, 'F')}/${minusOf(P2M)}`);
+  // latch, broken by P2CLR during phase 2 (P2CLR:P2M :: RSTM:LKM). P2S rides
+  // its hold through the break and copies the low state only after the tick
+  // falls — the branch contact never moves under a live line.
+  w.push(`${plusOf(P2CLR)}/${R(P2CLR, 'H')}`, `${R(P2CLR, 'J')}/${R(P2M, 'L')}`, `${R(P2M, 'K')}/${comOf(P2M)}`);
+  w.push(`${R(TICKM2, 'J')}/${R(P2M, 'H')}`, `${R(P2M, 'G')}/${comOf(P2S)}`);
+  w.push(`${plusOf(TICKM2)}/${R(TICKM2, 'L')}`, `${R(TICKM2, 'K')}/${R(P2S, 'L')}`, `${R(P2S, 'K')}/${comOf(P2S)}`);
+  w.push(`${comOf(P2S)}/${R(P2S, 'E')}`, `${R(P2S, 'F')}/${minusOf(P2S)}`);
+  // the phase-2 depth-1 rail (P2S's NO side; its NC side is the reset rail,
+  // wired at the tick branch above). P2CLR rides it; P2GATE and the P2CUT
+  // bank join in the next increment.
+  const p2railA = takeGroups(2);
+  w.push(`${p2railA[0]}/${p2railA[1]}`);
+  const p2aUse = { n: 0 };
+  w.push(`${R(P2S, 'G')}/${tap(p2railA, p2aUse)}`);
+  w.push(`${R(P2S, 'J')}/${tap(resetRail, rrUse)}`);
+  w.push(`${tap(p2railA, p2aUse)}/${R(P2CLR, 'E')}`, `${R(P2CLR, 'F')}/${minusOf(P2CLR)}`);
 
   return { wires: w, rails: dataRails };
 }

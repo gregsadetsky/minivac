@@ -68,7 +68,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -355,6 +355,11 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
     g.m.setSlide((VMODE % 6) + 1, 'right', Math.floor(VMODE / 6));
     expect(relayOn(VMODE), 'VMODE follows its slide up').toBe(1);
     expect(topwState(), 'no token, no TOPW').toEqual([0, 0, 0, 0, 0, 0, 0]);
+    // park it again: with vmode up a lock takes an extra (phase-2) tick,
+    // which is the sequencer test's subject — this one watches the mirrors
+    // through the classic two-tick rhythm
+    g.m.setSlide((VMODE % 6) + 1, 'left', Math.floor(VMODE / 6));
+    expect(relayOn(VMODE), 'VMODE follows its slide down').toBe(0);
 
     const model = Array(8).fill(0);
     g.setColumn(0);
@@ -376,9 +381,61 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
     expect(g.tokenAt()).toEqual([]);
     expect(topwState(), 'token gone, TOPW all open').toEqual([0, 0, 0, 0, 0, 0, 0]);
     expect(g.field()).toEqual(model);
+  });
 
-    g.m.setSlide((VMODE % 6) + 1, 'left', Math.floor(VMODE / 6));
-    expect(relayOn(VMODE), 'VMODE follows its slide down').toBe(0);
+  // rung 9b sequencing: with VMODE up, a lock is THREE ticks — press (P2M
+  // latches), phase 2 (the reset rail stays dark: the token, LKM and LKS
+  // survive one extra tick; P2CLR breaks P2M so the sequence self-limits),
+  // then the normal reset. No write hardware rides phase 2 yet — this pins
+  // the sequencer alone, then a vmode-off lock in the same game proves the
+  // 2-tick rhythm is untouched.
+  it('vertical prep: the phase-2 sequencer adds exactly one tick to a lock (sparse)', { timeout: 600000 }, () => {
+    setSolverEngine('sparse');
+    const g = makeGame();
+    const relayOn = (n: number) =>
+      g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0;
+    const vmode = (on: boolean) =>
+      g.m.setSlide((VMODE % 6) + 1, on ? 'right' : 'left', Math.floor(VMODE / 6));
+
+    const model = Array(8).fill(0);
+    vmode(true);
+    g.setColumn(0);
+    g.pressStart();
+    g.tick(); // spawn
+    expect(g.tokenAt()).toEqual([0]);
+    expect(relayOn(P2M), 'no press yet, P2M off').toBe(0);
+    for (let r = 1; r <= 7; r++) g.tick(); // fall; row 7 = merged landing+lock
+    model[7] = 0b0001;
+    expect(g.field(), 'press wrote the bottom row').toEqual(model);
+    expect(relayOn(P2M), 'the vertical press latched P2M').toBe(1);
+    expect(relayOn(P2S), 'P2S copied P2M after the release').toBe(1);
+
+    g.tick(); // phase 2 (a no-op in this increment): reset rail must stay dark
+    expect(g.tokenAt(), 'token survives phase 2').toEqual([7]);
+    expect(g.field(), 'phase 2 wrote nothing (no write hardware yet)').toEqual(model);
+    expect(relayOn(P2M), 'P2CLR broke P2M during phase 2').toBe(0);
+    expect(relayOn(P2S), 'P2S copied the low master').toBe(0);
+    expect(relayOn(LKS), 'LKM survived phase 2, so LKS is still up').toBe(1);
+
+    g.tick(); // the real reset, one tick late
+    expect(g.tokenAt(), 'reset killed the token').toEqual([]);
+    expect(relayOn(LKS), 'reset cleared LKM, LKS followed').toBe(0);
+    expect(g.field()).toEqual(model);
+
+    g.tick(); // SPAWN was armed on the reset tick: the next piece enters
+    expect(g.tokenAt(), 'spawn re-armed through the extra tick').toEqual([0]);
+
+    // same game, vmode DOWN mid-fall: mode is sampled at the press, so this
+    // lock (onto the stack at row 6) is the classic two-tick rhythm
+    vmode(false);
+    for (let r = 1; r <= 6; r++) g.tick();
+    model[6] = 0b0001;
+    expect(g.field(), 'horizontal lock landed on the stack').toEqual(model);
+    expect(relayOn(P2M), 'vmode down: no P2M latch').toBe(0);
+    g.tick(); // must be the reset immediately
+    expect(g.tokenAt(), 'two-tick rhythm intact with vmode down').toEqual([]);
+    g.tick();
+    expect(g.tokenAt(), 'and the next spawn still works').toEqual([0]);
   });
 
   const heavy = MASS ? it : it.skip;
