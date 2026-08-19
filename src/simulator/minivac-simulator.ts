@@ -11,9 +11,8 @@ import { SparseCircuit } from './sparse-circuit';
 // same equations, O(nnz) instead of O(N^3) — matters for multivac scale).
 // Default via env var so the whole test suite can run under either engine.
 export type SolverEngine = 'cktsim' | 'sparse';
-let solverEngine: SolverEngine =
-  (typeof process !== 'undefined' && process.env && process.env.MINIVAC_SOLVER === 'sparse')
-    ? 'sparse' : 'cktsim';
+const envSolver = (globalThis as { process?: { env?: Record<string, string> } }).process?.env?.MINIVAC_SOLVER;
+let solverEngine: SolverEngine = envSolver === 'sparse' ? 'sparse' : 'cktsim';
 export function setSolverEngine(engine: SolverEngine): void {
   solverEngine = engine;
 }

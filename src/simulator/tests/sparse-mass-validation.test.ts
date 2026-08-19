@@ -12,8 +12,9 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
 
-const RUN = process.env.MINIVAC_MASS === '1';
-const CASES = parseInt(process.env.MASS_CASES || '5000', 10);
+const env = (globalThis as { process?: { env?: Record<string, string> } }).process?.env || {};
+const RUN = env.MINIVAC_MASS === '1';
+const CASES = parseInt(env.MASS_CASES || '5000', 10);
 const d = RUN ? describe : describe.skip;
 
 afterEach(() => setSolverEngine('cktsim'));
