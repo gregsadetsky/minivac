@@ -15,9 +15,28 @@ import SlideSwitch from '../primitives/SlideSwitch';
 import SlideSwitchVertical from '../primitives/SlideSwitchVertical';
 import { type CableData } from '../../utils/wire-utils';
 import { MinivacSimulator, type MinivacState } from '../../simulator/minivac-simulator';
+import { type MotorAngleStore } from '../SimulatorCore';
+
+// The motor angle changes every animation frame while running; subscribing just the
+// knob to it keeps the rest of the panel from re-rendering at display rate.
+function LiveRotaryKnob({
+  store,
+  size,
+  isInteractive,
+  onChange,
+}: {
+  store: MotorAngleStore;
+  size: number;
+  isInteractive: boolean;
+  onChange: (angle: number) => void;
+}) {
+  const angle = React.useSyncExternalStore(store.subscribe, store.getSnapshot);
+  return <RotaryKnob size={size} angle={angle} isInteractive={isInteractive} onChange={onChange} />;
+}
 
 interface MinivacPanelProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
+  motorAngleStore: MotorAngleStore;
   onPanelReady: () => void;
   simState: MinivacState | null;
   simulator: MinivacSimulator | null;
@@ -45,6 +64,7 @@ interface MinivacPanelProps {
 
 export default function MinivacPanel({
   containerRef,
+  motorAngleStore,
   onPanelReady,
   simState,
   simulator,
@@ -549,13 +569,14 @@ export default function MinivacPanel({
                 <DecimalWheel diameter={204} currentValue={simState?.motor.position || 0} angle={simState?.motor.angle || 0} />
                 {/* Rotary knob centered - rotates to point at current motor position */}
                 <div className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                  <RotaryKnob
+                  <LiveRotaryKnob
+                    store={motorAngleStore}
                     size={80}
-                    angle={simState?.motor.angle || 0}
                     isInteractive={!simState?.motor.running}
                     onChange={(newAngle) => {
                       // Only allow manual control when motor is not running
                       if (simulator && simState && !simState.motor.running) {
+                        motorAngleStore.set(newAngle);
                         simulator.updateMotorAngle(newAngle);
                         // Force simulation with new angle (getState won't simulate when motor is stopped)
                         simulator.resimulate();

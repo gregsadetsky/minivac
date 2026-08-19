@@ -4,6 +4,15 @@ import { MinivacSimulator, type MinivacState } from '../simulator/minivac-simula
 import { useCableManagement } from '../hooks/useCableManagement';
 import MinivacPanel from './panels/MinivacPanel';
 
+// Tiny external store for the motor angle: it changes every animation frame while
+// the motor runs, and pushing it through React state would re-render the whole
+// panel at display rate. Only the rotary knob subscribes to this.
+export interface MotorAngleStore {
+  subscribe: (cb: () => void) => () => void;
+  getSnapshot: () => number;
+  set: (angle: number) => void;
+}
+
 export interface SimulatorCoreProps {
   // Circuit configuration
   initialCircuit?: string[];
@@ -44,6 +53,24 @@ export default function SimulatorCore({
   const [simState, setSimState] = React.useState<MinivacState | null>(null);
   const previousRelayStates = React.useRef<boolean[]>([]);
   const lastStateSignature = React.useRef<string>('');
+  const motorAngleStore = React.useRef<MotorAngleStore | null>(null);
+  if (!motorAngleStore.current) {
+    let angle = 0;
+    const listeners = new Set<() => void>();
+    motorAngleStore.current = {
+      subscribe: (cb) => {
+        listeners.add(cb);
+        return () => listeners.delete(cb);
+      },
+      getSnapshot: () => angle,
+      set: (a) => {
+        if (a !== angle) {
+          angle = a;
+          listeners.forEach(l => l());
+        }
+      },
+    };
+  }
   const relayOnSound = React.useRef<Howl | null>(null);
   const relayOffSound = React.useRef<Howl | null>(null);
 
@@ -278,10 +305,13 @@ export default function SimulatorCore({
       }
       previousRelayStates.current = [...newState.relays];
 
-      // Only re-render when the state actually changed — at idle the state is
-      // identical every frame, and pushing a fresh object into React 60-120x/s
-      // reconciles the whole panel for nothing (measured: rhythmic ~66ms GC stalls).
-      const signature = JSON.stringify(newState);
+      // The continuously-changing motor angle goes through the lightweight store
+      // (only the knob re-renders); everything else re-renders the panel only when
+      // it actually changed — at idle the state is identical every frame, and pushing
+      // a fresh object into React 60-120x/s reconciled the whole panel for nothing
+      // (measured: rhythmic ~66ms GC stalls).
+      motorAngleStore.current!.set(newState.motor.angle);
+      const signature = JSON.stringify({ ...newState, motor: { ...newState.motor, angle: 0 } });
       if (signature !== lastStateSignature.current) {
         lastStateSignature.current = signature;
         setSimState(newState);
@@ -312,6 +342,7 @@ export default function SimulatorCore({
     }}>
       <MinivacPanel
         containerRef={containerRef}
+        motorAngleStore={motorAngleStore.current!}
         onPanelReady={() => setIsPanelReady(true)}
         simState={simState}
         simulator={simulator}
