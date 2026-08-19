@@ -1,13 +1,17 @@
 /**
- * The mini-tetris multivac circuit (roadmap rung 7): 4x8 field, 1x1 piece,
- * gravity + stacking + line clear in pure relay wiring — 145 relays across
- * 25 machines. This module is the single source of truth for the netlist:
- * the test (src/simulator/tests/multivac-mini-tetris.test.ts, which owns the
- * full design commentary and the war stories) and the /tetris/ browser page
- * both import it. The generator builds the circuit from logical blocks
- * (register file, token ring, collision network, tick branch), so it can
- * also serve as the gate-level description of the machine; the wire list is
- * the compiled output.
+ * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b): 4x8 field,
+ * gravity + stacking + line clear in pure relay wiring — 163 relays across
+ * 28 machines. A piece is any COLUMN MASK the slides raise (1 or 2 wide),
+ * and with the VMODE slide up it is two cells TALL: the lock press writes
+ * the token row as ever, then a phase-2 tick writes the row above through
+ * the TOPW mirror bank before the (now one-tick-late) reset. This module is
+ * the single source of truth for the netlist: the test
+ * (src/simulator/tests/multivac-mini-tetris.test.ts, which owns the full
+ * design commentary and the war stories) and the /tetris/ browser page both
+ * import it. The generator builds the circuit from logical blocks (register
+ * file, token ring, collision network, tick branch, phase-2 sequencer), so
+ * it can also serve as the gate-level description of the machine; the wire
+ * list is the compiled output.
  */
 
 // ---- relay allocation: relay n lives at machine floor(n/6), section n%6+1
@@ -50,7 +54,8 @@ export const P2GATE = 157; // phase-2 READGATE: powers the two trigger rails
 export const P2COL = 158; // phase-2 RAILGATE2: powers the column feed
 export const TICKM2 = 159; // second tick mirror: clocks P2M -> P2S (TICKM's contacts are spoken for)
 export const P2CUT = (x: number) => 160 + x; // 4 relays: drop the collision mirrors during phase 2
-export const MACHINES = 28; // relay 163 -> m27.2
+export const LINEDLY = 164; // delays the LINE chain's feed past the collision-sense cut
+export const MACHINES = 28; // relay 164 -> m27.3
 
 export function tetrisCircuit(): {
   wires: string[];
@@ -318,18 +323,31 @@ export function tetrisCircuit(): {
     w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${collideNode}`);
   }
 
-  // LINE relays on the rails; their series chain (rooted in rail A, so
-  // operator writes never trigger it) latches CLEARP when a lock completes a
-  // row. The clear itself happens on the NEXT tick — the reset tick — where
-  // CLEARP's contact powers the breaker-trigger rail: only the full row's
-  // holds break (the token is still there to select it), no gates, no rails,
-  // and all four cells drop out. The full line is visible for exactly one
-  // tick, like a real tetris line flash. RSTM2 (on the reset rail) breaks
-  // CLEARP's latch so the clear fires once.
+  // LINE relays on the rails; their series chain latches CLEARP when a lock
+  // completes a row. The clear itself happens on the NEXT tick — the reset
+  // tick — where CLEARP's contact powers the breaker-trigger rail: only the
+  // full row's holds break (the token is still there to select it), no
+  // gates, no rails, and all four cells drop out. The full line is visible
+  // for exactly one tick, like a real tetris line flash. RSTM2 (on the
+  // reset rail) breaks CLEARP's latch so the clear fires once.
+  //
+  // The chain's feed is DELAYED one relay past the press rails (LINEDLY:
+  // coil on RAILGATE2's spare set, so it needs the press chain = operator
+  // writes still can't trigger it). Feeding it from rail A directly fired
+  // it FALSELY whenever a piece locked directly above a persistent full
+  // row: for the press's first two waves — before PRESSCUT's cut lands —
+  // the collision readback of the full row below holds all four rails hot,
+  // and a wave-1 feed latches CLEARP through the stale LINE contacts,
+  // clearing the row being written. Unreachable before vertical pieces
+  // (a full row could never persist), found by their tests. By the wave the
+  // delayed feed arrives, the rails carry only the mask and the token
+  // row's own readback — the true line state.
   for (let j = 0; j < 4; j++) {
     w.push(`${tapRail(j)}/${R(LINE(j), 'E')}`, `${R(LINE(j), 'F')}/${minusOf(LINE(j))}`);
   }
-  w.push(`${tap(railA, aUse)}/${R(LINE(0), 'H')}`);
+  w.push(`${plusOf(RAILGATE2)}/${R(RAILGATE2, 'H')}`, `${R(RAILGATE2, 'G')}/${R(LINEDLY, 'E')}`);
+  w.push(`${R(LINEDLY, 'F')}/${minusOf(LINEDLY)}`);
+  w.push(`${plusOf(LINEDLY)}/${R(LINEDLY, 'H')}`, `${R(LINEDLY, 'G')}/${R(LINE(0), 'H')}`);
   w.push(`${R(LINE(0), 'G')}/${R(LINE(1), 'H')}`, `${R(LINE(1), 'G')}/${R(LINE(2), 'H')}`);
   // the chain fires CPSET, and CPSET's contact — sourcing from + — sets
   // CLEARP. Wiring the chain straight into CLEARP's com lets CLEARP's
@@ -474,6 +492,9 @@ export function tetrisCircuit(): {
 export const TETRIS_IO = {
   tick: { slide: 5, machine: 1 }, // right = tick high, left = tick low
   start: { button: 6, machine: 1 }, // press+release arms SPAWN
+  vmode: { slide: (VMODE % 6) + 1, machine: Math.floor(VMODE / 6) }, // right = piece is 2 tall
+  // LKS up = the machine owes itself bookkeeping ticks (phase 2 / reset)
+  lockedRelay: { machine: Math.floor(LKS / 6), index: LKS % 6 },
   pieceSlide: (j: number) => ({ slide: (PIECE(j) % 6) + 1, machine: Math.floor(PIECE(j) / 6) }),
   cellRelay: (r: number, j: number) => ({ machine: Math.floor(CELL(r, j) / 6), index: CELL(r, j) % 6 }),
   tokenRelay: (i: number) => {

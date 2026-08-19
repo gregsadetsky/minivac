@@ -1,12 +1,31 @@
 /**
- * Multivac roadmap rung 7: MINI-TETRIS VERTICAL SLICE. 4-wide x 8-tall
- * field, gravity + stacking + line clear. Pure wiring — every game decision
- * is made by relay contacts. 145 relays across 25 machines (the top of the
- * roadmap's 15-25 estimate; the width is the price of tie-point-safe
- * private contacts — see the notes below). The piece is whatever COLUMN
- * MASK the slides raise: singles, dominoes, wider — the per-column private
- * contacts make any horizontal shape work with zero circuit changes
- * (rung 9). Vertical shapes/rotation need a second token row — future work.
+ * Multivac roadmap rungs 7+9+9b: MINI-TETRIS. 4-wide x 8-tall field,
+ * gravity + stacking + line clear. Pure wiring — every game decision is
+ * made by relay contacts. 163 relays across 28 machines (the width is the
+ * price of tie-point-safe private contacts — see the notes below). The
+ * piece is whatever COLUMN MASK the slides raise — singles, dominoes,
+ * wider, with zero circuit changes (rung 9) — and with the VMODE slide up
+ * it is TWO CELLS TALL (rung 9b): the bottom cell is the token (collision
+ * is unchanged — the bottom leads), the press writes the token row exactly
+ * as before, and a PHASE-2 tick then writes the row above:
+ *
+ * VERTICAL = THREE TICKS (press, phase 2, reset). A vertical press also
+ * latches P2M (tick-high AND press AND VMODE, dead-ending at +); its slave
+ * P2S — clocked by TICKM2 like LKS by TICKM — re-routes the next tick's
+ * reset rail into the phase-2 power chain: P2GATE (a second READGATE)
+ * powers private gate/breaker trigger rails routed by the TOPW mirror bank
+ * (one parallel coil per ring slave 1-7) into row r-1's EXISTING write
+ * group, P2COL (a second RAILGATE2) re-feeds the column rails, and the
+ * P2CUT bank (in series with PRESSCUT) drops the collision mirrors so the
+ * row below the token stays off the rails. The press rails stay dark, so
+ * the token row's own readback never re-fires — the top write sees only
+ * the mask and row r-1's own content. P2CLR breaks P2M during phase 2;
+ * the reset (which RESETM/RSTM/RSTM2 sit out during phase 2, keeping the
+ * token, LKM and any CLEARP latch alive) runs one tick late. At row 0 the
+ * top cell is CLIPPED (no TOPW(0)); a line completed by the TOP write does
+ * NOT clear (the clear machinery is token-row-addressed and the LINE chain
+ * is press-rooted) — a documented limit of this rung, pinned below; the
+ * field-scaling rung's row collapse replaces the clear machinery anyway.
  *
  * Composition (each part is a proven rung):
  * - FIELD = the rung-4 8x4 register file, verbatim: decoder + write groups
@@ -42,16 +61,28 @@
  * live tick and unwind its own source).
  *
  * LINE CLEAR: the 4 LINE relays hang on the data rails and their series
- * chain (fed from rail A, so operator writes never trigger it) fires CPSET,
- * whose private contact latches CLEARP when a lock completes the row. The
- * full line is visible while the press is held — the flash — and from the
- * release on CLEARP alone powers the breaker-trigger rail: the row's holds
- * stay broken with the gates and column feed dark, all four cells drop out,
- * and the next (reset) tick's RSTM2 breaks the latch to re-arm the row.
- * Rows above do NOT collapse in this slice; that is the field-scaling
- * rung's work.
+ * chain fires CPSET, whose private contact latches CLEARP when a lock
+ * completes the row. The full line is visible while the press is held —
+ * the flash — and from the release on CLEARP alone powers the breaker-
+ * trigger rail: the row's holds stay broken with the gates and column feed
+ * dark, all four cells drop out, and the next (reset) tick's RSTM2 breaks
+ * the latch to re-arm the row. Rows above do NOT collapse in this slice;
+ * that is the field-scaling rung's work.
  *
- * A RESET tick (the tick after any lock): resetrail breaks every ring
+ * THE LINE SENSOR'S FALSE WINDOW (found by the vertical rung's tests): for
+ * a press's first waves — before PRESSCUT's cut lands — the collision
+ * readback of the row BELOW the token still holds the rails. If that row
+ * is FULL, a chain feed that arrives with rail A latches CLEARP through
+ * the stale LINE contacts and the clear machinery erases the row being
+ * WRITTEN. Unreachable before rung 9b (a full row could never persist —
+ * every full row cleared at its own lock; now a top-completed line stays),
+ * so the chain's feed is DELAYED one relay past the press rails (LINEDLY,
+ * off RAILGATE2's spare set — still press-only, so operator writes still
+ * cannot trigger it): by the wave it arrives, the rails carry only the
+ * mask and the token row's own readback — the true line state.
+ *
+ * A RESET tick (the tick after any lock; after the phase-2 tick when the
+ * lock was vertical): resetrail breaks every ring
  * slave's hold through private reset-mirror contacts (the token dies), sets
  * the SPAWN latch, and RSTM clears LOCKED mid-tick. The next tick is a
  * normal fall tick: the ring clock fires, master 0 has sampled SPAWN while
@@ -60,7 +91,7 @@
  * reset tick, then the next piece enters — a full-height drop is spawn +
  * 7 falls + reset = 9 ticks.
  *
- * Sparse-pinned: at 25 machines a cktsim tick costs tens of seconds, so the
+ * Sparse-pinned: at 28 machines a cktsim tick costs tens of seconds, so the
  * dense-oracle equivalence rides on the per-rung tests below this one (all
  * dense-validated) plus the 5000-random-circuit sweep. Set MINIVAC_MASS=1
  * to run the short scenario under cktsim too.
@@ -233,7 +264,7 @@ function dropVertical(
   expect(g.field(), `${label}: field after reset`).toEqual(model);
 }
 
-describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
+describe('Multivac: mini-tetris (28 machines)', () => {
   it('gravity, stacking, and a line clear (sparse)', { timeout: 600000 }, () => {
     setSolverEngine('sparse');
     const g = makeGame();
@@ -307,11 +338,14 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
 
   // seeded random gameplay, model-checked EVERY tick. This adds what the
   // scripted scenarios cannot: mid-fall steering (the collision target
-  // changes while the piece falls), mid-fall RESHAPING (the piece mask is
-  // just slides, so a single can become a domino mid-flight — the model
+  // changes while the piece falls), mid-fall RESHAPING (the piece mask and
+  // tallness are just slides, so shapes morph mid-flight — the model
   // mirrors the machine, not tournament rules), spawns straight onto a tall
-  // stack (merged spawn+lock), and whatever stack shapes the seed builds.
-  it('random gameplay: seeded drops, steering, mixed piece widths (sparse)', { timeout: 900000 }, () => {
+  // stack (merged spawn+lock), vertical locks interleaved with horizontal
+  // ones, and whatever stack shapes the seed builds. The machine samples
+  // tallness at the press (P2M latches) and the mask again at the phase-2
+  // tick (the slides feed the rails live) — the model does exactly that.
+  it('random gameplay: seeded drops, steering, morphing shapes, vertical locks (sparse)', { timeout: 900000 }, () => {
     setSolverEngine('sparse');
     const lcg = (seed: number) => {
       let s = seed >>> 0;
@@ -324,9 +358,12 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
     const model = Array(8).fill(0);
     let token = -1; // falling piece's row, -1 = none
     let mask = 0b0001;
-    let resetPending = false; // the tick after a lock is always a reset
+    let vertical = false; // the VMODE slide, as the model last set it
+    let phase2Pending = false; // a vertical lock happened: next tick = top write
+    let resetPending = false; // then the tick after that is the reset
     let spawnArmed = false;
     let locks = 0;
+    let vlocks = 0;
     let clears = 0;
     let ticks = 0;
 
@@ -337,7 +374,12 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
         clears++;
       }
       locks++;
-      resetPending = true;
+      if (vertical) {
+        phase2Pending = true; // sampled at the press, like P2M
+        vlocks++;
+      } else {
+        resetPending = true;
+      }
     };
 
     g.pressStart();
@@ -349,12 +391,22 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
         mask = (width === 2 ? 0b11 : 0b1) << pos;
         g.setMask(mask);
       }
+      if (rnd() < 0.15) {
+        vertical = !vertical;
+        g.m.setSlide((VMODE % 6) + 1, vertical ? 'right' : 'left', Math.floor(VMODE / 6));
+      }
       // model what this tick must do, then let the relays do it. Landing
       // and locking are one tick (the mid-tick collide re-route); a PURE
       // lock tick only exists when steering put a block under an already
       // falling piece between ticks (collide pre-armed).
       const resting = () => token === 7 || (model[token + 1] & mask) !== 0;
-      if (resetPending) {
+      if (phase2Pending) {
+        // the top write: current mask, one row above the still-alive token;
+        // clipped at row 0; NEVER clears (top-full stays — the pinned limit)
+        if (token >= 1) model[token - 1] |= mask;
+        phase2Pending = false;
+        resetPending = true;
+      } else if (resetPending) {
         token = -1;
         resetPending = false;
         spawnArmed = true;
@@ -377,8 +429,11 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
     // the seed is fixed, so the run is deterministic; line-clear coverage
     // also lives in the scripted tests above. raise MINIVAC_TETRIS_DROPS
     // for longer random runs.
-    console.log(`random gameplay: ${ticks} ticks, ${locks} locks, ${clears} line clears`);
+    console.log(
+      `random gameplay: ${ticks} ticks, ${locks} locks (${vlocks} vertical), ${clears} line clears`
+    );
     expect(locks).toBe(DROPS);
+    expect(vlocks, 'the seed must actually exercise vertical locks').toBeGreaterThan(2);
   });
 
   // rung 9b groundwork: the TOPW mirrors (one per row 1-7, a parallel coil
@@ -579,6 +634,28 @@ describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
     vmode(false);
     dropPiece(g, 0b1000, model, 'game goes on');
     expect(g.row(5)).toBe(0b1001);
+  });
+
+  // the /tetris/ page runs the 'fast' engine; until this rung no tetris
+  // game test did. A short scenario keeps the page's engine covered on the
+  // full composed circuit: a line-clearing horizontal drop plus a vertical
+  // drop. (fast is oracle-validated on 5000 random circuits and the whole
+  // suite elsewhere; this is the composition smoke.)
+  it('short scenario under the fast engine (what /tetris/ runs)', { timeout: 600000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const model = Array(8).fill(0);
+    g.operatorWrite(7, 0b1110);
+    model[7] = 0b1110;
+    g.pressStart();
+    dropPiece(g, 0b0001, model, 'fast drop'); // completes and clears row 7
+    expect(g.row(7)).toBe(0);
+    g.operatorWrite(3, 0b0010);
+    model[3] = 0b0010;
+    g.m.setSlide((VMODE % 6) + 1, 'right', Math.floor(VMODE / 6));
+    dropVertical(g, 0b0010, model, 'fast vertical'); // rests at 2: rows 2+1
+    expect(g.row(2)).toBe(0b0010);
+    expect(g.row(1)).toBe(0b0010);
   });
 
   const heavy = MASS ? it : it.skip;

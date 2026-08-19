@@ -106,10 +106,36 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    through private contacts, so dominoes (and wider) needed ZERO circuit
    changes. proven: two-domino line clear, overhang physics, mixed-width
    random gameplay (multivac-mini-tetris.test.ts); /tetris/ toggles piece
-   size with the up arrow. NEXT for pieces: vertical/2-row shapes and
-   rotation — that DOES need circuit work (a second token row: tail bit per
-   ring stage or a paired token, collision sensing two rows down, and a
-   two-row lock).
+   size with the up arrow.
+9b. DONE 2026-08-19 — PIECES, vertical ("phase-2 top write"): VMODE slide
+   makes the mask two cells TALL (so 1x2 and 2x2 pieces; 163 relays / 28
+   machines total). the bottom cell IS the token — collision unchanged —
+   and the press writes the token row exactly as before; a P2M/P2S
+   master-slave pair (clocked by TICKM2, the LKM/LKS pattern) then turns
+   the next tick into PHASE 2: a private power chain (P2GATE->trigger
+   rails->P2COL column feed, P2CUT dropping the collision mirrors) fires
+   row r-1's EXISTING write group through the TOPW mirror bank, and the
+   reset runs one tick late. the press rails stay dark during phase 2 (the
+   token row's readback must not re-fire — it can hold stack content) and
+   the reset cluster sits phase 2 out (token/LKM/CLEARP survive). limits,
+   pinned by tests: top cell clips at row 0; a line completed by the TOP
+   write does not clear (token-row-addressed clear machinery; the rung-10
+   collapse replaces clears anyway). BONUS BUG the new tests found in the
+   rung-7 machine: locking directly above a persistent full row falsely
+   fired the line sensor through the collision readback during the press's
+   pre-PRESSCUT waves (unreachable before — full rows never persisted);
+   fixed by delaying the LINE chain's feed one relay past the press rails
+   (LINEDLY). proven: pollution tests with per-leak-source bit signatures
+   (floor + stack flavors), 2x2 squares, bottom-write clears with the top
+   cell surviving, top-full stays, row-0 clip, vertical-mixed random
+   gameplay, a fast-engine scenario (what /tetris/ runs), a dense-oracle
+   vertical scenario (MASS-gated). /tetris/: up arrow cycles
+   1x1 -> 2 wide -> 2 tall -> 2x2, and the page auto-runs the machine's
+   bookkeeping ticks while LOCKED is up (also closes the window where
+   steering between the bottom and top writes would shear the piece).
+   NEXT for pieces: rotation = just remapping the four shape slides
+   (1x2 <-> 2x1 is already the up-arrow cycle); L/S/T shapes need
+   per-column row offsets — real circuit work, likely after rung 10.
 10. FIELD SCALING: 10x20 with row collapse after a line clear (rows above
    shift down = the stored-row shift machinery). this is where the rung-8a
    solver rewrite becomes necessary rather than nice.
