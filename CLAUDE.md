@@ -83,5 +83,5 @@ future multivac viewer is planned as canvas, browser-side notes in _notes/
 - notation/circuits: samples live in src/circuits/ as the single source of
   truth for menu + tests. book circuit wire lists were transcribed and
   independently cross-validated against manual scans.
-- TODO.md is the live backlog; _notes/tetris-roadmap.md has the multivac
-  ladder status and next rungs.
+- TODO.md is the live backlog; ROADMAP.md has the multivac
+  ladder status and next rungs toward tetris.
