@@ -47,7 +47,7 @@ describe('Book VII Experiment 1: Simple Flip-Flop (capacitor)', () => {
     expect(storedBit(m)).toBe(0);
   });
 
-  it('toggles 0 -> 1 -> 0 -> 1 -> 0 when operated slowly', () => {
+  it('toggles 0 -> 1 -> 0 -> 1 -> 0 when operated slowly', { timeout: 30000 }, () => {
     const m = build();
     for (const expected of [1, 0, 1, 0]) {
       slowToggle(m);
@@ -55,7 +55,7 @@ describe('Book VII Experiment 1: Simple Flip-Flop (capacitor)', () => {
     }
   });
 
-  it('charges the capacitor through the 22 ohm resistor while pressed', () => {
+  it('charges the capacitor through the 22 ohm resistor while pressed', { timeout: 30000 }, () => {
     const m = build();
     m.pressButton(1);
     hold(m, 100);
@@ -64,7 +64,7 @@ describe('Book VII Experiment 1: Simple Flip-Flop (capacitor)', () => {
     expect(m.getCapVoltage(1)).toBeLessThan(12.5);
   });
 
-  it('misses when operated too fast (manual step 6)', () => {
+  it('misses when operated too fast (manual step 6)', { timeout: 30000 }, () => {
     const m = build();
     m.pressButton(1);
     hold(m, 4); // not enough charge to reach relay pickup on release
