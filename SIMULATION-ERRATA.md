@@ -21,9 +21,20 @@ wires 6G/6F and 6G/6A permanently tie relay 6's coil-out to light 6 (jacks are t
 points). at the second press, + reaches the coil's other end via 5N/6E. relay 6 on →
 both coil ends at + → ~0mA → drops. but the instant it drops, current flows
 + → coil 6 → light 6 → − at ~71-77mA, which is above this relay's pickup → re-picks →
-both ends + again → drops → buzz. whether a given unit buzzes or toggles depends on
-that relay's individual pickup vs ~75mA — per-relay variance (which book VII's
+both ends + again → drops → buzz. whether a given unit buzzes or toggles cleanly depends
+on that relay's individual pickup vs ~75mA — per-relay variance (which book VII's
 per-relay bias-calibration chart, p8-9, shows the manufacturer knew about).
+
+refinement from further device testing: the real circuit DOES function as a flip-flop —
+it toggles reliably, deterministically alternating nobuzz/buzz presses; every buzzing
+(1→0) press ends with relay 6 out and light 6 off. presumably the chattering armature
+never seats the latch contact, so releasing mid-buzz always lands "off".
+
+remaining sim divergence: the sim predicts the buzz (oscillation alert) but resolves the
+released state to relay 6 = ON (stuck storing 1), where the device lands OFF. a possible
+fix — resolve an iteration-oscillating relay to de-energized (chattering armature can't
+hold its latch) — would need care not to break genuinely-buzzing circuits (buzzer/morse
+style) where intermittent contact IS the intended behavior. unimplemented for now.
 
 ---
 
