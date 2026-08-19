@@ -23,6 +23,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node', // Default to node for simulator tests
+    exclude: ['**/node_modules/**', '**/.claude/**', '**/dist/**'],
     setupFiles: './src/test/setup.ts',
     server: {
       deps: {

@@ -32,7 +32,7 @@ root.innerHTML = `
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
     <div style="margin-top:10px;color:#5c646e">
-      &larr;/&rarr; column &nbsp;&middot;&nbsp; &darr; or space = tick &nbsp;&middot;&nbsp; enter = start
+      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = piece size &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; enter = start
     </div>
     <details style="margin-top:18px;color:#5c646e;text-align:left;max-width:520px">
       <summary style="cursor:pointer;text-align:center">dump the circuit</summary>
@@ -67,10 +67,12 @@ const { wires } = tetrisCircuit();
 document.getElementById('dump')!.textContent =
   `${wires.length} wires, ${MACHINES} machines\n\n` + wires.join('\n');
 
-let column = 0;
+let pos = 0; // left edge of the piece
+let width = 1; // 1 = single, 2 = domino (any mask works in the circuit)
 let busy = true;
 let ticks = 0;
 let sim: MinivacSimulator;
+const mask = () => (width === 2 ? 0b11 : 0b1) << pos;
 
 function relay(loc: { machine: number; index: number }): boolean {
   return sim.getMachineState(loc.machine).relays[loc.index];
@@ -83,15 +85,16 @@ function tokenRow(): number {
 
 function render(note?: string) {
   const tok = tokenRow();
+  const m = mask();
   for (let r = 0; r < ROWS; r++) {
     for (let j = 0; j < COLS; j++) {
       const on = relay(TETRIS_IO.cellRelay(r, j));
-      const isPiece = r === tok && j === column;
+      const isPiece = r === tok && ((m >> j) & 1) === 1;
       pixels[r][j].style.background = isPiece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
   for (let j = 0; j < COLS; j++) {
-    colMarks[j].style.background = j === column ? '#7fd4ff' : 'transparent';
+    colMarks[j].style.background = ((m >> j) & 1) === 1 ? '#7fd4ff' : 'transparent';
   }
   const alerts = sim.getState().alerts;
   status.textContent =
@@ -113,21 +116,28 @@ function act(label: string, fn: () => void) {
   }, 15);
 }
 
-function setColumn(j: number) {
+function applyMask() {
+  const m = mask();
   for (let k = 0; k < COLS; k++) {
     const s = TETRIS_IO.pieceSlide(k);
-    sim.setSlide(s.slide, k === j ? 'right' : 'left', s.machine);
+    sim.setSlide(s.slide, ((m >> k) & 1) === 1 ? 'right' : 'left', s.machine);
   }
 }
 
 document.addEventListener('keydown', e => {
-  if (['ArrowLeft', 'ArrowRight', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    const next = Math.min(COLS - 1, Math.max(0, column + (e.key === 'ArrowRight' ? 1 : -1)));
-    if (next === column) return;
+    const next = Math.min(COLS - width, Math.max(0, pos + (e.key === 'ArrowRight' ? 1 : -1)));
+    if (next === pos) return;
     act(`column ${next}`, () => {
-      column = next;
-      setColumn(column);
+      pos = next;
+      applyMask();
+    });
+  } else if (e.key === 'ArrowUp') {
+    act(width === 1 ? 'domino' : 'single', () => {
+      width = width === 1 ? 2 : 1;
+      pos = Math.min(pos, COLS - width);
+      applyMask();
     });
   } else if (e.key === 'ArrowDown' || e.key === ' ') {
     act('tick', () => {
@@ -158,7 +168,7 @@ document.addEventListener('keydown', e => {
 setTimeout(() => {
   sim = new MinivacSimulator(wires, false, MACHINES);
   sim.initialize();
-  setColumn(0);
+  applyMask();
   busy = false;
   render('ready — press enter to spawn a piece');
 }, 30);

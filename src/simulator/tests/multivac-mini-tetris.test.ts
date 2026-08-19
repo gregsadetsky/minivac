@@ -1,9 +1,12 @@
 /**
  * Multivac roadmap rung 7: MINI-TETRIS VERTICAL SLICE. 4-wide x 8-tall
- * field, 1x1 piece, gravity + stacking + line clear. Pure wiring — every
- * game decision is made by relay contacts. 145 relays across 25 machines
- * (the top of the roadmap's 15-25 estimate; the width is the price of
- * tie-point-safe private contacts — see the notes below).
+ * field, gravity + stacking + line clear. Pure wiring — every game decision
+ * is made by relay contacts. 145 relays across 25 machines (the top of the
+ * roadmap's 15-25 estimate; the width is the price of tie-point-safe
+ * private contacts — see the notes below). The piece is whatever COLUMN
+ * MASK the slides raise: singles, dominoes, wider — the per-column private
+ * contacts make any horizontal shape work with zero circuit changes
+ * (rung 9). Vertical shapes/rotation need a second token row — future work.
  *
  * Composition (each part is a proven rung):
  * - FIELD = the rung-4 8x4 register file, verbatim: decoder + write groups
@@ -106,12 +109,16 @@ function makeGame() {
     }
     return hot;
   };
-  const setColumn = (j: number) => {
+  // the "piece" is whatever set of column slides is raised: the lock feed
+  // and the collision taps fan per-column through private contacts, so any
+  // mask — single, domino, a full row — works with zero circuit changes
+  const setMask = (mask: number) => {
     for (let k = 0; k < 4; k++) {
       const p = PIECE(k);
-      m.setSlide((p % 6) + 1, k === j ? 'right' : 'left', Math.floor(p / 6));
+      m.setSlide((p % 6) + 1, (mask >> k) & 1 ? 'right' : 'left', Math.floor(p / 6));
     }
   };
+  const setColumn = (j: number) => setMask(1 << j);
   const tick = () => {
     m.setSlide(5, 'right', 1);
     const rise = m.lastRelaxationIterations;
@@ -134,10 +141,12 @@ function makeGame() {
     // which the collision network would read as a phantom piece
     for (let j = 0; j < 4; j++) m.setSlide(j + 1, 'left', 1);
   };
-  return { m, field, row, tokenAt, setColumn, tick, pressStart, operatorWrite };
+  return { m, field, row, tokenAt, setMask, setColumn, tick, pressStart, operatorWrite };
 }
 
-// drop one piece in column j from spawn to lock, model-checking every tick.
+// drop one piece (any column MASK — a single, a domino, wider) from spawn
+// to lock, model-checking every tick. The piece rests when ANY of its
+// columns is blocked below, so a domino can overhang an empty cell.
 //
 // rhythm: on the tick that lands the token on its rest row, the collision
 // relay fires MID-TICK (the token's new mirrors light the readback of the
@@ -147,19 +156,19 @@ function makeGame() {
 // spawn + 7 falls + reset = 9 ticks.
 function dropPiece(
   g: ReturnType<typeof makeGame>,
-  j: number,
+  mask: number,
   model: number[],
   label: string
 ) {
-  // rest row: first row whose below is the floor or an occupied cell
+  // rest row: first row whose below blocks any column of the mask
   let rest = 7;
   for (let r = 0; r < 7; r++) {
-    if (model[r + 1] & (1 << j)) {
+    if (model[r + 1] & mask) {
       rest = r;
       break;
     }
   }
-  g.setColumn(j);
+  g.setMask(mask);
   g.tick(); // spawn tick: token appears at row 0
   expect(g.tokenAt(), `${label}: spawned`).toEqual([0]);
   expect(g.field(), `${label}: spawn does not touch the field`).toEqual(model);
@@ -167,7 +176,7 @@ function dropPiece(
     g.tick();
     expect(g.tokenAt(), `${label}: token at ${r}`).toEqual([r]);
     if (r === rest) {
-      model[r] |= 1 << j;
+      model[r] |= mask;
       // a completed line flashes only within the press: CLEARP holds the
       // row's breakers up from the release on, so the cells are gone by the
       // time the tick is back low
@@ -180,7 +189,7 @@ function dropPiece(
   expect(g.field(), `${label}: field after reset`).toEqual(model);
 }
 
-describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
+describe('Multivac: mini-tetris vertical slice (25 machines)', () => {
   it('gravity, stacking, and a line clear (sparse)', { timeout: 600000 }, () => {
     setSolverEngine('sparse');
     const g = makeGame();
@@ -195,26 +204,26 @@ describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
     expect(g.tokenAt()).toEqual([]);
 
     g.pressStart();
-    dropPiece(g, 0, model, 'drop 1 (col 0)'); // -> rests on the floor, row 7
+    dropPiece(g, 0b0001, model, 'drop 1 (col 0)'); // -> rests on the floor, row 7
     expect(g.row(7)).toBe(0b0001);
 
-    dropPiece(g, 1, model, 'drop 2 (col 1)');
-    dropPiece(g, 2, model, 'drop 3 (col 2)');
+    dropPiece(g, 0b0010, model, 'drop 2 (col 1)');
+    dropPiece(g, 0b0100, model, 'drop 3 (col 2)');
     expect(g.row(7)).toBe(0b0111);
 
     // stacking: same column again -> must lock one row higher
-    dropPiece(g, 0, model, 'drop 4 (col 0 again)');
+    dropPiece(g, 0b0001, model, 'drop 4 (col 0 again)');
     expect(g.row(6)).toBe(0b0001);
     expect(g.row(7)).toBe(0b0111);
 
     // line clear: col 3 falls PAST row 6 (disjoint) to the floor, completes
     // row 7, and the same press writes the row back as zeros
-    dropPiece(g, 3, model, 'drop 5 (col 3, clears the line)');
+    dropPiece(g, 0b1000, model, 'drop 5 (col 3, clears the line)');
     expect(g.row(7), 'line cleared').toBe(0);
     expect(g.row(6), 'row above stays (no collapse in this slice)').toBe(0b0001);
 
     // the game goes on: the floor is open again
-    dropPiece(g, 2, model, 'drop 6 (col 2)');
+    dropPiece(g, 0b0100, model, 'drop 6 (col 2)');
     expect(g.row(7)).toBe(0b0100);
   });
 
@@ -226,18 +235,39 @@ describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
     model[7] = 0b1110;
     expect(g.field()).toEqual(model);
     g.pressStart();
-    dropPiece(g, 0, model, 'the tetris drop'); // disjoint with 0b1110 -> floor
+    dropPiece(g, 0b0001, model, 'the tetris drop'); // disjoint with 0b1110 -> floor
     expect(g.row(7), 'line cleared on lock').toBe(0);
+  });
+
+  // dominoes: a two-cell piece is just two raised column slides — the lock
+  // feed and collision taps are per-column private contacts, so the circuit
+  // supports any mask with zero changes. This proves it: floor landing, a
+  // line completed by two dominoes, and an overhang (the piece rests when
+  // ANY of its columns is blocked, leaving air beneath the other).
+  it('dominoes: two-cell pieces, a two-domino line, and an overhang (sparse)', { timeout: 600000 }, () => {
+    setSolverEngine('sparse');
+    const g = makeGame();
+    const model = Array(8).fill(0);
+    g.pressStart();
+    dropPiece(g, 0b0011, model, 'domino at 0-1');
+    expect(g.row(7)).toBe(0b0011);
+    dropPiece(g, 0b1100, model, 'domino at 2-3 completes the line');
+    expect(g.row(7), 'two dominoes cleared the line').toBe(0);
+    dropPiece(g, 0b0001, model, 'single at col 0');
+    dropPiece(g, 0b0011, model, 'domino rests on it, col 1 overhangs air');
+    expect(g.row(7)).toBe(0b0001);
+    expect(g.row(6)).toBe(0b0011);
+    dropPiece(g, 0b0010, model, 'single at col 1 lands ON the overhang');
+    expect(g.row(5)).toBe(0b0010);
   });
 
   // seeded random gameplay, model-checked EVERY tick. This adds what the
   // scripted scenarios cannot: mid-fall steering (the collision target
-  // changes while the piece falls), spawns straight onto a tall stack
-  // (merged spawn+lock), and whatever stack shapes the seed builds. Note
-  // the hardware does not check sideways moves into an occupied cell (the
-  // piece may overlap; the eventual lock ORs, so the write is a no-op for
-  // that bit) — the model mirrors the machine, not tournament rules.
-  it('random gameplay: seeded drops with mid-fall steering (sparse)', { timeout: 900000 }, () => {
+  // changes while the piece falls), mid-fall RESHAPING (the piece mask is
+  // just slides, so a single can become a domino mid-flight — the model
+  // mirrors the machine, not tournament rules), spawns straight onto a tall
+  // stack (merged spawn+lock), and whatever stack shapes the seed builds.
+  it('random gameplay: seeded drops, steering, mixed piece widths (sparse)', { timeout: 900000 }, () => {
     setSolverEngine('sparse');
     const lcg = (seed: number) => {
       let s = seed >>> 0;
@@ -249,7 +279,7 @@ describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
     const g = makeGame();
     const model = Array(8).fill(0);
     let token = -1; // falling piece's row, -1 = none
-    let col = 0;
+    let mask = 0b0001;
     let resetPending = false; // the tick after a lock is always a reset
     let spawnArmed = false;
     let locks = 0;
@@ -257,7 +287,7 @@ describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
     let ticks = 0;
 
     const lockAt = (r: number) => {
-      model[r] |= 1 << col;
+      model[r] |= mask;
       if (model[r] === 15) {
         model[r] = 0; // CLEARP zeroes the row as the press releases
         clears++;
@@ -270,14 +300,16 @@ describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
     spawnArmed = true;
     while (locks < DROPS) {
       if (rnd() < 0.45) {
-        col = Math.floor(rnd() * 4);
-        g.setColumn(col);
+        const width = rnd() < 0.35 ? 2 : 1;
+        const pos = Math.floor(rnd() * (5 - width));
+        mask = (width === 2 ? 0b11 : 0b1) << pos;
+        g.setMask(mask);
       }
       // model what this tick must do, then let the relays do it. Landing
       // and locking are one tick (the mid-tick collide re-route); a PURE
       // lock tick only exists when steering put a block under an already
       // falling piece between ticks (collide pre-armed).
-      const resting = () => token === 7 || ((model[token + 1] >> col) & 1) === 1;
+      const resting = () => token === 7 || (model[token + 1] & mask) !== 0;
       if (resetPending) {
         token = -1;
         resetPending = false;
@@ -295,12 +327,12 @@ describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
       }
       g.tick();
       ticks++;
-      expect(g.field(), `tick ${ticks} field (col ${col})`).toEqual(model);
+      expect(g.field(), `tick ${ticks} field (mask ${mask.toString(2)})`).toEqual(model);
       expect(g.tokenAt(), `tick ${ticks} token`).toEqual(token >= 0 ? [token] : []);
     }
-    // the seed is fixed, so the run is deterministic (14 drops = 106 ticks,
-    // 0 clears — line-clear coverage lives in the scripted tests above;
-    // raise MINIVAC_TETRIS_DROPS for longer random runs)
+    // the seed is fixed, so the run is deterministic; line-clear coverage
+    // also lives in the scripted tests above. raise MINIVAC_TETRIS_DROPS
+    // for longer random runs.
     console.log(`random gameplay: ${ticks} ticks, ${locks} locks, ${clears} line clears`);
     expect(locks).toBe(DROPS);
   });
@@ -313,7 +345,7 @@ describe('Multivac: mini-tetris vertical slice (22 machines)', () => {
     g.operatorWrite(7, 0b0110);
     model[7] = 0b0110;
     g.pressStart();
-    dropPiece(g, 0, model, 'dense drop');
+    dropPiece(g, 0b0001, model, 'dense drop');
     expect(g.row(7)).toBe(0b0111);
   });
 });

@@ -97,6 +97,19 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
       big lever, only if (a) falls short at the full 10x20 field. NOT
       required at the current scale.
 
+9. DONE 2026-08-19 — PIECES, horizontal: a piece is whatever COLUMN MASK the
+   slides raise — the lock feed and collision taps already fan per-column
+   through private contacts, so dominoes (and wider) needed ZERO circuit
+   changes. proven: two-domino line clear, overhang physics, mixed-width
+   random gameplay (multivac-mini-tetris.test.ts); /tetris/ toggles piece
+   size with the up arrow. NEXT for pieces: vertical/2-row shapes and
+   rotation — that DOES need circuit work (a second token row: tail bit per
+   ring stage or a paired token, collision sensing two rows down, and a
+   two-row lock).
+10. FIELD SCALING: 10x20 with row collapse after a line clear (rows above
+   shift down = the stored-row shift machinery). this is where the rung-8a
+   solver rewrite becomes necessary rather than nice.
+
 ## display/input notes
 
 - the canvas viewer reads relay states directly as pixels — the playfield does
