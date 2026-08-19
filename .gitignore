@@ -27,4 +27,3 @@ dist-ssr
 
 # local measurement notes, not for the repo
 .claude-logs
-_notes/*
