@@ -35,11 +35,12 @@ it toggles reliably, deterministically alternating nobuzz/buzz presses; every bu
 (1→0) press ends with relay 6 out and light 6 off. presumably the chattering armature
 never seats the latch contact, so releasing mid-buzz always lands "off".
 
-remaining sim divergence: the sim predicts the buzz (oscillation alert) but resolves the
-released state to relay 6 = ON (stuck storing 1), where the device lands OFF. a possible
-fix — resolve an iteration-oscillating relay to de-energized (chattering armature can't
-hold its latch) — would need care not to break genuinely-buzzing circuits (buzzer/morse
-style) where intermittent contact IS the intended behavior. unimplemented for now.
+sim divergence FIXED: chattering relays now resolve to de-energized (a buzzing armature
+never seats its contacts), so the sim toggles exactly like the device — nobuzz/buzz
+alternation, always landing "off" after a buzzing press — with the oscillation alert
+kept as the buzz indicator. the sim shows the buzz as an alert + resolved state, not as
+an animated/audible buzz (the quasi-static solver has no timescale for the chatter).
+device-verified test: src/simulator/tests/book4-single-input-flipflop.test.ts
 
 ---
 
