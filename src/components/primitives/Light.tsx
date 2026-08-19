@@ -142,7 +142,7 @@ function Light({
 
         {/* Glow halo — scales with brightness */}
         <div
-          className={`absolute rounded-full ${lit ? 'animate-pulse' : ''}`}
+          className="absolute rounded-full"
           style={{
             top: `-${glowOffset}px`,
             left: `-${glowOffset}px`,
