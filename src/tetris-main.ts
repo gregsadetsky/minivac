@@ -25,7 +25,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, SHAPES } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES, shapeRange } from './circuits/multivac-mini-tetris';
 
 // the 'fast' engine: typed-array rewrite of the sparse solver, validated
 // against the dense oracle on 5000 random circuits (zero mismatches, max
@@ -119,11 +119,8 @@ let ticks = 0;
 let sim: MinivacSimulator;
 const shapeLabel = () => shape().label;
 // position bounds per shape: BOTH rows must fit the well
-const minPos = () => Math.max(0, -shape().bOff, -shape().tOff);
-const maxPos = () => {
-  const s = shape();
-  return Math.min(COLS - s.bOff - s.bW, s.tW > 0 ? COLS - s.tOff - s.tW : COLS);
-};
+const minPos = () => shapeRange(shape(), COLS).min;
+const maxPos = () => shapeRange(shape(), COLS).max;
 
 function relay(loc: { machine: number; index: number }): boolean {
   return sim.getMachineState(loc.machine).relays[loc.index];
@@ -419,8 +416,7 @@ document.addEventListener('keydown', e => {
     if (p < 0) return;
     const nIx = (shapeAt() + 1) % SHAPES.length;
     const ns = SHAPES[nIx];
-    const nMin = Math.max(0, -ns.bOff, -ns.tOff);
-    const nMax = Math.min(COLS - ns.bOff - ns.bW, ns.tW > 0 ? COLS - ns.tOff - ns.tW : COLS);
+    const { min: nMin, max: nMax } = shapeRange(ns, COLS);
     const nPos = Math.min(nMax, Math.max(nMin, p));
     act(ns.label, () => {
       // the clamp = operator steps, machine-checked per the CURRENT shape
