@@ -95,6 +95,42 @@ lessons first:
   OR-write absorbs it). the page guard SHRINKS to exactly that case, with
   the full fix in increment 3's piece register.
 
+## increment 2 — BUILT 2026-08-20 (22 relays, MACHINES 46; final form)
+
+what shipped differs from the sketch in two places worth remembering:
+
+1. the rails read OCCUPANCY, not freedom, and they read it from the CELL
+   COMS (each field com had exactly one spare hole), not the J/N jacks.
+   the "free J/N jacks" in the sketch are NC jacks whose arms carry the
+   hold/readback feeds — a free JACK is not a free CONTACT. occupancy +
+   LEGINV-as-blocked + NC-gating also fixes the default: no token row
+   selected (pre-spawn, post-lock row 7, power-on) = rails dark = every
+   step legal. MIRC coils chain off TOPW(r).E (rows 1-6; the MIRA coms
+   are full) and MIRA(0)'s spare com hole (row 0). row 7 unmapped by
+   design: the token only shows row 7 post-lock.
+2. the gates are CHANGEOVERS, not blocks. a plain series NC would let a
+   refused press latch NO master — and the release window then breaks
+   every slave hold with nothing to transfer: ONE REFUSED PRESS WIPES THE
+   RING. the LEGINV contact's NO side returns the blocked sample into the
+   CURRENT master (a forced no-op step), so every single-button press
+   latches some master and the ring always survives its own release.
+   refusal returns collect on one matrix group per position and re-latch
+   through POSA's coil-jack spare hole.
+3. wide right-steps run a two-stage tree on the legal side: WIDM3
+   {narrow -> com; wide -> LEGINV2(c+1) {free -> com; occupied ->
+   return}}; right-into-3 is WIDM4 {narrow -> com; wide -> return} — the
+   wall is in contacts and the page's wide-at-wall clamp died. left steps
+   need no second check (gravity keeps piece cells off stored cells, so
+   a wide piece's right cell enters its own old column).
+4. test fallout, all semantic (the wiring passed its trace first try):
+   the random model walks toward its wanted column with real presses and
+   accepts wherever the register lands (partial walks are the machine's
+   answer); wideness for the reset re-home comes from the tracked slide,
+   not mask bits (a wall-degraded wide mask looks single-bit); the
+   steer-into-overlap test's reported move became the REFUSAL receipt,
+   with OR-absorption coverage moved to the reshape seam (a slide cannot
+   be electrically refused — the page guards it).
+
 ## increment 2 audit notes (2026-08-20, post-increment-1)
 
 - gate placement: series-gate EACH D-tap, not the direction chain. LEGINV(c)

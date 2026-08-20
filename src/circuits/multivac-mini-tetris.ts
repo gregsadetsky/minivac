@@ -1,7 +1,7 @@
 /**
  * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b + 10 + the
  * piece register): 4x8 field, gravity + stacking + line clear + row
- * collapse in pure relay wiring — 245 relays across 42 machines. The
+ * collapse in pure relay wiring — 267 relays across 46 machines. The
  * piece's COLUMN is machine state: a one-hot relay ring stepped by
  * momentary LEFT/RIGHT buttons (sample-on-press, commit-on-release; edges
  * self-loop; every reset re-homes it), 1 or 2 wide via the WID slide, and
@@ -122,12 +122,17 @@ export const POSRST = (x: number) => 244 + x; // 2 relays: the RESET tick re-hom
 export const TWIN = 246; // the release window (ANYBM down AND ANYBM2 still up): transfer NOW
 export const BOOTL = 247; // latches on the first press; its NC is the power-on home seed
 export const POSM2 = (j: number) => 248 + j; // 3 more slave mirrors: the wide taps' pos gates
+// increment 2 — lateral legality in contacts:
+export const MIRC = (r: number, h: number) => 251 + 2 * r + h; // rows 0..6 x2: token-row gates for the occupancy taps
+export const LEGINV = (j: number) => 265 + j; // "column j occupied at the token row" (rail coil); its changeover routes the step
+export const LEGINV2 = (k: number) => 267 + k; // k=2,3: second reads of columns 2,3 for the wide right-edge checks
+export const WIDM3 = 271, WIDM4 = 272; // wide-mode mirrors: the narrow bypasses + the wall gate
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 export const LEFTBTN = { button: 3, machine: 40 }; // m40.3 button
 export const RIGHTBTN = { button: 4, machine: 40 }; // m40.4 button
 export const WIDSLIDE = { slide: 5, machine: 40 }; // m40.5 slide -> WIDM coils
-export const MACHINES = 42; // relays through m41.5; m36's coms serve as the junctions
+export const MACHINES = 46; // relays through m45.3; m36's coms serve as the junctions
 
 export function tetrisCircuit(): {
   wires: string[];
@@ -767,11 +772,18 @@ export function tetrisCircuit(): {
     w.push(`${R(POSM(j - 1), 'L')}/${R(POSM(j), 'L')}`);
   }
   // D routing: left steps down, right steps up; the edges self-loop so an
-  // edge press is a no-op instead of walking the one-hot off the ring
+  // edge press is a no-op instead of walking the one-hot off the ring.
+  // Every D-tap runs through a LEGINV CHANGEOVER (increment 2, wired
+  // below): the legal side continues into the target master's com, the
+  // blocked side RETURNS the sample into the current master (a forced
+  // no-op step). A plain block would latch NO master and the release
+  // window would then break every slave hold with nothing to transfer —
+  // one refused press would wipe the ring. The edge self-loops stay
+  // ungated: stepping into your own column is always legal.
   w.push(`${R(POSM(0), 'G')}/${comOf(POSA(0))}`); // left self-loop at 0
-  for (let j = 1; j < 4; j++) w.push(`${R(POSM(j), 'G')}/${comOf(POSA(j - 1))}`);
-  for (let j = 0; j < 3; j++) w.push(`${R(POSM(j), 'K')}/${comOf(POSA(j + 1))}`);
   w.push(`${R(POSM(3), 'K')}/${comOf(POSA(3))}`); // right self-loop at 3
+  // (the gated taps for the six real moves are pushed in the legality
+  // section, after the rails they route through exist)
   // masters: hold from mid-press through the release window (ANYBM2.G
   // chain — ANYBM2 outlives the buttons by one wave), transfer out through
   // TWIN.G's chain into the new slave's com, in the window only
@@ -854,6 +866,81 @@ export function tetrisCircuit(): {
   w.push(`${R(POSM2(0), 'G')}/${R(WIDM, 'H')}`, `${R(WIDM, 'G')}/${R(PIECE(1), 'E')}`);
   w.push(`${R(POSM2(1), 'G')}/${R(WIDM, 'L')}`, `${R(WIDM, 'K')}/${R(PIECE(2), 'E')}`);
   w.push(`${R(POSM2(2), 'G')}/${R(WIDM2, 'H')}`, `${R(WIDM2, 'G')}/${R(PIECE(3), 'E')}`);
+
+  // ---------- the piece register, increment 2: lateral legality ----------
+  // "Buttons request, contacts decide" — the same doctrine as the fall.
+  // Occupancy rails: rail(j) = the cell at (tokenRow, j) is ON. Sources
+  // are the cell COM taps (each field com had exactly one spare hole),
+  // gated per row by MIRC mirrors ("token at row r", chained off TOPW's
+  // coil jacks; row 0 off MIRA(0)'s spare com hole; row 7 unmapped — the
+  // token only shows row 7 post-lock, where a step merely pre-positions
+  // the next spawn). The token ring is one-hot, so at most one row's
+  // gates are closed: the legal fan-in shape. LEGINV(j) reads the rail;
+  // NO TOKEN ROW selected = rails dark = every step legal, which is what
+  // keeps pre-spawn and post-lock steering (and the power-on ring) free.
+  // Backward audit: a rail is fed only through the one closed MIRC row
+  // gate; an OFF cell's com behind an OPEN gate can never be energized
+  // from the rail side.
+  const legRails = [takeGroups(2), takeGroups(2), takeGroups(2), takeGroups(2)];
+  for (const lg of legRails) w.push(`${lg[0]}/${lg[1]}`);
+  const legUse = [0, 0, 0, 0];
+  const legTap = (j: number) => legRails[j][legUse[j]++ >= 5 ? 1 : 0];
+  for (let r = 0; r <= 6; r++) {
+    const feed0 = r === 0 ? comOf(MIRA(0)) : R(TOPW(r), 'E');
+    w.push(`${feed0}/${R(MIRC(r, 0), 'E')}`, `${R(MIRC(r, 0), 'E')}/${R(MIRC(r, 1), 'E')}`);
+    w.push(`${R(MIRC(r, 0), 'F')}/${minusOf(MIRC(r, 0))}`, `${R(MIRC(r, 1), 'F')}/${minusOf(MIRC(r, 1))}`);
+    for (let j = 0; j < 4; j++) {
+      const mr = MIRC(r, j < 2 ? 0 : 1);
+      const [arm, no] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
+      w.push(`${comOf(CELL(r, j))}/${R(mr, arm)}`, `${R(mr, no)}/${legTap(j)}`);
+    }
+  }
+  for (let j = 0; j < 4; j++) {
+    w.push(`${legTap(j)}/${R(LEGINV(j), 'E')}`, `${R(LEGINV(j), 'F')}/${minusOf(LEGINV(j))}`);
+  }
+  // second reads of columns 2 and 3 (parallel coils, coil-jack chained)
+  // for the wide right-edge checks — LEGINV's own sets are spoken for
+  w.push(`${R(LEGINV(2), 'E')}/${R(LEGINV2(2), 'E')}`, `${R(LEGINV2(2), 'F')}/${minusOf(LEGINV2(2))}`);
+  w.push(`${R(LEGINV(3), 'E')}/${R(LEGINV2(3), 'E')}`, `${R(LEGINV2(3), 'F')}/${minusOf(LEGINV2(3))}`);
+  // narrow/wall mirrors on the WID slide (WIDM/WIDM2's sets feed PIECE)
+  w.push(`${R(WIDM, 'E')}/${R(WIDM3, 'E')}`, `${R(WIDM3, 'F')}/${minusOf(WIDM3)}`);
+  w.push(`${R(WIDM2, 'E')}/${R(WIDM4, 'E')}`, `${R(WIDM4, 'F')}/${minusOf(WIDM4)}`);
+
+  // the gated D-taps. RIGHT into c (c=1,2): LEGINV(c) changeover, then
+  // the legal side runs the wide-edge tree — WIDM3 {narrow -> com;
+  // wide -> LEGINV2(c+1) {free -> com; occupied -> return}}. RIGHT into 3:
+  // WIDM4 {narrow -> com; wide -> return} — the wall lives in contacts
+  // now. LEFT into c (c=0,1,2): LEGINV(c)'s second set, changeover only
+  // (a wide piece's right cell moves into the piece's own old column —
+  // gravity guarantees piece cells never coincide with stored cells, so
+  // left needs no second check). Refusal returns collect on one matrix
+  // group per position and re-latch the current master through its coil
+  // jack's spare hole.
+  const retNode = [takeGroups(1)[0], takeGroups(1)[0], takeGroups(1)[0]];
+  w.push(`${retNode[0]}/${R(POSA(0), 'E')}`);
+  w.push(`${retNode[1]}/${R(POSA(1), 'E')}`);
+  w.push(`${retNode[2]}/${R(POSA(2), 'E')}`);
+  for (const c of [1, 2] as const) {
+    const [wArm, wNc, wNo] = c === 1 ? ['H', 'J', 'G'] : ['L', 'N', 'K'];
+    w.push(`${R(POSM(c - 1), 'K')}/${R(LEGINV(c), 'H')}`); // the tap into the changeover
+    w.push(`${R(LEGINV(c), 'G')}/${retNode[c - 1]}`); // blocked: return
+    w.push(`${R(LEGINV(c), 'J')}/${R(WIDM3, wArm)}`); // legal: the wide-edge tree
+    w.push(`${R(WIDM3, wNc)}/${comOf(POSA(c))}`); // narrow: step
+    w.push(`${R(WIDM3, wNo)}/${R(LEGINV2(c + 1), 'H')}`); // wide: check the right edge
+    w.push(`${R(LEGINV2(c + 1), 'J')}/${R(WIDM3, wNc)}`); // free: join the step wire
+    w.push(`${R(LEGINV2(c + 1), 'G')}/${retNode[c - 1]}`); // occupied: return
+  }
+  w.push(`${R(POSM(2), 'K')}/${R(LEGINV(3), 'H')}`);
+  w.push(`${R(LEGINV(3), 'G')}/${retNode[2]}`); // blocked: return
+  w.push(`${R(LEGINV(3), 'J')}/${R(WIDM4, 'H')}`); // legal: the wall gate
+  w.push(`${R(WIDM4, 'J')}/${comOf(POSA(3))}`); // narrow: step
+  w.push(`${R(WIDM4, 'G')}/${retNode[2]}`); // wide: the wall, return
+  for (const c of [0, 1, 2] as const) {
+    w.push(`${R(POSM(c + 1), 'G')}/${R(LEGINV(c), 'L')}`); // the left tap
+    w.push(`${R(LEGINV(c), 'N')}/${comOf(POSA(c))}`); // free: step
+    if (c === 2) w.push(`${R(LEGINV(c), 'K')}/${R(POSA(3), 'E')}`); // blocked: return (direct — POSA(3) has no group)
+    else w.push(`${R(LEGINV(c), 'K')}/${retNode[c + 1]}`); // blocked: return
+  }
 
   return { wires: w, rails: dataRails };
 }

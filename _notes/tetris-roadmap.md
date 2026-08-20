@@ -218,11 +218,33 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    edge degradation, mid-fall steering, lock-tick hold, reset re-home);
    the full tetris file green under fast with the re-home folded into the
    random model; playwright page flow on the button-driven page.
-   NEXT, increment 2: lateral LEGALITY in contacts — the step's D-path
-   gated by "target column free at the token row" (MIRC mirror bank +
-   LEGINV NCs), shrinking the page's JS guard to the tall-top case.
-   increment 3: the full piece register (per-column row offsets, L/S/T,
-   rotation as register rewiring).
+   increment 2 LANDED 2026-08-20, same day: LATERAL COLLISION IS IN THE
+   RELAYS — buttons request, contacts decide, like the fall. Occupancy
+   rails (cell-com taps gated per row by MIRC mirrors riding the one-hot
+   token; row 7 unmapped, rails dark = legal, so pre-spawn/post-lock
+   steering stays free) read by LEGINV coils whose contacts sit in every
+   D-tap as CHANGEOVERS: legal continues into the target master, blocked
+   RETURNS the sample into the current master — a plain block would latch
+   no master and the release window would wipe the ring on the first
+   refused press. Wide right-steps run a second-read tree (WIDM3 +
+   LEGINV2) for the right edge's target, and wide-into-column-3 is the
+   WIDM4 wall gate: the wall is geometry in contacts, and the page's
+   wide-at-wall clamp is deleted. 267 relays / 46 machines. The page's JS
+   guard SHRANK to the two documented seams: the ArrowUp reshape (slides
+   cannot be electrically refused) and the tall piece's top cell (the
+   token-row read; increment 3 closes it). the wiring passed its trace on
+   the first run — the failures that took iterations were MY test
+   scenarios (the model now walks with real presses and accepts partial
+   walks; wideness for re-home comes from the tracked slide; the old
+   steer-into-overlap premise became the refusal receipt, with OR-
+   absorption coverage moved to the reshape seam).
+   receipts: the lateral-legality trace (wide-edge refusal, the wall in
+   contacts, narrow + left refusals, post-lock freedom, re-home); both
+   random-gameplay runs green with refusals exercised (114/219 ticks,
+   model-checked every tick); full tetris file green under fast;
+   playwright page flow with the machine (not JS) refusing the steer.
+   NEXT, increment 3: the full piece register (per-column row offsets,
+   L/S/T, rotation as register rewiring) — closes the tall-top seam.
 
 11. FIELD SCALING: wider/taller grid = stamping proven patterns; the
    solver budget is the real constraint (lever (b) pivot-order reuse

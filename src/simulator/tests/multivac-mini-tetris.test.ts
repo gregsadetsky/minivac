@@ -3,7 +3,7 @@
  * 4-wide x 8-tall field, gravity + stacking + line clear WITH row
  * collapse, and the piece's column held IN THE MACHINE (a one-hot ring
  * stepped by LEFT/RIGHT buttons). Pure wiring — every game decision is
- * made by relay contacts. 245 relays across 42 machines (the width is the
+ * made by relay contacts. 267 relays across 46 machines (the width is the
  * price of tie-point-safe private contacts — see the notes below). The
  * piece is whatever COLUMN MASK the slides raise — singles, dominoes,
  * wider, with zero circuit changes (rung 9) — and with the VMODE slide up
@@ -355,7 +355,7 @@ function dropVertical(
   collapseTicks(g, cleared, model, label);
 }
 
-describe('Multivac: mini-tetris (42 machines)', () => {
+describe('Multivac: mini-tetris (46 machines)', () => {
   it('gravity, stacking, and a line clear (fast)', { timeout: 1500000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
@@ -452,6 +452,7 @@ describe('Multivac: mini-tetris (42 machines)', () => {
     const model = Array(8).fill(0);
     let token = -1; // falling piece's row, -1 = none
     let mask = 0b0001;
+    let wideNow = false; // the WID slide, as the model last set it
     let vertical = false; // the VMODE slide, as the model last set it
     let phase2Pending = false; // a vertical lock happened: next tick = top write
     let resetPending = false; // then the tick after that is the reset
@@ -485,8 +486,23 @@ describe('Multivac: mini-tetris (42 machines)', () => {
       if (rnd() < 0.45) {
         const width = rnd() < 0.35 ? 2 : 1;
         const pos = Math.floor(rnd() * (5 - width));
-        mask = (width === 2 ? 0b11 : 0b1) << pos;
-        g.setMask(mask);
+        // walk toward the wanted column with real button presses; the
+        // legality contacts may refuse any step (stored cells beside the
+        // token). Accept wherever the register actually lands and model
+        // THAT — partial walks are the machine's honest answer.
+        wideNow = width === 2;
+        g.m.setSlide(TETRIS_IO.wid.slide, width === 2 ? 'right' : 'left', TETRIS_IO.wid.machine);
+        let guard = 8;
+        for (;;) {
+          const at = g.posAt();
+          if (at === pos || guard-- <= 0) break;
+          g.pressBtn(at < pos ? TETRIS_IO.right : TETRIS_IO.left);
+          if (g.posAt() === at) break; // refused: stop pushing
+        }
+        // clip to the field: a refused left walk can strand the register
+        // WIDE at column 3, where the machine's PIECE degrades to the
+        // edge column alone (there is no wide tap off the last slave)
+        mask = ((width === 2 ? 0b11 : 0b1) << g.posAt()) & 0b1111;
       }
       if (rnd() < 0.3) {
         vertical = !vertical;
@@ -518,8 +534,10 @@ describe('Multivac: mini-tetris (42 machines)', () => {
         if (clearedRow > 0) collapseLeft = 3 * clearedRow; // row-0 clears never seed
         clearedRow = -1;
         // the reset tick re-homes the position register to column 0 (the
-        // WID slide is untouched): the machine's piece mask snaps home
-        mask = (mask & (mask - 1)) !== 0 ? 0b0011 : 0b0001;
+        // WID slide is untouched): the machine's piece mask snaps home.
+        // wideness must come from the tracked slide, not the mask bits —
+        // a wall-degraded wide mask (0b1000) looks single-bit
+        mask = wideNow ? 0b0011 : 0b0001;
       } else if (token >= 0) {
         if (resting()) lockAt(token); // pre-armed collide: no movement
         else {
@@ -899,10 +917,13 @@ describe('Multivac: mini-tetris (42 machines)', () => {
     g.pressBtn(TETRIS_IO.right);
     expect(pieces(), 'wide at 2').toEqual([0, 0, 1, 1]);
     g.pressBtn(TETRIS_IO.right);
-    // pos 3 wide has no column 4: the machine feeds PIECE(3) alone (the
-    // page clamps this away; the legality increment folds width in)
-    expect(pieces(), 'wide at the edge degrades to the edge column').toEqual([0, 0, 0, 1]);
-    g.pressBtn(TETRIS_IO.left);
+    // pos 3 wide has no column 4: the WIDM4 wall gate refuses the step in
+    // contacts (a degraded PIECE(3)-only state is reachable only by
+    // slide-narrowing at 3 then re-widening — the reshape seam the page
+    // guard owns; buttons can't get there)
+    expect(g.posAt(), 'wide into the wall is refused by the contacts').toBe(2);
+    expect(pieces(), 'the wide pair holds at 2').toEqual([0, 0, 1, 1]);
+    quiet();
     g.pressBtn(TETRIS_IO.left);
     g.m.setSlide(TETRIS_IO.wid.slide, 'left', TETRIS_IO.wid.machine);
     expect(ring()).toEqual([0, 1, 0, 0]);
@@ -925,6 +946,108 @@ describe('Multivac: mini-tetris (42 machines)', () => {
     expect(g.tokenAt()).toEqual([]);
     expect(g.field()).toEqual(model);
     expect(ring(), 'reset re-homes the register').toEqual([1, 0, 0, 0]);
+    quiet();
+  });
+
+  // the piece register (increment 2): lateral LEGALITY in contacts. The
+  // step's D-tap runs through LEGINV(target) — a coil reading "target
+  // column occupied at the token's own row" off a MIRC-gated occupancy
+  // rail. The contact set is a CHANGEOVER, not a plain gate: blocked
+  // re-routes the sample into the CURRENT master (an electrically forced
+  // no-op step) — a plain block would latch NO master and the release
+  // window would then break every slave hold with nothing to transfer:
+  // one refused press would wipe the ring. Wide right-steps also check
+  // the right edge's target column (LEGINV2 second-read bank) and the
+  // wall gate makes "wide into column 3" a refusal in contacts — geometry
+  // the page used to clamp in JS. No token selected (pre-spawn, or the
+  // post-lock row 7) = rails dark = every step legal, so free steering
+  // and the next-spawn pre-positioning keep working.
+  it('lateral legality: contacts refuse steps into stored cells (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const relayOn = (n: number) => (g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0);
+    const ring = () => Array.from({ length: 4 }, (_, j) => relayOn(POSS(j)));
+    const quiet = () => expect(g.m.getState().alerts).toEqual([]);
+    const wid = (on: boolean) =>
+      g.m.setSlide(TETRIS_IO.wid.slide, on ? 'right' : 'left', TETRIS_IO.wid.machine);
+
+    const model = Array(8).fill(0);
+    g.operatorWrite(3, 0b1000); // the wide-edge block at (3,3)
+    model[3] = 0b1000;
+    g.operatorWrite(5, 0b0100); // the narrow block at (5,2)
+    model[5] = 0b0100;
+    g.operatorWrite(6, 0b0001); // the left block at (6,0)
+    model[6] = 0b0001;
+
+    g.pressStart();
+    g.tick(); // spawn at row 0, home column
+    expect(g.tokenAt()).toEqual([0]);
+    g.pressBtn(TETRIS_IO.right); // pos 1: the descent column (never blocked)
+    expect(g.posAt()).toBe(1);
+    g.tick();
+    g.tick();
+    g.tick(); // token at row 3
+    expect(g.tokenAt()).toEqual([3]);
+
+    // wide right-step at row 3: cols 1,2 -> 2,3 puts the right edge on the
+    // stored (3,3). The contacts must refuse; the ring must SURVIVE the
+    // refused press's release window intact (the changeover, not a block)
+    wid(true);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'wide step into the stored right edge refused').toBe(1);
+    expect(ring(), 'the refused press left the one-hot intact').toEqual([0, 1, 0, 0]);
+    quiet();
+    // narrow: the same target column is free at this row
+    wid(false);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'narrow step to column 2 is legal at row 3').toBe(2);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'and back').toBe(1);
+    quiet();
+
+    g.tick(); // row 4 — nothing stored anywhere on it
+    expect(g.tokenAt()).toEqual([4]);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt()).toBe(2);
+    // the wall in contacts: wide at pos 2 has no column 4 to enter
+    wid(true);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'wide into the wall refused by the contacts').toBe(2);
+    expect(ring()).toEqual([0, 0, 1, 0]);
+    quiet();
+    wid(false);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'narrow into column 3 is legal on a clean row').toBe(3);
+    g.pressBtn(TETRIS_IO.left);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt()).toBe(1);
+    quiet();
+
+    g.tick(); // row 5: (5,2) blocks the right step now
+    expect(g.tokenAt()).toEqual([5]);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'narrow step into the stored (5,2) refused').toBe(1);
+    expect(ring()).toEqual([0, 1, 0, 0]);
+    quiet();
+
+    g.tick(); // row 6: (6,0) blocks the left step
+    expect(g.tokenAt()).toEqual([6]);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'left step into the stored (6,0) refused').toBe(1);
+    quiet();
+
+    g.tick(); // row 7: merged landing + lock at (7,1)
+    model[7] = 0b0010;
+    expect(g.field(), 'the survivor locks where it was steered').toEqual(model);
+    // post-lock, pre-reset: row 7 has no legality row — steps stay free
+    // (the piece is already written; a step only pre-positions the next)
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'post-lock steps are unrestricted').toBe(2);
+    quiet();
+    g.tick(); // reset re-homes
+    expect(g.tokenAt()).toEqual([]);
+    expect(g.posAt()).toBe(0);
+    expect(g.field()).toEqual(model);
     quiet();
   });
 
@@ -961,41 +1084,65 @@ describe('Multivac: mini-tetris (42 machines)', () => {
   // cells are absorbed. The only way a row vanishes is completing it — and
   // with no row collapse in this rung the rows above stay floating, which
   // is easy to read as a glitch on the page.
-  it('steer-into-overlap: absorbed by the OR-write, rows vanish only by completion (both engines)', { timeout: 1800000 }, () => {
+  // the live-play report (2026-08-20) was a piece steered sideways INTO an
+  // already-placed cell, absorbed by the OR-write. That exact move is now
+  // REFUSED BY THE CONTACTS (the increment-2 legality changeovers) — the
+  // report's scenario survives here as the refusal receipt. The ONE
+  // remaining overlap seam is the WID slide reshape (a slide cannot be
+  // electrically refused; the page guards it): its overlap is absorbed by
+  // the OR-write, and rows still vanish only by completion.
+  it('steer-into-overlap: refused by the contacts; the reshape seam still ORs (fast)', { timeout: 1800000 }, () => {
     for (const engine of ['fast'] as const) {
       setSolverEngine(engine);
       const g = makeGame();
       const model = Array(8).fill(0);
+      g.operatorWrite(7, 0b0100); // (7,2): the floor the widened pair rests on
+      model[7] = 0b0100;
+      g.operatorWrite(6, 0b0100); // (6,2): the stored cell the reshape overlaps
+      model[6] = 0b0100;
       g.pressStart();
-      dropPiece(g, 0b0001, model, `${engine}: col 0 to the floor`);
-      dropPiece(g, 0b0001, model, `${engine}: col 0 stacks`);
-      // third piece falls in col 1, then steers LEFT into the stack's top
-      // cell at its own row — the reported move
+
+      // the reshape seam first, on the clean columns: hover a narrow piece
+      // at row 6 (nothing below col 1), widen the WID slide (no contact
+      // can refuse a slide) — the pre-armed collide locks the pair IN
+      // PLACE through the stored (6,2), and the OR-write absorbs it
       g.setColumn(1);
       g.tick(); // spawn
       expect(g.tokenAt()).toEqual([0]);
-      for (let r = 1; r <= 6; r++) {
-        g.tick();
-        expect(g.tokenAt(), `${engine}: falling beside the stack`).toEqual([r]);
-      }
-      g.setColumn(0); // overlap cell(6,0); cell(7,0) below pre-arms collide
-      g.tick(); // pure lock at row 6: old | mask — the overlap is absorbed
-      expect(g.tokenAt(), `${engine}: locked at 6`).toEqual([6]);
-      expect(g.field(), `${engine}: overlap lock changed nothing`).toEqual(model);
+      for (let r = 1; r <= 6; r++) g.tick();
+      expect(g.tokenAt(), `${engine}: hovering at the seam row`).toEqual([6]);
+      g.m.setSlide(TETRIS_IO.wid.slide, 'right', TETRIS_IO.wid.machine); // widen: cols 1,2
+      g.tick(); // (7,2) blocks the pair: pure lock at 6, 0b0110 over the stored 0b0100
+      model[6] |= 0b0110;
+      expect(g.field(), `${engine}: the reshape overlap is absorbed by the OR-write`).toEqual(model);
+      g.tick(); // reset (re-homes the register)
+      g.m.setSlide(TETRIS_IO.wid.slide, 'left', TETRIS_IO.wid.machine);
+      expect(g.tokenAt()).toEqual([]);
+
+      // the reported live-play move: a piece beside stored content steered
+      // INTO it — now refused by the legality changeovers
+      dropPiece(g, 0b0001, model, `${engine}: col 0 to the floor`);
+      dropPiece(g, 0b0001, model, `${engine}: col 0 stacks`); // row 6 now 0b0111
+      g.setColumn(3);
+      g.tick(); // spawn
+      for (let r = 1; r <= 6; r++) g.tick();
+      expect(g.tokenAt(), `${engine}: hovering beside the stored row`).toEqual([6]);
+      g.pressBtn(TETRIS_IO.left); // into (6,2) — the reported move
+      expect(g.posAt(), `${engine}: the reported move is refused in contacts`).toBe(3);
+      expect(g.field(), `${engine}: the refusal changed nothing`).toEqual(model);
+      expect(g.m.getState().alerts).toEqual([]);
+      g.tick(); // merged landing + lock at the floor, still col 3
+      model[7] |= 0b1000;
+      expect(g.field(), `${engine}: locked where the contacts left it`).toEqual(model);
       g.tick(); // reset
       expect(g.tokenAt()).toEqual([]);
-      // the game continues; nothing may vanish while no row completes
-      dropPiece(g, 0b0010, model, `${engine}: col 1`);
-      dropPiece(g, 0b0100, model, `${engine}: col 2`);
-      expect(g.row(7), `${engine}: floor row intact`).toBe(0b0111);
-      expect(g.row(6), `${engine}: stacked row intact`).toBe(0b0001);
-      // now complete row 6: fill it to one hole and drop into that hole
-      // (the piece collides at 6 because row 7 holds its column)
-      g.operatorWrite(6, 0b1100);
-      model[6] = 0b1101;
-      dropPiece(g, 0b0010, model, `${engine}: completes row 6`);
+      expect(g.row(6), `${engine}: nothing vanished without completion`).toBe(0b0111);
+
+      // completion is still the only way a row dies: (7,3) is stored now,
+      // so a col-3 drop rests at row 6 and completes it; clear + collapse
+      dropPiece(g, 0b1000, model, `${engine}: completes row 6`);
       expect(g.row(6), `${engine}: row 6 vanished by completion`).toBe(0);
-      expect(g.row(7), `${engine}: floor row survives the clear above it`).toBe(0b0111);
+      expect(g.row(7), `${engine}: floor row survives the clear above it`).toBe(0b1101);
     }
   });
 

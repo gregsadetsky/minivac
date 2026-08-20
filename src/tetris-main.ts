@@ -8,9 +8,9 @@
  * ring steps (edge presses self-loop); this page no longer knows where
  * the piece is, it asks. Everything the game decides (falling, landing,
  * stacking, line clears, the two-row vertical write, the row collapse
- * that walks the stack down after a clear) happens inside the 245-relay
+ * that walks the stack down after a clear) happens inside the 267-relay
  * circuit; the page only works the tick/shape slides, the LEFT/RIGHT
- * buttons and START — exactly what a human at 42 real Minivacs would do.
+ * buttons and START — exactly what a human at 46 real Minivacs would do.
  * After a lock the machine owes itself bookkeeping ticks (the vertical
  * phase-2 write, then the reset, which also re-homes the register); the
  * page runs those automatically while the LOCKED slave is up, which also
@@ -41,7 +41,7 @@ root.innerHTML = `
   <div style="text-align:center;padding:24px">
     <h1 style="font-size:16px;font-weight:600;letter-spacing:.06em;color:#e8e2d0;margin:0 0 4px">
       multivac tetris</h1>
-    <div style="color:#7a828c;margin-bottom:18px">245 relays / ${MACHINES} minivacs — pure wiring</div>
+    <div style="color:#7a828c;margin-bottom:18px">267 relays / ${MACHINES} minivacs — pure wiring</div>
     <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center;margin-bottom:6px"></div>
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
@@ -94,7 +94,7 @@ function relay(loc: { machine: number; index: number }): boolean {
 }
 
 // the piece's column lives in the machine: the position register's
-// one-hot slaves (dark until the first START seeds them)
+// one-hot slaves (seeded at the home column from power-on)
 function posAt(): number {
   for (let j = 0; j < COLS; j++) if (relay(TETRIS_IO.posRelay(j))) return j;
   return -1;
@@ -121,12 +121,15 @@ function rowCells(r: number): number {
   return n;
 }
 
-// the register steps on any button press — lateral LEGALITY isn't in the
-// contacts yet (that's the next increment: the step's D-path gated by
-// "target column free at the token row"), so moving or reshaping into
-// stored cells would overlap them (benign for the data: the lock is an
-// OR-write; wrong as tetris). Until then, like the Enter guard below,
-// the page plays the disciplined 1961 operator and refuses the keypress.
+// lateral legality lives IN THE CONTACTS now: the step's D-tap runs
+// through a LEGINV changeover reading "target column occupied at the
+// token row", so the machine itself refuses sideways moves into stored
+// cells (the page just presses the button and reads back whether the
+// register stepped). This JS check remains for exactly two seams: the
+// ArrowUp RESHAPE (changing width/tallness isn't a machine step — the
+// slides can't be electrically refused) and a TALL piece's TOP cell
+// (the legality network reads the token's own row only; the top row's
+// check arrives with increment 3's full piece register).
 function wouldOverlap(nPos: number, nWidth: number, nTall: boolean): boolean {
   const tok = tokenRow();
   if (tok < 0) return false;
@@ -162,14 +165,14 @@ function render(note?: string) {
 
 // the solve is synchronous (~10ms per solve under 'fast'; a tick is ~70-100ms
 // at 25 machines), so interactions paint a "settling" note first
-function act(label: string, fn: () => void) {
+function act(label: string, fn: () => string | void) {
   if (busy) return;
   busy = true;
   status.textContent = `${label} — relays settling…`;
   setTimeout(() => {
-    fn();
+    const note = fn();
     busy = false;
-    render();
+    render(note ?? undefined);
   }, 15);
 }
 
@@ -185,18 +188,27 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     if (busy) return;
     const p = posAt();
-    if (p < 0) return; // the register is dark until the first START
-    // the ring self-loops at columns 0 and 3; the wide piece's right edge
-    // is a page clamp for now (the register doesn't know the width — the
-    // legality increment folds it in via WIDM)
-    const next = Math.min(COLS - width, Math.max(0, p + (e.key === 'ArrowRight' ? 1 : -1)));
+    if (p < 0) return;
+    const dir = e.key === 'ArrowRight' ? 1 : -1;
+    // the machine decides: the wall and stored cells refuse in contacts
+    // (the ring self-loops at the edges; wide-into-the-wall is the WIDM4
+    // gate). The page skips only the obvious no-ops, checks the tall-top
+    // seam, then presses and reads back whether the register stepped.
+    const next = Math.min(COLS - width, Math.max(0, p + dir));
     if (next === p) return;
-    if (wouldOverlap(next, width, tall)) {
-      render('blocked — the stack is in the way');
-      return;
+    const tok = tokenRow();
+    if (tall && tok > 0) {
+      const m = (width === 2 ? 0b11 : 0b1) << next;
+      for (let j = 0; j < COLS; j++) {
+        if (((m >> j) & 1) === 1 && relay(TETRIS_IO.cellRelay(tok - 1, j))) {
+          render('blocked — the stack is in the way (top row)');
+          return;
+        }
+      }
     }
     act(`column ${next}`, () => {
-      press(e.key === 'ArrowRight' ? TETRIS_IO.right : TETRIS_IO.left);
+      press(dir > 0 ? TETRIS_IO.right : TETRIS_IO.left);
+      if (posAt() === p) return 'blocked — the contacts refused the step';
     });
   } else if (e.key === 'ArrowUp') {
     // cycle 1x1 -> 2 wide -> 2 tall -> 2x2 (tall = the VMODE slide: the
@@ -221,7 +233,10 @@ document.addEventListener('keydown', e => {
       return;
     }
     act('shape', () => {
-      if (nPos < p) press(TETRIS_IO.left); // widening at the wall: step in first
+      if (nPos < p) {
+        press(TETRIS_IO.left); // widening at the wall: step in first
+        if (posAt() !== nPos) return 'blocked — no room for that shape here';
+      }
       width = nWidth;
       tall = nTall;
       applyShape();
