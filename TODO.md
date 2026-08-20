@@ -52,3 +52,13 @@
 - can you drag a cable from one emulated minivac window to another window....???
   - (at that point, would rather have multiple minivacs in the same window and the ability to zoom out and connect them all)
 - connect "external" devices: 5 relays or lights interpreted as baudot code? ability to send over the wire? or to receive? over https? show "keyboard", when typing, 5 relays are set to that? or show 5 lights... as pixels? only relevant if multiple minivacs to create mini dislpay?
+
+## perf note (2026-08-20, user-observed)
+- ~7s from line-contact to settled: ~36-40 owed ticks x 2 solves each at
+  ~70-90ms/solve in-browser (620 relays). theater is gone (16ms/tick);
+  this is SOLVE time. lever = pivot-order reuse in the fast engine (the
+  sparsity pattern never changes between wirings — compute the
+  elimination order once, replay numerically). validation per user:
+  new-fast vs current-fast AND dense on the 5/50/500/5000 ladder + full
+  suite under fast + the standing sweep; original sparse spot-checked
+  on ~100 cases only.
