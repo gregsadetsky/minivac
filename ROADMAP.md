@@ -524,10 +524,30 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    ladder becomes an occasional overnight receipt. 335fb7f (game over +
    score ring + staggered pieces + page S/Z) deployed to main on the
    green scenario receipt.
-   NEXT: 3b-4c — the overhang trio (L2/J2/T2: 3-wide TOPS, offset single
-   bottoms — BCUT suppresses the base column, a TT rail drives triple
-   tops, their transitions and legality classes). design in
-   _notes/shapes-design.md.
+   THE OVERHANG TRIO (3b-4c) LANDED same session — THE 2-ROW BOX IS
+   COMPLETE: L2/J2/T2 (the 180-degree forms: 3-wide tops over offset
+   single bottoms) joined the ring, which now holds every orientation of
+   the family — TWELVE states, all reshapes rotations, all in contacts.
+   the bottom machinery generalized with ONE new idea each: a single
+   BCUT contact ahead of the chained POSS arms suppresses the base
+   column (one-hot slaves make the shared arm net legal — a fan-out that
+   is finally NOT a tie-point trap), L2's bottom rides the WID3 tap
+   alone, T2's the WIDM tap, J2 keeps the plain base. the legality
+   surprise: the UNGATED bottom check false-refuses L2/T2 (their target
+   bottoms exclude the checked column) — three trees gained an OVR
+   bypass changeover on the same L2|T2 signal, their true bottoms read
+   as gated hops, and several of those are PROVABLY unreachable in play
+   (the notch machinery rests the piece before the state can exist) —
+   wired anyway, belt and braces. the wrap transition gained its first
+   delta check. two lessons repeated until learned: the ret-group count
+   must include the tree's own refusals, and EVERY ring accessor must
+   know all three index blocks (the walk test caught states 9-11 reading
+   pos mirrors as two-hot-at-boot). receipts: the 12-state walk, L2+J2
+   locks stacked on each other's stems, T2 steering refused-then-allowed
+   under a tower, file/check/playwright green. 502 relays / 85 machines.
+   NEXT: deploy the whole ring arc once the restructured receipts land;
+   then the ladder's next rungs — the canvas multivac viewer, column
+   scaling (a wider well), or capacitor-timed self-ticking.
 
 ## display/input notes
 
