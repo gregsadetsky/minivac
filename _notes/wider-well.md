@@ -199,6 +199,22 @@ diff the spend per source family.
   VMODEM(3); left-0 rides VMODEM(2).set2 — request order in tree order
   reproduces the hand map exactly, so the SET gate must hold).
 
+## pilot outcome + strategy (14:55Z)
+
+VMODEM is MirrorBank-managed (commit ab5472a): 8 requests in hand order,
+wire-multiset identical at both geometries, ledger identical, walk test
+green. the splice-tail nuance held (ring-state union enters at the
+chain tail's E jack — the bank mints the same wires, the splice lands
+on the same net).
+
+DECISION: no more hand-order bank conversions — the plumbing is proven,
+and the step-tree emitter will reassign sets anyway (its request order
+is emitter order, gated behaviorally per the C gate). next unit: the
+step-tree emitter — generate the right/wall/left trees from the check
+table's (db,dt) offsets + bounds, requesting sets from MirrorBanks,
+first reproducing behavior at cols=4 (suite + driver + dense batch),
+then unlocking 5/6.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
