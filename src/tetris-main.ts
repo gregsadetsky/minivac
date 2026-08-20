@@ -2,11 +2,12 @@
  * multivac mini-tetris — the minimal viewer. No minivac drawings: just the
  * playfield as big pixels and a keyboard wired to the machine's inputs.
  * The pixels ARE relay armatures: each cell reads a field-cell relay, the
- * falling piece reads the token ring's slaves, and the piece's COLUMN
- * reads the position register's slaves — steering is machine state now:
- * the arrow keys press momentary LEFT/RIGHT buttons and a one-hot relay
- * ring steps (edge presses self-loop); this page no longer knows where
- * the piece is, it asks. Everything the game decides (falling, landing,
+ * falling piece reads the token ring's slaves, the piece's COLUMN reads
+ * the position register's slaves, and since the shape ring (3b-3a) the
+ * piece's SHAPE reads a 6-state one-hot ring stepped by the UP button —
+ * steering AND reshaping are machine state: this page no longer knows
+ * where the piece is or what shape it has, it asks. Everything the game
+ * decides (falling, landing,
  * stacking, line clears, the two-row vertical write, the row collapse
  * that walks the stack down after a clear) happens inside the circuit —
  * now the 12-ROW WELL: the generator is rows-parameterized (rung 11); the
@@ -40,10 +41,10 @@ const loc = (n: number) => ({ machine: Math.floor(n / 6), index: n % 6 });
 const IO = {
   tick: { slide: 5, machine: 1 },
   start: { button: 6, machine: 1 },
-  vmode: { slide: (L.VMODE % 6) + 1, machine: Math.floor(L.VMODE / 6) },
-  wid: { slide: 5, machine: btnMachine },
   left: { button: 3, machine: btnMachine },
   right: { button: 4, machine: btnMachine },
+  up: { button: 2, machine: btnMachine },
+  shapeRelay: (i: number) => loc(L.SHR(i, 2)),
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
   gameOverRelay: loc(L.GAMEOVER),
@@ -100,10 +101,11 @@ for (let j = 0; j < COLS; j++) {
 document.getElementById('dump')!.textContent =
   `${wires.length} wires, ${L.machines} machines\n\n` + wires.join('\n');
 
-// the shape set: flat/tall rectangles + the staggered S and Z (whose top
-// pair shifts one column off the bottom pair — the machine's TOPMASK
-// slides + STAG mode, shapes rung 3b). stag: -1 = top shifted left (S),
-// +1 = shifted right (Z), 0 = symmetric.
+// the shape set — a page-side MIRROR of the machine's shape ring states
+// (3b-3a): the shape itself is machine state now, a 6-state one-hot ring
+// stepped by the UP button, and this array just gives each state its
+// label and render geometry. Order MUST match the ring. stag: -1 = top
+// pair shifted left (S), +1 = right (Z), 0 = symmetric.
 const SHAPES = [
   { label: '1x1', w: 1, tall: false, stag: 0 },
   { label: '2 wide', w: 2, tall: false, stag: 0 },
@@ -112,8 +114,12 @@ const SHAPES = [
   { label: 'S', w: 2, tall: true, stag: -1 },
   { label: 'Z', w: 2, tall: true, stag: 1 },
 ] as const;
-let shapeIx = 0;
-const shape = () => SHAPES[shapeIx];
+// the selected shape lives IN THE RELAYS (like the position): read it back
+function shapeAt(): number {
+  for (let i = 0; i < SHAPES.length; i++) if (relay(IO.shapeRelay(i))) return i;
+  return 0;
+}
+const shape = () => SHAPES[shapeAt()];
 const width = () => shape().w;
 const tall = () => shape().tall;
 let busy = true;
@@ -179,9 +185,11 @@ function topMask(): number {
   if (p < 0 || !tall()) return 0;
   const st = shape().stag;
   if (st === 0) return mask();
-  // p+st can dip below 0 transiently right after a reset re-homes the
-  // register (the operator steps back in bounds before the next spawn)
-  return p + st < 0 ? 0 : (0b11 << (p + st)) & 0b1111;
+  // out-of-bounds = EMPTY top, mirroring the machine's T fan exactly (its
+  // invalid-pos branches are omitted); happens transiently after a reset
+  // re-homes the register, before the operator steps back in bounds
+  const sh = p + st;
+  return sh < 0 || sh > 2 ? 0 : (0b11 << sh) & 0b1111;
 }
 
 function press(b: { button: number; machine: number }) {
@@ -211,11 +219,11 @@ function rowCells(r: number): number {
 // token row / one row above it", so the machine itself refuses sideways
 // moves into stored cells — bottom AND top cell of a tall piece, wide
 // edges included (the page just presses the button and reads back
-// whether the register stepped). This JS check remains for TWO seams
-// until the shape ring (3b-3): the ArrowUp RESHAPE (a slide flip cannot
-// be electrically refused) and the STAGGERED top pair (the legality
-// trees read the top row per the bottom mask's columns; an S/Z top pair
-// enters a different column).
+// whether the register stepped). This JS check remains for TWO seams:
+// the ArrowUp RESHAPE (the shape ring steps unconditionally until 3b-3c
+// gates the UP path in contacts) and the STAGGERED top pair (the
+// legality trees read the top row per the bottom mask's columns; an S/Z
+// top pair enters a different column — 3b-3b re-gates them).
 function wouldOverlap(nPos: number, nIx: number): boolean {
   const s = SHAPES[nIx];
   const tok = tokenRow();
@@ -276,24 +284,11 @@ function act(label: string, fn: () => string | void) {
   }, 15);
 }
 
-function applyShape() {
-  const w = IO.wid;
-  sim.setSlide(w.slide, width() === 2 ? 'right' : 'left', w.machine);
-  const v = IO.vmode;
-  sim.setSlide(v.slide, tall() ? 'right' : 'left', v.machine);
-  // the staggered slides are ABSOLUTE columns: recompute from the live
-  // register position every time the shape or position changes
-  const st = shape().stag;
-  sim.setSlide(6, st !== 0 ? 'right' : 'left', btnMachine); // STAG
-  const t = st !== 0 ? topMask() : 0;
-  for (let j = 0; j < COLS; j++) sim.setSlide(j + 1, (t >> j) & 1 ? 'right' : 'left', btnMachine);
-}
-
 // after a lock the reset tick re-homes the register to column 0 — out of
 // bounds for a staggered shape (S needs pos>=1). The operator steps the
 // fresh position back in bounds BEFORE the next spawn (pre-spawn steps
-// are legal: no token, the legality rails read empty) and re-syncs the
-// absolute TOPMASK columns.
+// are legal: no token, the legality rails read empty). Nothing else to
+// sync: the machine's T fan follows the register by itself.
 function resyncPiece() {
   let cur = posAt();
   let guard = 0;
@@ -305,7 +300,6 @@ function resyncPiece() {
     press(IO.left);
     cur = posAt();
   }
-  applyShape();
 }
 
 document.addEventListener('keydown', e => {
@@ -346,15 +340,18 @@ document.addEventListener('keydown', e => {
     act(`column ${next}`, () => {
       press(dir > 0 ? IO.right : IO.left);
       if (posAt() === p) return 'blocked — the contacts refused the step';
-      if (st !== 0) applyShape(); // the TOPMASK slides are absolute columns
+      // nothing to re-sync: the machine's T fan follows the register
     });
   } else if (e.key === 'ArrowUp') {
-    // cycle the shape set (the last two are the staggered S and Z: their
-    // top pair rides the TOPMASK slide bank + STAG mode, shapes rung 3b)
+    // step the SHAPE RING — a machine button, exactly like LEFT/RIGHT:
+    // the one-hot ring advances 1x1 -> 2wide -> 2tall -> 2x2 -> S -> Z and
+    // wraps; WID/VMODE/STAG and the whole top-mask bank derive from ring
+    // contacts. The page only pre-checks the fit (the overlap guard and
+    // the bounds clamp stay JS until 3b-3c refuses the UP in contacts).
     if (busy) return;
     const p = posAt();
     if (p < 0) return;
-    const nIx = (shapeIx + 1) % SHAPES.length;
+    const nIx = (shapeAt() + 1) % SHAPES.length;
     const ns = SHAPES[nIx];
     const nMin = ns.stag < 0 ? 1 : 0;
     const nMax = COLS - ns.w + (ns.stag > 0 ? -1 : 0);
@@ -375,8 +372,8 @@ document.addEventListener('keydown', e => {
         cur = stepped;
       }
       if (cur !== nPos) return 'blocked — no room for that shape here';
-      shapeIx = nIx;
-      applyShape();
+      press(IO.up);
+      if (shapeAt() !== nIx) return 'the ring did not step (unexpected)';
     });
   } else if (e.key === 'ArrowDown' || e.key === ' ') {
     // one tick — plus however many the machine owes itself afterwards: a
@@ -441,7 +438,7 @@ document.addEventListener('keydown', e => {
 setTimeout(() => {
   sim = new MinivacSimulator(wires, false, L.machines);
   sim.initialize();
-  applyShape();
+  // nothing to apply: the shape ring seeds at 1x1, the slides stay parked
   busy = false;
   render('ready — press enter to spawn a piece');
 }, 30);
