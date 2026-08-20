@@ -199,6 +199,32 @@ export const ZG = (k: number) => 389 + k; // Z mirrors: ZG(0,1) = NOT-Z coil gat
 // them; position first, then reshape: the transition network gates the
 // entry at pos {0,1} and reads the delta cells).
 export const NSTATES = 12; // ring states (the page's cycle length)
+// the shape set — geometry per ring state as (bottom offset/width, top
+// offset/width): the bottom row sits at register position p+bOff, the
+// top at p+tOff. Order MUST match the ring (the L/J/T triples appended
+// in 3b-4a, their 180-degree overhang forms in 3b-4c). SINGLE SOURCE OF
+// TRUTH: the page renders from it and the wider-well emitter derives
+// its step/reshape check tables from it (_notes/wider-well.md).
+export const SHAPES = [
+  { label: '1x1', bOff: 0, bW: 1, tOff: 0, tW: 0 },
+  { label: '2 wide', bOff: 0, bW: 2, tOff: 0, tW: 0 },
+  { label: '2 tall', bOff: 0, bW: 1, tOff: 0, tW: 1 },
+  { label: '2x2 square', bOff: 0, bW: 2, tOff: 0, tW: 2 },
+  { label: 'S', bOff: 0, bW: 2, tOff: -1, tW: 2 },
+  { label: 'Z', bOff: 0, bW: 2, tOff: 1, tW: 2 },
+  { label: 'L', bOff: 0, bW: 3, tOff: 0, tW: 1 },
+  { label: 'J', bOff: 0, bW: 3, tOff: 2, tW: 1 },
+  { label: 'T', bOff: 0, bW: 3, tOff: 1, tW: 1 },
+  { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3 },
+  { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3 },
+  { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3 },
+] as const;
+if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
+// legal register positions for a shape at a given width (both rows fit)
+export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
+  min: Math.max(0, -s.bOff, s.tW > 0 ? -s.tOff : 0),
+  max: Math.min(cols - s.bOff - s.bW, s.tW > 0 ? cols - s.tOff - s.tW : cols),
+});
 export const SHR2 = (i: number, part: number) => 415 + 3 * (i - 6) + part; // states 6..8: clk, master, slave (415..423)
 export const MMIR2 = (i: number) => 424 + (i - 6); // into-6..8 transition gates (424..426)
 // POSM5 set map (7 pos0 + 7 pos1 uses): k=0 B-fan PIECE(2) + T-fan L1;

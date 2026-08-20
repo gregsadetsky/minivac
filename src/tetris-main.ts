@@ -25,7 +25,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, NSTATES } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES } from './circuits/multivac-mini-tetris';
 
 // the 'fast' engine: typed-array rewrite of the sparse solver, validated
 // against the dense oracle on 5000 random circuits (zero mismatches, max
@@ -105,29 +105,9 @@ for (let j = 0; j < COLS; j++) {
 document.getElementById('dump')!.textContent =
   `${wires.length} wires, ${L.machines} machines\n\n` + wires.join('\n');
 
-// the shape set — a page-side MIRROR of the machine's shape ring states:
-// a 12-state one-hot ring stepped by the UP button; this array just
-// gives each state its label and render geometry as (bottom offset and
-// width, top offset and width) — the bottom row sits at the register
-// position p+bOff, the top at p+tOff. Order MUST match the ring: the
-// L/J/T triples appended in 3b-4a, their 180-degree OVERHANG forms
-// (3-wide tops over offset single bottoms) in 3b-4c; every 2-row-box
-// orientation of the family is here.
-const SHAPES = [
-  { label: '1x1', bOff: 0, bW: 1, tOff: 0, tW: 0 },
-  { label: '2 wide', bOff: 0, bW: 2, tOff: 0, tW: 0 },
-  { label: '2 tall', bOff: 0, bW: 1, tOff: 0, tW: 1 },
-  { label: '2x2 square', bOff: 0, bW: 2, tOff: 0, tW: 2 },
-  { label: 'S', bOff: 0, bW: 2, tOff: -1, tW: 2 },
-  { label: 'Z', bOff: 0, bW: 2, tOff: 1, tW: 2 },
-  { label: 'L', bOff: 0, bW: 3, tOff: 0, tW: 1 },
-  { label: 'J', bOff: 0, bW: 3, tOff: 2, tW: 1 },
-  { label: 'T', bOff: 0, bW: 3, tOff: 1, tW: 1 },
-  { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3 },
-  { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3 },
-  { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3 },
-] as const;
-if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
+// the shape set lives in the circuit file now (single source of truth
+// with the ring order and the wider-well emitter); the page only renders
+// its labels and geometry.
 // the selected shape lives IN THE RELAYS (like the position): read it back
 function shapeAt(): number {
   for (let i = 0; i < SHAPES.length; i++) if (relay(IO.shapeRelay(i))) return i;
