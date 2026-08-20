@@ -622,8 +622,40 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    the step-tree emitter and the FAN emitters landed behaviorally
    green at 4 (file 32); the UP-transition emitter remains, then the
    cols=6 flip.
-   NEXT: deploy gravity + wider-well prep on the sweep receipt; then
-   the UP-transition emitter and cols=6.
+   THE DOUBLE CLEAR (CLEARP2) LANDED 2026-08-20, late session — a
+   LIVE-GAME BUG the user hit within hours of the gravity deploy: a
+   vertical lock completing BOTH its rows cleared only the token row,
+   and the leftover full row was PERMANENT (clear sensing rode the
+   rails = token row only; the clear/collapse select rows via the
+   token, which dies at the reset; nothing can ever lock inside a full
+   row again). the fix followed a clean-context design review that
+   REFUTED three parts of my first plan (line-verified): no new phase
+   tick is needed (the bottom clear itself works by holding the breaker
+   rail from mid-press — the 'fires at reset' comment was stale), the
+   sensing rides the PHASE-2 rails (a mask-OR chain under-senses
+   symmetric verticals), and the collapse runs ONE two-hot walk (the
+   elevator chain is already a shift register: seed masters r and r-1
+   and the pair copies rows down by TWO, with a one-tick duplicate the
+   beta wave kills — trace-verified in the sim before wiring; same
+   tick cost as a single walk, so the page cap stands). the score grew
+   a two-pulse clock (the old feed was electrically CLEARP's com — a
+   parallel pulse would have false-re-latched it) with a CAUSAL latch
+   (P2SM2) whose release is downstream of the CLEARP mirror's fall —
+   the raw two-term gate raced at the reset and scored singles twice,
+   caught by the driver's step-exact game, which also model-checks the
+   whole double-clear scenario pixel-by-pixel now. top-only completions
+   (the review's catch) clear and score too; SCBOOT latches away on
+   them (its coil node is the E jack, not the com — found the hard
+   way). the old 'top-full stays' test encoded the bug as intended
+   behavior and is rewritten. receipts: the failing test flipped, the
+   top-only test, the vertical suite under the NEW semantics, the
+   whole clear battery green under the dense oracle too (the two-hot
+   alpha is an electrical first: one hold contact feeding three
+   parallel coils), driver end to end incl. the double-clear scenario.
+   ~14 relays.
+   NEXT: deploy the gravity correction + wider-well prep + the double
+   clear on the sweep receipt; then cols=6 (the MIRB collision-mirror
+   bank is the known blocker) and the rotation-group rung.
 
 ## display/input notes
 

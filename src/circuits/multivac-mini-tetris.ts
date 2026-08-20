@@ -1,7 +1,10 @@
 /**
- * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b + 10 + the
- * piece register): 4x8 field, gravity + stacking + line clear + row
- * collapse in pure relay wiring — 289 relays across 50 machines. The
+ * The mini-tetris multivac circuit (roadmap rungs 7 through the shape
+ * ring, the emitters and the double clear): rows x cols field, gravity +
+ * stacking + line clears (double included) + row collapse in pure relay
+ * wiring. Sizes are LAYOUT-COMPUTED — never trust a hand-written count
+ * here; ask tetrisLayout(rows, cols).relays/.machines (the 8-row default
+ * is exported as L8 and every constant below derives from it). The
  * piece's COLUMN is machine state: a one-hot relay ring stepped by
  * momentary LEFT/RIGHT buttons (sample-on-press, commit-on-release; edges
  * self-loop; every reset re-homes it), 1 or 2 wide via the WID slide, and
@@ -409,6 +412,9 @@ export interface TetrisLayout {
   ELEVSL: (t: number) => number;
   SEEDM: (t: number) => number;
   CLEARPM: number; LANE: number; TICKM3: number; TGM: number; TGS: number;
+  LINEDLY2: number; CPSET2: number; CLEARP2: number; CLEARPM2: number;
+  SCPM: number; P2SM: number; CLEARPM2B: number; CLEARPM2C: number; P2SM2: number;
+  SEEDM2: (t: number) => number;
   ELEVW1: (t: number) => number;
   ELEVW2: (t: number) => number;
   CGA: number; CGB: number; CGB2: number; CUTC1: number; CUTC2: number;
@@ -507,6 +513,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const elevBase = take(3 * (rows - 1)); // ELEVC/A/SL, t = 1..rows-1
   const seedmBase = take(rows - 1);
   const clearpmBase = take(5);
+  // the double clear (CLEARP2): sense + latch + seed-fan mirrors
+  const dcBase = take(9 + (rows - 2)); // LINEDLY2, CPSET2, CLEARP2, CLEARPM2, SCPM, P2SM, CLEARPM2b, CLEARPM2c, P2SM2, SEEDM2 x (rows-2)
   const elevwBase = take(2 * (rows - 1));
   const cgaBase = take(5); // CGA, CGB, CGB2, CUTC1, CUTC2
   const juncGap = take(rows - 3); // junction-only sections; JUNC(0) shares CUTC2's com
@@ -583,6 +591,9 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     ELEVSL: t => elevBase + 3 * (t - 1) + 2,
     SEEDM: t => seedmBase + (t - 1),
     CLEARPM: clearpmBase, LANE: clearpmBase + 1, TICKM3: clearpmBase + 2, TGM: clearpmBase + 3, TGS: clearpmBase + 4,
+    LINEDLY2: dcBase, CPSET2: dcBase + 1, CLEARP2: dcBase + 2, CLEARPM2: dcBase + 3,
+    SCPM: dcBase + 4, P2SM: dcBase + 5, CLEARPM2B: dcBase + 6, CLEARPM2C: dcBase + 7, P2SM2: dcBase + 8,
+    SEEDM2: t => dcBase + 9 + (t - 2),
     ELEVW1: t => elevwBase + 2 * (t - 1),
     ELEVW2: t => elevwBase + 2 * (t - 1) + 1,
     CGA: cgaBase, CGB: cgaBase + 1, CGB2: cgaBase + 2, CUTC1: cgaBase + 3, CUTC2: cgaBase + 4,
@@ -686,6 +697,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let t = 1; t <= 7; t++) claim('ELEVC/A/SL', ELEVC(t), ELEVA(t), ELEVSL(t));
   for (let t = 1; t <= 7; t++) claim('SEEDM', SEEDM(t));
   claim('CLEARPM/LANE/TICKM3/TGM/TGS', CLEARPM, LANE, TICKM3, TGM, TGS);
+  claim('double clear', L8.LINEDLY2, L8.CPSET2, L8.CLEARP2, L8.CLEARPM2, L8.SCPM, L8.P2SM, L8.CLEARPM2B, L8.CLEARPM2C, L8.P2SM2);
+  for (let t = 2; t < 8; t++) claim('SEEDM2', L8.SEEDM2(t));
   for (let t = 1; t <= 7; t++) claim('ELEVW1/2', ELEVW1(t), ELEVW2(t));
   claim('CGA/CGB/CGB2/CUTC/TG2', CGA, CGB, CGB2, CUTC1, CUTC2, TG2M, TG2S, CUTC3, CUTC4);
   for (let j = 0; j < 4; j++) claim('POSA', POSA(j));
@@ -767,6 +780,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     RAILGATE2, RSTM2, CPSET, VMODE, TOPW,
     P2M, P2S, P2CLR, P2GATE, P2COL, TICKM2, P2CUT, LINEDLY,
     ELEVC, ELEVA, ELEVSL, SEEDM, CLEARPM, LANE, TICKM3, TGM, TGS,
+    LINEDLY2, CPSET2, CLEARP2, CLEARPM2, SCPM, P2SM, CLEARPM2B, CLEARPM2C, P2SM2, SEEDM2,
     ELEVW1, ELEVW2, CGA, CGB, CGB2, CUTC1, CUTC2, JUNC,
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
@@ -1227,7 +1241,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   for (let x = 0; x < rows / 2; x++) {
     w.push(`${tap(p2railA, p2aUse)}/${R(P2CUT(x), 'E')}`, `${R(P2CUT(x), 'F')}/${minusOf(P2CUT(x))}`);
   }
-  const p2break = takeGroups(grown(2, 1));
+  const p2break = takeGroups(grown(3, 1)); // +1 group: CLEARP2's clear-hold tap
   const p2gate = takeGroups(grown(3, 1));
   for (const g of [p2break, p2gate]) {
     for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
@@ -1295,6 +1309,36 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   for (let t = 1; t <= rows - 1; t++) {
     w.push(`${R(RING(t, 2), 'E')}/${R(SEEDM(t), 'E')}`, `${R(SEEDM(t), 'F')}/${minusOf(SEEDM(t))}`);
     w.push(`${tap(seedFan, sfUse)}/${R(SEEDM(t), 'H')}`, `${R(SEEDM(t), 'G')}/${comOf(ELEVA(t))}`);
+  }
+
+  // ---------- the DOUBLE clear (CLEARP2) ----------
+  // the top row of a vertical lock can complete too — sensed on the
+  // PHASE-2 rails (they carry exactly row r-1's post-write content: the
+  // effective top mask through the STAGM changeover plus the stored
+  // cells' readback), latched, and cleared by HOLDING the p2break rail
+  // through the phase-2 release — the mirror of the bottom clear's
+  // mid-press hold, zero new ticks. the collapse: BOTH latches seed the
+  // elevator at the reset — masters r and r-1 — and the chain, already
+  // a shift register, walks the pair as a TWO-HOT hole: copy-down-by-
+  // two with a one-tick duplicate the beta wave kills (trace-verified
+  // in the sim before wiring). design cross-reviewed 2026-08-20.
+  w.push(`${plusOf(P2COL)}/${R(P2COL, 'H')}`, `${R(P2COL, 'G')}/${R(LINEDLY2, 'E')}`, `${R(LINEDLY2, 'F')}/${minusOf(LINEDLY2)}`);
+  w.push(`${plusOf(LINEDLY2)}/${R(LINEDLY2, 'H')}`, `${R(LINEDLY2, 'G')}/${R(LINE(0), 'L')}`);
+  for (let j = 1; j < cols; j++) w.push(`${R(LINE(j - 1), 'K')}/${R(LINE(j), 'L')}`);
+  w.push(`${R(LINE(cols - 1), 'K')}/${comOf(CPSET2)}`);
+  w.push(`${comOf(CPSET2)}/${R(CPSET2, 'E')}`, `${R(CPSET2, 'F')}/${minusOf(CPSET2)}`);
+  w.push(`${plusOf(CPSET2)}/${R(CPSET2, 'H')}`, `${R(CPSET2, 'G')}/${comOf(CLEARP2)}`);
+  w.push(`${comOf(CLEARP2)}/${R(CLEARP2, 'E')}`, `${R(CLEARP2, 'F')}/${minusOf(CLEARP2)}`);
+  w.push(`${plusOf(RSTM2)}/${R(RSTM2, 'L')}`, `${R(RSTM2, 'N')}/${R(CLEARP2, 'L')}`, `${R(CLEARP2, 'K')}/${comOf(CLEARP2)}`);
+  w.push(`${plusOf(CLEARP2)}/${R(CLEARP2, 'H')}`, `${R(CLEARP2, 'G')}/${tap(p2break, p2bUse)}`);
+  w.push(`${comOf(CLEARP2)}/${R(CLEARPM2, 'E')}`, `${R(CLEARPM2, 'F')}/${minusOf(CLEARPM2)}`);
+  const seedFan2 = takeGroups(grown(2, 1));
+  for (let i = 1; i < seedFan2.length; i++) w.push(`${seedFan2[i - 1]}/${seedFan2[i]}`);
+  const sf2Use = { n: 0 };
+  w.push(`${plusOf(CLEARPM2)}/${R(CLEARPM2, 'H')}`, `${R(CLEARPM2, 'G')}/${tap(seedFan2, sf2Use)}`);
+  for (let t = 2; t <= rows - 1; t++) {
+    w.push(`${R(SEEDM(t), 'E')}/${R(SEEDM2(t), 'E')}`, `${R(SEEDM2(t), 'F')}/${minusOf(SEEDM2(t))}`);
+    w.push(`${tap(seedFan2, sf2Use)}/${R(SEEDM2(t), 'H')}`, `${R(SEEDM2(t), 'G')}/${R(ELEVA(t - 1), 'E')}`);
   }
 
   // ---------- row collapse C2: the tick lane + the alpha/beta toggle ----
@@ -2037,7 +2081,29 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // pulse and the seed line goes dead mid-pulse, exactly before the
   // clock-fall hold would have re-caught digit 0.
   const scrClkCom = (i: number) => comOf(SCR(i, 0));
-  w.push(`${R(CLEARPM, 'E')}/${scrClkCom(0)}`);
+  // the clock is fed BY CONTACT, not by the old com tie (which made the
+  // chain electrically CLEARP's com — a second pulse source would have
+  // re-latched CLEARP falsely). SCPM = CLEARP-signal AND NOT-phase-2
+  // (P2SM mirrors P2S), so the bottom clear's pulse ENDS when phase 2
+  // rises; CLEARPM2's contact carries the top clear's pulse. doubles get
+  // two full clock cycles, singles and top-onlies one each.
+  w.push(`${R(CLEARPM, 'E')}/${R(CLEARPM2B, 'E')}`, `${R(CLEARPM2B, 'F')}/${minusOf(CLEARPM2B)}`);
+  w.push(`${R(P2S, 'E')}/${R(P2SM, 'E')}`, `${R(P2SM, 'F')}/${minusOf(P2SM)}`);
+  // P2SM2 LATCHES 'phase 2 has happened' and its hold rides CLEARPM2B's
+  // own contact — its fall is DOWNSTREAM of the CLEARP mirror's fall, so
+  // the SCPM AND-gate can never transiently retrue during the reset
+  // relaxation (the raw P2SM race scored singles twice, caught by the
+  // driver's step-exact game)
+  w.push(`${plusOf(P2SM)}/${R(P2SM, 'H')}`, `${R(P2SM, 'G')}/${R(P2SM2, 'E')}`, `${R(P2SM2, 'F')}/${minusOf(P2SM2)}`);
+  w.push(`${plusOf(CLEARPM2B)}/${R(CLEARPM2B, 'L')}`, `${R(CLEARPM2B, 'K')}/${R(P2SM2, 'L')}`, `${R(P2SM2, 'K')}/${R(P2SM2, 'E')}`);
+  w.push(`${plusOf(CLEARPM2B)}/${R(CLEARPM2B, 'H')}`, `${R(CLEARPM2B, 'G')}/${R(P2SM2, 'H')}`);
+  w.push(`${R(P2SM2, 'J')}/${R(SCPM, 'E')}`, `${R(SCPM, 'F')}/${minusOf(SCPM)}`);
+  w.push(`${plusOf(SCPM)}/${R(SCPM, 'H')}`, `${R(SCPM, 'G')}/${scrClkCom(8)}`);
+  w.push(`${plusOf(CLEARPM2)}/${R(CLEARPM2, 'L')}`, `${R(CLEARPM2, 'K')}/${scrClkCom(0)}`); // com(0)'s hole freed by the removed tie
+  // SCBOOT must latch away on a TOP-ONLY first clear too (CLEARPM's own
+  // set only covers bottom clears): CLEARPM2C parallels CLEARP2's com
+  w.push(`${R(CLEARPM2, 'E')}/${R(CLEARPM2C, 'E')}`, `${R(CLEARPM2C, 'F')}/${minusOf(CLEARPM2C)}`);
+  w.push(`${plusOf(CLEARPM2C)}/${R(CLEARPM2C, 'H')}`, `${R(CLEARPM2C, 'G')}/${R(SCBOOT, 'G')}`); // E is full and the com is NOT the coil node here — the G jack's permanent tie to E carries the feed
   for (let i = 2; i < 10; i += 2) w.push(`${scrClkCom(i - 2)}/${scrClkCom(i)}`);
   for (let i = 0; i < 10; i++) {
     const c = SCR(i, 0), a = SCR(i, 1), sl = SCR(i, 2);

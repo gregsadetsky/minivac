@@ -310,10 +310,9 @@ function collapseTicks(
 // the bottom-row write are dropPiece's rhythm exactly; then one extra tick —
 // phase 2 — writes row rest-1 through the TOPW mirrors while the token
 // still selects the row, and the reset runs a tick late. A line completed
-// by the BOTTOM write clears as usual; one completed by the TOP write does
-// NOT (the clear machinery is token-row-addressed and the LINE chain is
-// rail-A-rooted) — a documented limit of this rung, pinned by the tests;
-// the field-scaling rung's row collapse replaces the clear machinery anyway.
+// by the BOTTOM write clears as usual; one completed by the TOP write
+// clears too since the double-clear rung (CLEARP2 senses the phase-2
+// rails and holds the p2break rail through the release).
 function dropVertical(
   g: ReturnType<typeof makeGame>,
   mask: number,
@@ -346,13 +345,51 @@ function dropVertical(
     expect(g.field(), `${label}: field after tick to ${r}`).toEqual(model);
   }
   g.tick(); // phase 2: the top write; the token survives to select the row
-  model[rest - 1] |= mask; // NO clear here even at 15 (top-full stays)
+  model[rest - 1] |= mask;
+  let topCleared = -1;
+  if (model[rest - 1] === 15) {
+    // the double-clear rung: a completed top row's flash ends at the
+    // phase-2 RELEASE (symmetric with the bottom clear's press flash)
+    model[rest - 1] = 0;
+    topCleared = rest - 1;
+  }
   expect(g.tokenAt(), `${label}: token survives phase 2`).toEqual([rest]);
-  expect(g.field(), `${label}: top row written`).toEqual(model);
+  expect(g.field(), `${label}: top row after phase 2`).toEqual(model);
   g.tick(); // reset, one tick late
   expect(g.tokenAt(), `${label}: token gone`).toEqual([]);
   expect(g.field(), `${label}: field after reset`).toEqual(model);
-  collapseTicks(g, cleared, model, label);
+  if (cleared >= 0 && topCleared >= 0) collapseTicksDouble(g, cleared, model, label);
+  else if (topCleared >= 0) collapseTicks(g, topCleared, model, label);
+  else collapseTicks(g, cleared, model, label);
+}
+
+// the TWO-HOT walk (both rows of a vertical lock cleared): the pair
+// {t, t-1} moves rows down by TWO per stage — alpha duplicates row t-2
+// into both holes, beta kills the duplicate and the source, gamma
+// shifts the pair; it drains through a no-op single stage at the top.
+function collapseTicksDouble(
+  g: ReturnType<typeof makeGame>,
+  bottomHole: number,
+  model: number[],
+  label: string
+) {
+  for (let t = bottomHole; t >= 2; t--) {
+    g.tick(); // alpha: both holes take row t-2's content
+    model[t] |= model[t - 2];
+    model[t - 1] |= model[t - 2];
+    expect(g.field(), `${label}: double alpha at ${t}`).toEqual(model);
+    g.tick(); // beta: the source and the duplicate drop
+    model[t - 1] = 0;
+    model[t - 2] = 0;
+    expect(g.field(), `${label}: double beta at ${t}`).toEqual(model);
+    g.tick(); // gamma: the pair walks up
+    expect(g.field(), `${label}: double gamma at ${t}`).toEqual(model);
+  }
+  for (let k = 0; k < 4; k++) {
+    g.tick(); // the residual single stage drains without touching rows
+    expect(g.field(), `${label}: drain ${k} is a no-op`).toEqual(model);
+    if (g.tokenAt().length > 0) break; // respawn = the walk fully drained
+  }
 }
 
 describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
@@ -756,7 +793,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(relayOn(P2S)).toBe(0);
   });
 
-  it('vertical pieces: bottom-write clears, top-full stays, row-0 clip (fast)', { timeout: 1500000 }, () => {
+  it('vertical pieces: bottom-write clears, top-write clears too, row-0 clip (fast)', { timeout: 1500000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
     const vmode = (on: boolean) =>
@@ -773,22 +810,33 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     dropVertical(g, 0b0001, model, 'v-clear');
     expect(g.row(7), 'the surviving top cell fell into its own clear').toBe(0b0001);
     expect(g.row(6)).toBe(0);
+    {
+      // a vertical BOTTOM-only clear scores exactly once (the raw-P2SM
+      // pulse race scored it twice; caught by the driver's scripted game)
+      const scoreDigit = (() => {
+        for (let i = 0; i < 10; i++)
+          if (g.m.getMachineState(Math.floor(SCR(i, 2) / 6)).relays[SCR(i, 2) % 6]) return i;
+        return -1;
+      })();
+      expect(scoreDigit, 'one clear, one step').toBe(1);
+    }
 
-    // the TOP write completes row 6 -> must NOT clear (token-row-addressed
-    // clear machinery; documented limit)
+    // the TOP write completes row 6 -> the DOUBLE-CLEAR rung senses it on
+    // the phase-2 rails and clears it (the old 'documented limit' was the
+    // permanence bug: nothing can ever lock inside a full row again)
     g.operatorWrite(6, 0b0111);
     model[6] = 0b0111;
     dropVertical(g, 0b1000, model, 'v-topfull');
-    expect(g.row(7)).toBe(0b1001);
-    expect(g.row(6), 'top-completed line stays full').toBe(0b1111);
+    model[6] = 0; // the completed top row cleared; nothing above to fall
+    expect(g.row(7), "the bottom keeps its own cells").toBe(0b1001);
+    expect(g.row(6), 'the top-completed line CLEARED').toBe(0);
 
-    // the game continues over the full row; stack col 0 to the ceiling:
-    // rests at 5, then 3, then 1 — each vertical drop eats two rows
-    dropVertical(g, 0b0001, model, 'v-stack-1'); // rows 5+4
-    dropVertical(g, 0b0001, model, 'v-stack-2'); // rows 3+2
-    dropVertical(g, 0b0001, model, 'v-stack-3'); // rows 1+0 (top at the edge)
+    // stack col 0 to the ceiling: rests at 6+5, then 4+3, then 2+1
+    dropVertical(g, 0b0001, model, 'v-stack-1'); // rows 6+5
+    dropVertical(g, 0b0001, model, 'v-stack-2'); // rows 4+3
+    dropVertical(g, 0b0001, model, 'v-stack-3'); // rows 2+1
     expect(g.row(1)).toBe(0b0001);
-    expect(g.row(0)).toBe(0b0001);
+    expect(g.row(0), 'row 0 stays empty — one lower than the junk-row era').toBe(0);
 
     // row-0 clip: row 1 now holds col 0, so the next col-0 spawn collides
     // at row 0 immediately — a merged spawn+press. Phase 2 finds no TOPW(0)
@@ -2112,10 +2160,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
   // full top row down one and the second clear would miss it). without
   // this, the leftover full row is PERMANENT: nothing can ever lock
   // inside a full row, so it never becomes the token row again.
-  // marked it.fails until the CLEARP2 rung lands: the failure IS the bug
-  // (this flips to a plain it() with the fix — vitest then rejects the
-  // .fails marker the moment the machine starts passing)
-  it.fails('the double clear: one lock completes both its rows (fast)', { timeout: 1800000 }, () => {
+  it('the double clear: one lock completes both its rows (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
     const relayOn = (n: number) => (g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0);
@@ -2142,6 +2187,37 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(g.row(7), 'the bottom row cleared').toBe(0);
     expect(g.row(6), 'the top row cleared too — no permanent junk').toBe(0);
     expect(scoreAt(), 'both clears scored').toBe(2);
+  });
+
+  // the top-ONLY completion (the cross-review's catch): a vertical lock
+  // can complete r-1 without completing r — the same permanence class.
+  // row 6 pre-holds cols 1-3; a 2-tall at col 0 locks bottom (7,0) and
+  // top (6,0): the top row completes alone. it must clear AND the bottom
+  // row's own bit must SURVIVE (the opposite-case assertion).
+  it('the top-only clear: the lock completes just its top row (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const relayOn = (n: number) => (g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0);
+    const scoreAt = () => {
+      for (let i = 0; i < 10; i++) if (relayOn(SCR(i, 2))) return i;
+      return -1;
+    };
+    g.operatorWrite(6, 0b1110);
+    for (let k = 0; k < 2; k++) g.pressBtn(TETRIS_IO.up); // 1x1 -> 2wide -> 2tall
+    g.pressStart();
+    for (let t = 0; t < 10 && g.tokenAt().length === 0; t++) g.tick();
+    for (let t = 0; t < 40; t++) {
+      g.tick();
+      if (
+        g.tokenAt().length === 0 &&
+        !g.m.getMachineState(TETRIS_IO.lockedRelay.machine).relays[TETRIS_IO.lockedRelay.index] &&
+        !g.m.getMachineState(TETRIS_IO.collapseRelay.machine).relays[TETRIS_IO.collapseRelay.index]
+      )
+        break;
+    }
+    expect(g.row(6), 'the completed top row cleared').toBe(0);
+    expect(g.row(7), "the bottom row KEEPS the piece's own cell").toBe(0b0001);
+    expect(scoreAt(), 'the top-only clear scored once').toBe(1);
   });
 
   it('the machine ticks itself: capacitor gravity (fast)', { timeout: 1800000 }, () => {
