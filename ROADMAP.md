@@ -458,15 +458,35 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    unreachable state), and operator writes must happen at 1x1 — a
    ring-wide state defeats operatorWrite's slide-narrowing via the
    union and would bridge driven rails through the piece gates.
-   NEXT (3b-3c, the last seam): UP-transition legality — the ring's
-   clock feed gates through a check network (energized next-master
-   identifies the target state; refusal = the clock never rises, no
-   return path needed, the ring simply holds). per-transition checks
-   from the footprint DELTA at the current pos via LEGB second sets +
-   new top-rail mirror reads + bounds. then the reshape guard dies and
-   the page is a pure operator. after that: 3b-4 grows the ring to the
-   full 2-row-box family (L/J/T x2 orientations). design in
-   _notes/shapes-design.md; MASS at the rung close.
+   RESHAPE LEGALITY IN CONTACTS (3b-3c) LANDED same session — the LAST
+   SEAM: the ring's clock feed conducts through a transition-check
+   network instead of a plain wire. the energized MASTER (one-hot: the
+   current state's successor, sampled while the clock is low) names the
+   target state; each transition is one master-mirror contact fanning to
+   one-hot pos branches whose series NC hops read the target footprint's
+   NEW cells off the occupancy rails (covered cells can't be stored, so
+   the delta suffices). a refusal needs NO return path — the clock never
+   rises and the ring holds; invalid positions simply have no branch,
+   which is the fit-bounds refusal for free. the page's wouldOverlap
+   DIED: the page holds no game model — steering, reshaping, collision,
+   bounds, scoring and game-over all refuse or decide in relays; the one
+   guard left is Enter's double-spawn interlock (the 1961 operator's
+   discipline, documented). the expensive lesson: POSM(3)'s "spare" set
+   was never spare — its L arm IS the right-press sample bus and its K
+   the edge self-loop; tying a check node there let a join backfeed fire
+   the D-tap trees mid-press and wipe the register to [1,1,1,1] (the
+   ring-walk trace caught it; pos 3 got a real mirror). a borrowed
+   contact set is free only if BOTH its arm and its throws are unwired.
+   receipts: five occupancy transitions each blocked then allowed a row
+   later; fit-range refusals; the register held through refusals; the
+   whole file + check + playwright green. 414 relays / 71 machines.
+   NEXT (3b-4): grow the ring to the full 2-row-box family — L/J/T x2
+   orientations each = 12 states (L2/J2/T2 are the overhang forms with
+   3-wide TOPS and offset single bottoms). sub-increments: 4a ring+fans+
+   writes (documented steering gap for the new top classes, the 3b-1
+   precedent), 4b legality re-classed per top geometry (the S/Z-specific
+   NOT-gates generalize to per-class read banks), 4c the transition
+   branches. design in _notes/shapes-design.md; MASS at the rung close.
 
 ## display/input notes
 
