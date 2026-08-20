@@ -139,6 +139,13 @@ export const LKM2 = 297; // lock-master mirror: the +-fed lock scope for GAMEOVE
 // the score ring (0..9, one step per line clear — the token-ring pattern):
 export const SCR = (i: number, part: number) => 298 + 3 * i + part; // clk, master, slave per digit (298..327)
 export const SCBOOT = 328; // latches on the first clear; its NC is digit 0's power-on seed
+// staggered pieces (S/Z — shapes increment 3b-1):
+export const PIECET = (j: number) => 329 + j; // the TOP-row mask bank (TOPMASK slides on the button machine)
+export const CUTC5 = 333, CUTC6 = 334; // colFanT's collapse cuts (the CUTC pattern for the T fan)
+export const STAGM = 335; // the STAG slide's mirror: phase 2 feeds colFanT (staggered) instead of colFan
+export const CUTB1 = 336, CUTB2 = 337; // sever the B fan during a staggered phase 2 (its closed gates bridge rails through colFan)
+export const CUTB3 = 338, CUTB4 = 339; // ...and the collision-tap side: the SECOND bridge (collideNode), rung 10's lesson verbatim
+export const CUTBD = 340; // one-hop delay for ALL the stagger cuts: they must outlive the gates/rails/readback at the release
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
@@ -147,10 +154,10 @@ export const SCBOOT = 328; // latches on the first clear; its NC is digit 0's po
 // free. (They lived on m40 through the piece rung, sharing sections with
 // relays whose + jacks HAPPENED to be unused; the 12-row layout landed
 // TWIN's + on the shared section and the capacity auditor caught it.)
-export const LEFTBTN = { button: 3, machine: 55 };
-export const RIGHTBTN = { button: 4, machine: 55 };
-export const WIDSLIDE = { slide: 5, machine: 55 };
-export const MACHINES = 56; // relays through m54.5 + the dedicated button machine m55; m36's coms serve as the junctions
+export const LEFTBTN = { button: 3, machine: 57 };
+export const RIGHTBTN = { button: 4, machine: 57 };
+export const WIDSLIDE = { slide: 5, machine: 57 };
+export const MACHINES = 58; // relays through m56.2 + the dedicated button machine m57; m36's coms serve as the junctions
 
 // ---- the ROWS-parameterized layout (rung 11 groundwork) ----
 // The same allocation map as the exported constants, laid out sequentially
@@ -209,6 +216,7 @@ export interface TetrisLayout {
   VMODEM: (p: number) => number;
   GOM: number; GAMEOVER: number; LKM2: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
+  PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -268,6 +276,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const vmodemBase = take(cols);
   const gomBase = take(3); // GOM, GAMEOVER, LKM2 — appended after the tall-well layout shipped
   const scBase = take(31); // the score ring: 10 digits x (clk, master, slave) + SCBOOT
+  const stagBase = take(12); // PIECET x4, CUTC5, CUTC6, STAGM, CUTB1..4, CUTBD
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -317,6 +326,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
     VMODEM: p => vmodemBase + p,
     GOM: gomBase, GAMEOVER: gomBase + 1, LKM2: gomBase + 2,
     SCR: (i, part) => scBase + 3 * i + part, SCBOOT: scBase + 30,
+    PIECET: j => stagBase + j, CUTC5: stagBase + 4, CUTC6: stagBase + 5, STAGM: stagBase + 6, CUTB1: stagBase + 7, CUTB2: stagBase + 8, CUTB3: stagBase + 9, CUTB4: stagBase + 10, CUTBD: stagBase + 11,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -380,6 +390,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
   claim('GOM/GAMEOVER/LKM2', GOM, GAMEOVER, LKM2);
   for (let i = 0; i < 10; i++) claim('SCR', SCR(i, 0), SCR(i, 1), SCR(i, 2));
   claim('SCBOOT', SCBOOT);
+  for (let j = 0; j < 4; j++) claim('PIECET', PIECET(j));
+  claim('CUTC5/6/STAGM/CUTB', CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD);
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -423,6 +435,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
   for (let i = 0; i < 10; i++)
     for (let pt = 0; pt < 3; pt++) eq('SCR', L.SCR(i, pt), SCR(i, pt));
   eq('SCBOOT', L.SCBOOT, SCBOOT);
+  for (let j = 0; j < 4; j++) eq('PIECET', L.PIECET(j), PIECET(j));
+  eq('CUTC5', L.CUTC5, CUTC5); eq('CUTC6', L.CUTC6, CUTC6); eq('STAGM', L.STAGM, STAGM); eq('CUTB1', L.CUTB1, CUTB1); eq('CUTB2', L.CUTB2, CUTB2); eq('CUTB3', L.CUTB3, CUTB3); eq('CUTB4', L.CUTB4, CUTB4); eq('CUTBD', L.CUTBD, CUTBD);
   eq('machines', L.machines, MACHINES);
   eq('btnMachine', L.btnMachine, LEFTBTN.machine);
   eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
@@ -449,7 +463,7 @@ export function tetrisCircuit(rows = 8): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, LEGINV2, WIDM3, WIDM4,
-    MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT,
+    MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
   // every anchor that shared a machine with relays eventually collided
@@ -491,7 +505,7 @@ export function tetrisCircuit(rows = 8): {
     R(A0m, 'J'), R(A0m, 'G'), R(A0m, 'N'), R(A0m, 'K'),
   ];
 
-  const dataRails = [takeGroups(grown(5, 2)), takeGroups(grown(5, 2)), takeGroups(grown(5, 2)), takeGroups(grown(5, 2))];
+  const dataRails = [takeGroups(grown(6, 2)), takeGroups(grown(6, 2)), takeGroups(grown(6, 2)), takeGroups(grown(6, 2))]; // 6: 21 taps/rail at 8 rows since the T bank joined
   const railJack = (j: number, hole: number) => dataRails[j][Math.floor(hole / 4)];
   // chain each rail's groups (each link burns one hole on both sides, so a
   // group offers 4 fresh holes; railJack spreads consumers accordingly)
@@ -733,15 +747,20 @@ export function tetrisCircuit(rows = 8): {
   for (let j = 0; j < 4; j++) {
     const p = PIECE(j);
     const cutc = j < 2 ? CUTC1 : CUTC2;
+    const cutb = j < 2 ? CUTB1 : CUTB2;
     const [cArm, cNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
     const cutk = j < 2 ? CUTC3 : CUTC4;
     // coils fed from the POS register (see the piece-register section) —
     // the per-column slides are gone; position is machine state now
     w.push(`${R(p, 'F')}/${minusOf(p)}`);
-    w.push(`${colFan}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
+    // colFan -> CUTB (NC, opens during a STAGGERED phase 2: the closed B
+    // gates would bridge the T-driven rails through colFan — the mirror
+    // of the bottom-press leak) -> CUTC (NC, opens during collapses) ->
+    w.push(`${colFan}/${R(cutb, cArm)}`, `${R(cutb, cNc)}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
     w.push(`${R(p, 'G')}/${tapRail(j)}`);
-    w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${R(cutk, cArm)}`);
-    w.push(`${R(cutk, cNc)}/${collideNode}`);
+    const cutb2 = j < 2 ? CUTB3 : CUTB4;
+    w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${R(cutb2, cArm)}`);
+    w.push(`${R(cutb2, cNc)}/${R(cutk, cArm)}`, `${R(cutk, cNc)}/${collideNode}`);
   }
 
   // LINE relays on the rails; their series chain latches CLEARP when a lock
@@ -899,7 +918,12 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${plusOf(P2GATE)}/${R(P2GATE, 'H')}`, `${R(P2GATE, 'G')}/${tap(p2break, p2bUse)}`);
   w.push(`${plusOf(P2GATE)}/${R(P2GATE, 'L')}`, `${R(P2GATE, 'K')}/${tap(p2gate, p2gUse)}`);
   w.push(`${tap(p2gate, p2gUse)}/${R(P2COL, 'E')}`, `${R(P2COL, 'F')}/${minusOf(P2COL)}`);
-  w.push(`${plusOf(P2COL)}/${R(P2COL, 'L')}`, `${R(P2COL, 'K')}/${colFan}`);
+  // phase 2's column feed runs through STAGM's changeover: flat/symmetric
+  // pieces keep the classic path (NC -> colFan, the B-mask gates — zero
+  // behavior change with the STAG slide off); staggered pieces divert to
+  // the T fan (NO -> colFanT, the PIECET gates)
+  w.push(`${plusOf(P2COL)}/${R(P2COL, 'L')}`, `${R(P2COL, 'K')}/${R(STAGM, 'H')}`);
+  w.push(`${R(STAGM, 'J')}/${colFan}`);
   // TOPW(r) routes the triggers to row r-1. The gate com (comA) is 4/4
   // full, but a com is one node: the trigger enters through W(r-1,0)'s coil
   // jack spare hole instead. Backfeed out of that node dead-ends at open
@@ -1409,7 +1433,57 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${plusOf(SCBOOT)}/${R(SCBOOT, 'H')}`, `${R(SCBOOT, 'G')}/${R(SCBOOT, 'E')}`);
   w.push(`${plusOf(SCBOOT)}/${R(SCBOOT, 'L')}`, `${R(SCBOOT, 'N')}/${comOf(SCR(0, 2))}`);
 
-    return { wires: w, rails: dataRails, layout: L, btnMachine };
+    // ---------- staggered pieces (S/Z): the TOP-row mask bank ----------
+  // PIECET(j) mirrors the TOPMASK slides (slides 1-4 on the dedicated
+  // button machine — each section's slide is separate hardware from its
+  // button). Phase 2's diverted feed (STAGM NO) powers colFanT, and each
+  // T gate puts its column onto the SAME data rail the B gate would —
+  // the write machinery downstream is untouched. The T fan conducts ONLY
+  // during phase 2: CUTC5/6 are NORMALLY-OPEN gates whose coils ride the
+  // phase-2 rail — outside that window the fan is severed on the FAN side
+  // of every T gate. The first draft used lane-scoped NC cuts (the B
+  // fan's CUTC pattern) and the audit caught a bottom-press leak: with a
+  // column in BOTH masks, the press's + walked rail -> closed T gate ->
+  // colFanT -> another closed T gate -> a top-only column's rail, and the
+  // bottom write grew extra cells. Phase-2-scoped NO gates kill that AND
+  // the collapse bridge in one move (the collapse never runs phase 2).
+  // Collision and lateral legality still read the B mask only in this
+  // increment: a staggered top cell can overhang stored content and the
+  // phase-2 OR-write absorbs it (documented; the top collision term is
+  // the next increment).
+  const colFanT = takeGroups(1)[0];
+  w.push(`${R(STAGM, 'G')}/${colFanT}`);
+  const bmS = `m${btnMachine}`;
+  w.push(`${bmS}.6+/${bmS}.6S`, `${bmS}.6T/${R(STAGM, 'E')}`, `${R(STAGM, 'F')}/${minusOf(STAGM)}`);
+  // ...and the gate coils are phase-2 AND staggered (STAGM's spare set):
+  // with STAG off, a raised TOPMASK slide must not connect the fan even
+  // during a symmetric piece's phase 2
+  // the cut coils ride ONE HOP behind the phase-2 rail (CUTBD): at the
+  // release the raw-rail version re-closed the B fan a wave before the
+  // write gates and the fresh top row's own READBACK died, and that one
+  // wave wrote a phantom cell through the re-bridged rails (the trace
+  // showed a clean mid-press field growing a cell on the release). One
+  // hop later, everything the leak needs is already dead; on the press
+  // the cuts still land the same eval as the first hot rail.
+  w.push(`${tap(p2railA, p2aUse)}/${R(STAGM, 'L')}`, `${R(STAGM, 'K')}/${R(CUTBD, 'E')}`);
+  w.push(`${R(CUTBD, 'F')}/${minusOf(CUTBD)}`);
+  w.push(`${plusOf(CUTBD)}/${R(CUTBD, 'H')}`, `${R(CUTBD, 'G')}/${R(CUTC5, 'E')}`);
+  w.push(`${R(CUTC5, 'E')}/${R(CUTC6, 'E')}`);
+  w.push(`${R(CUTC6, 'E')}/${R(CUTB1, 'E')}`, `${R(CUTB1, 'E')}/${R(CUTB2, 'E')}`);
+  w.push(`${R(CUTB2, 'E')}/${R(CUTB3, 'E')}`, `${R(CUTB3, 'E')}/${R(CUTB4, 'E')}`);
+  w.push(`${R(CUTB3, 'F')}/${minusOf(CUTB3)}`, `${R(CUTB4, 'F')}/${minusOf(CUTB4)}`);
+  w.push(`${R(CUTC5, 'F')}/${minusOf(CUTC5)}`, `${R(CUTC6, 'F')}/${minusOf(CUTC6)}`);
+  w.push(`${R(CUTB1, 'F')}/${minusOf(CUTB1)}`, `${R(CUTB2, 'F')}/${minusOf(CUTB2)}`);
+  for (let j = 0; j < 4; j++) {
+    const pt = PIECET(j);
+    w.push(`${bmS}.${j + 1}+/${bmS}.${j + 1}S`, `${bmS}.${j + 1}T/${R(pt, 'E')}`, `${R(pt, 'F')}/${minusOf(pt)}`);
+    const cutc = j < 2 ? CUTC5 : CUTC6;
+    const [cArm, cNo] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
+    w.push(`${colFanT}/${R(cutc, cArm)}`, `${R(cutc, cNo)}/${R(pt, 'H')}`);
+    w.push(`${R(pt, 'G')}/${tapRail(j)}`);
+  }
+
+  return { wires: w, rails: dataRails, layout: L, btnMachine };
 }
 
 

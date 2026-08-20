@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, TETRIS_IO } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -1375,6 +1375,72 @@ describe('Multivac: mini-tetris (50 machines)', () => {
     expect(g.tokenAt(), 'no spawn after game over').toEqual([]);
     expect(g.field(), 'the field is frozen history').toEqual(model);
     expect(relayOn(GAMEOVER), 'latched for good').toBe(1);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // staggered pieces (shapes 3b-1): S and Z. The phase-2 top write always
+  // sampled the mask live; now it can sample a DIFFERENT mask — the
+  // TOPMASK slide bank (PIECET) behind STAGM's changeover, whose fan
+  // conducts only during a staggered phase 2 (the audit caught both a
+  // bottom-press leak through dual-mask columns and a symmetric-phase-2
+  // bridge before any test ran). Collision/legality still read the B
+  // mask: a staggered top cell can overhang, absorbed by the OR-write
+  // (documented; the top collision term is the next increment).
+  it('staggered pieces: S and Z write their two rows (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const bm = LEFTBTN.machine;
+    const setTop = (mask: number) => {
+      for (let j = 0; j < 4; j++) g.m.setSlide(j + 1, (mask >> j) & 1 ? 'right' : 'left', bm);
+    };
+    const stag = (on: boolean) => g.m.setSlide(6, on ? 'right' : 'left', bm);
+    const vmode = (on: boolean) =>
+      g.m.setSlide((VMODE % 6) + 1, on ? 'right' : 'left', Math.floor(VMODE / 6));
+
+    const model = Array(8).fill(0);
+    g.pressStart();
+    // the S: bottom pair at cols 1-2, top pair at cols 0-1
+    vmode(true);
+    stag(true);
+    setTop(0b0011);
+    g.setMask(0b0110);
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick(); // merged landing + lock at the floor
+    model[7] = 0b0110;
+    expect(g.field(), 'S: the bottom row wrote the B mask').toEqual(model);
+    g.tick(); // phase 2: the TOP mask, not the B mask
+    model[6] = 0b0011;
+    expect(g.field(), 'S: the top row wrote the TOPMASK').toEqual(model);
+    g.tick(); // reset
+    expect(g.tokenAt()).toEqual([]);
+
+    // the Z on the other side: bottom 0-1, top 1-2 — resting ON the S
+    setTop(0b0110);
+    g.setMask(0b0011);
+    g.tick(); // spawn
+    for (let r = 1; r <= 5; r++) g.tick(); // rests at 5 ((6,0) is empty but (6,1) stored)
+    model[5] = 0b0011;
+    expect(g.field(), 'Z: bottom at its rest row').toEqual(model);
+    g.tick(); // phase 2
+    model[4] = 0b0110;
+    expect(g.field(), 'Z: top staggered right').toEqual(model);
+    g.tick(); // reset
+    expect(g.tokenAt()).toEqual([]);
+
+    // regression inside the same game: STAG off = the classic symmetric
+    // tall piece, TOPMASK slides ignored even though they are still up
+    stag(false);
+    setTop(0b1111); // deliberately hostile: must be ignored
+    g.setMask(0b1000);
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick();
+    model[7] |= 0b1000;
+    g.tick(); // phase 2: symmetric — the B mask again
+    model[6] |= 0b1000;
+    expect(g.field(), 'symmetric tall unchanged with STAG off').toEqual(model);
+    g.tick(); // reset
+    setTop(0);
+    vmode(false);
     expect(g.m.getState().alerts).toEqual([]);
   });
 
