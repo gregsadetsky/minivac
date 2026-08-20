@@ -137,6 +137,39 @@ size estimate: a full rung arc (comparable to all of 3b). the gate per
 emitter: behavior at 4 (file + check + driver + the dense batch), then
 the width flip to 6 with new-edge tests.
 
+## the contact allocator, first API sketch (pre-code)
+
+data model:
+- a SOURCE is a coil net that mirrors chain onto: a ring slave (state),
+  a POSS slave (pos), a mode relay (WIDM/VMODE/STAG/WID3/TT/BCUT...).
+- request(source, kind) -> a fresh contact set handle {relay, set1|2},
+  minting a new mirror on the source's coil chain when all existing
+  sets of that source's mirrors are spent. kind is 'changeover' (arm +
+  both throws reserved) or 'gate' (arm + one throw; the OTHER throw of
+  that set stays claimable by a later 'gate' on the SAME source only if
+  electrically legal — default NO, the tie-point law: one consumer per
+  set unless the second is a proven one-hot-safe join).
+- the allocator EMITS the mirror coil wires itself (chain at the coil
+  jacks, F -> minus) and returns jack names via R(relay, ...).
+- every mint is claim()-registered; layout counts stop being hand-laid
+  take() literals for these banks and become the allocator's tally,
+  asserted == the take() size (the take sizes then derive from a dry
+  ALLOCATION PASS: run the emitters' request stream once to count, then
+  lay out — two-pass build, same shape as the existing grown() logic).
+- ordering: mints must be deterministic (stable request order) so the
+  netlist is reproducible run to run.
+
+open questions for the next session:
+- do the emitters run inside tetrisLayout (counts) AND tetrisCircuit
+  (wires) — or does tetrisCircuit compute the whole thing and hand the
+  layout back? leaning: a single build function that returns both, with
+  tetrisLayout(rows, cols) becoming a thin wrapper that runs the count
+  pass only (keeps the exported baked constants + eq gates intact).
+- jack-hole budgets: request() must also track the 2-holes-per-jack
+  spend on the THROW side when consumers chain at output jacks (the
+  LEGB-output-tie pattern) — probably a second primitive join(handleA,
+  handleB) that validates capacity.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
