@@ -55,7 +55,29 @@ export const P2COL = 158; // phase-2 RAILGATE2: powers the column feed
 export const TICKM2 = 159; // second tick mirror: clocks P2M -> P2S (TICKM's contacts are spoken for)
 export const P2CUT = (x: number) => 160 + x; // 4 relays: drop the collision mirrors during phase 2
 export const LINEDLY = 164; // delays the LINE chain's feed past the collision-sense cut
-export const MACHINES = 28; // relay 164 -> m27.3
+// ---- row collapse ("the elevator", roadmap rung 10) ----
+// after a line clear at row r the hole walks UP: two ticks per row — the
+// row above the hole self-presses onto the rails and the hole's row latches
+// them through its gates alone (move), then the source drops breakers-only
+// (clear) and the chain steps. The chain is the rung-5 ring pattern chained
+// in REVERSE (the token ring only walks down); stage t = "the hole is at
+// row t", t = 1..7 — a clear at row 0 has nothing above it and never seeds.
+// The chain seeds from the dying token on the reset tick (the reset doubles
+// as the seed-transfer clock) and drains by walking off stage 1. Full
+// design + rejected alternatives: _notes/collapse-design.md
+export const ELEVC = (t: number) => 162 + 3 * t; // stage clocks (165..183)
+export const ELEVA = (t: number) => 163 + 3 * t; // stage masters (166..184)
+export const ELEVSL = (t: number) => 164 + 3 * t; // stage slaves (167..185)
+export const SEEDM = (t: number) => 185 + t; // ring-slave mirrors: seed the chain at the token row (186..192)
+export const CLEARPM = 193; // CLEARP mirror: scopes the seed to clearing locks
+export const LANE = 194; // collapse tick-lane slave (branches between LKS and COLLIDE)
+export const TICKM3 = 195; // third tick mirror: clocks LANE and the phase toggle
+export const TGM = 196, TGS = 197; // alpha/beta toggle (move tick / clear+step tick)
+export const ELEVW1 = (t: number) => 196 + 2 * t; // trigger-routing mirrors (198..210 even)
+export const ELEVW2 = (t: number) => 197 + 2 * t; // (199..211 odd)
+export const CGA = 212, CGB = 213; // collapse rail feeds (alpha rail / both-phase rail)
+export const JUNC = (k: number) => 216 + k; // m36: spare sections whose 4-hole coms serve as junction boxes
+export const MACHINES = 37; // relays through m35; m36 = junctions
 
 export function tetrisCircuit(): {
   wires: string[];
@@ -482,6 +504,51 @@ export function tetrisCircuit(): {
   for (let r = 1; r < 8; r++) {
     w.push(`${tap(p2gate, p2gUse)}/${R(TOPW(r), 'H')}`, `${R(TOPW(r), 'G')}/${R(W(r - 1, 0), 'E')}`);
     w.push(`${tap(p2break, p2bUse)}/${R(TOPW(r), 'L')}`, `${R(TOPW(r), 'K')}/${comOf(W(r - 1, 2))}`);
+  }
+
+  // ---------- row collapse (rung 10) C1: the elevator chain + seeding ----
+  // Stage t = "the hole is at row t". The chain is the ring pattern chained
+  // in REVERSE (stage t's master samples stage t+1's slave), its clock coms
+  // fed from the reset rail: the reset tick that kills the token doubles as
+  // the seed-transfer clock — the seed path (CLEARPM -> SEEDM fan) holds the
+  // token row's MASTER up from the clearing press until mid-reset, and the
+  // transfer lands it in the slave just before the seed dies with the token.
+  // Until the tick lane exists (next increment) every later reset also
+  // clocks the chain, so the one-hot visibly walks one stage up per lock —
+  // pure passive state, no routing, the game unchanged.
+  const elevClkCom = (t: number) => comOf(ELEVC(t));
+  w.push(`${tap(resetRail, rrUse)}/${elevClkCom(1)}`);
+  for (let t = 3; t <= 7; t += 2) w.push(`${elevClkCom(t - 2)}/${elevClkCom(t)}`);
+  for (let t = 1; t <= 7; t++) {
+    const c = ELEVC(t), a = ELEVA(t), s = ELEVSL(t);
+    w.push(`${elevClkCom(t % 2 === 1 ? t : t - 1)}/${R(c, 'E')}`, `${R(c, 'F')}/${minusOf(c)}`);
+    w.push(`${plusOf(c)}/${R(c, 'H')}`, `${plusOf(c)}/${R(c, 'L')}`);
+    // master D while the clock is low: the slave one stage DOWN the field
+    // (the hole walks up); stage 7's master has only the seed
+    if (t < 7) {
+      w.push(`${R(c, 'J')}/${R(ELEVSL(t + 1), 'L')}`, `${R(ELEVSL(t + 1), 'K')}/${comOf(a)}`);
+    }
+    w.push(`${R(c, 'G')}/${R(a, 'H')}`, `${R(a, 'G')}/${comOf(a)}`); // master holds, clock high
+    w.push(`${comOf(a)}/${R(a, 'E')}`, `${R(a, 'F')}/${minusOf(a)}`);
+    w.push(`${R(c, 'K')}/${R(a, 'L')}`, `${R(a, 'K')}/${comOf(s)}`); // slave := master, clock high
+    // slave self-hold while low — NO reset break: the chain is SET by the
+    // reset tick and dies by walking off stage 1
+    w.push(`${R(c, 'N')}/${R(s, 'H')}`, `${R(s, 'G')}/${comOf(s)}`);
+    w.push(`${comOf(s)}/${R(s, 'E')}`, `${R(s, 'F')}/${minusOf(s)}`);
+  }
+  // the seed: CLEARPM (parallel coil on CLEARP's com — energized from the
+  // clearing press until RSTM2) gates + into a fan of SEEDM contacts.
+  // SEEDM(t) is a parallel coil on ring slave t's E-jack spare hole, so at
+  // most ONE fan consumer conducts — the one-hot token — which is what
+  // makes the one-contact fan legal (every other far side is dead).
+  w.push(`${comOf(CLEARP)}/${R(CLEARPM, 'E')}`, `${R(CLEARPM, 'F')}/${minusOf(CLEARPM)}`);
+  const seedFan = takeGroups(2);
+  w.push(`${seedFan[0]}/${seedFan[1]}`);
+  const sfUse = { n: 0 };
+  w.push(`${plusOf(CLEARPM)}/${R(CLEARPM, 'H')}`, `${R(CLEARPM, 'G')}/${tap(seedFan, sfUse)}`);
+  for (let t = 1; t <= 7; t++) {
+    w.push(`${R(RING(t, 2), 'E')}/${R(SEEDM(t), 'E')}`, `${R(SEEDM(t), 'F')}/${minusOf(SEEDM(t))}`);
+    w.push(`${tap(seedFan, sfUse)}/${R(SEEDM(t), 'H')}`, `${R(SEEDM(t), 'G')}/${comOf(ELEVA(t))}`);
   }
 
   return { wires: w, rails: dataRails };

@@ -99,7 +99,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -716,6 +716,60 @@ describe('Multivac: mini-tetris (28 machines)', () => {
       expect(g.row(6), `${engine}: row 6 vanished by completion`).toBe(0);
       expect(g.row(7), `${engine}: floor row survives the clear above it`).toBe(0b0111);
     }
+  });
+
+  // rung 10 groundwork: the elevator chain (the collapse cursor). Stage t
+  // hot = "the hole is at row t". In this increment the chain is PASSIVE —
+  // no routing, no tick lane — so it must (a) stay dark through ordinary
+  // play, (b) seed at the token's row when a clearing lock's reset fires
+  // (the reset doubles as the seed-transfer clock), (c) with its clock on
+  // the reset rail, visibly walk one stage UP per subsequent reset until it
+  // drains off stage 1, and (d) never disturb the game. The walk moves to
+  // collapse-lane ticks in the next increment; the cheap reset generator
+  // here is a spawn-lock: row 1 pre-filled at col 0 makes every col-0 spawn
+  // a merged spawn+press at row 0, so each tick PAIR is one full lock cycle.
+  it('collapse prep: the elevator seeds at the cleared row and walks per reset (sparse)', { timeout: 900000 }, () => {
+    setSolverEngine('sparse');
+    const g = makeGame();
+    const relayOn = (n: number) =>
+      g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0;
+    const elev = () => Array.from({ length: 7 }, (_, i) => relayOn(ELEVSL(i + 1)));
+    const oneHotAt = (t: number) =>
+      Array.from({ length: 7 }, (_, i) => (i + 1 === t ? 1 : 0));
+    const model = Array(8).fill(0);
+    g.pressStart();
+
+    dropPiece(g, 0b0001, model, 'c1 drop 1');
+    dropPiece(g, 0b0010, model, 'c1 drop 2');
+    dropPiece(g, 0b0100, model, 'c1 drop 3');
+    expect(elev(), 'chain dark through non-clearing locks').toEqual(oneHotAt(0));
+    dropPiece(g, 0b1000, model, 'c1 drop 4 clears row 7');
+    expect(g.row(7)).toBe(0);
+    // dropPiece's final tick IS the reset: the seed has transferred
+    expect(elev(), 'the clear seeded stage 7').toEqual(oneHotAt(7));
+
+    // walk: pre-fill row 1 col 0, then every col-0 tick pair is a
+    // spawn+lock followed by a reset — one chain step per pair
+    g.operatorWrite(1, 0b0001);
+    model[1] = 0b0001;
+    g.setColumn(0);
+    for (let step = 6; step >= 1; step--) {
+      g.tick(); // spawn straight into the press at row 0
+      model[0] = 0b0001; // idempotent after the first pair
+      expect(g.tokenAt()).toEqual([0]);
+      g.tick(); // reset — clocks the chain
+      expect(g.tokenAt()).toEqual([]);
+      expect(g.field()).toEqual(model);
+      expect(elev(), `walked up to stage ${step}`).toEqual(oneHotAt(step));
+    }
+    g.tick();
+    g.tick(); // one more pair: the one-hot walks off stage 1 and drains
+    expect(elev(), 'chain drained off the top').toEqual(oneHotAt(0));
+
+    // the machine still plays a full ordinary drop afterwards (the floor
+    // reopened when the line cleared)
+    dropPiece(g, 0b0100, model, 'c1 game goes on');
+    expect(g.row(7)).toBe(0b0100);
   });
 
   const heavy = MASS ? it : it.skip;
