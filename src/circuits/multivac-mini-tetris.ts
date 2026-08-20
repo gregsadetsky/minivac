@@ -1605,7 +1605,8 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     // T2/L2 bottom reads + every left tree's d0 bypass changeovers) grow
     // with cols: L2 = 4 members + (cols-1) bypasses + (cols-3) reads,
     // T2 = 4 + (cols-1) + (cols-1), S = 4 + (cols-2), J1 = 3 + (cols-2)
-    const caps = [1, 1, 2, 2, Math.ceil((cols + 2) / 2), 2, 2, Math.ceil((cols + 1) / 2), 2, cols + 1, 2, cols + 2];
+    // state 0 (1x1) also anchors the LEGACY pairs: five more sets
+    const caps = [3, 1, 2, 2, Math.ceil((cols + 2) / 2), 2, 2, Math.ceil((cols + 1) / 2), 2, cols + 1, 2, cols + 2];
     let off = 0;
     for (let i = 0; i < NSTATES; i++) {
       stBanks.push(
@@ -1619,7 +1620,10 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // jack to jack, ONE wire enters the coil net — the LEGB trick)
   let stpUnionN = 0;
   let stpUGateOff = 0;
-  const mkUnion = (name: string, members: number[]) => {
+  // an extra member can be a SERIES chain of contacts (all must conduct):
+  // the legacy slide modes join as pairs — mode relay AND ring-at-1x1
+  type SeriesMember = Array<{ relay: number; arm: string; no: string }>;
+  const mkUnion = (name: string, members: number[], extras: SeriesMember[] = []) => {
     if (stpUnionN >= L.STPUNION_CAP) throw new Error('union rails overflow');
     const u = L.STPUNION + stpUnionN++;
     let prev: string | null = null;
@@ -1628,6 +1632,15 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       w.push(`${plusOf(cs.relay)}/${R(cs.relay, cs.arm)}`);
       if (prev !== null) w.push(`${prev}/${R(cs.relay, cs.no)}`);
       prev = R(cs.relay, cs.no);
+    }
+    for (const chain of extras) {
+      let feed: string | null = null;
+      for (const cs of chain) {
+        w.push(`${feed === null ? plusOf(cs.relay) : feed}/${R(cs.relay, cs.arm)}`);
+        feed = R(cs.relay, cs.no);
+      }
+      if (prev !== null) w.push(`${prev}/${feed as string}`);
+      prev = feed;
     }
     w.push(`${prev}/${R(u, 'E')}`, `${R(u, 'F')}/${minusOf(u)}`);
     const gateCap = Math.ceil((cols - 1) / 2) + 1;
@@ -1638,16 +1651,34 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   };
   // state indices by ring order (SHAPES): 0 1x1, 1 2wide, 2 2tall, 3 O,
   // 4 S, 5 Z, 6 L1, 7 J1, 8 T1, 9 L2, 10 J2, 11 T2
+  // the LEGACY slide modes (ring parked at 1x1) ride as series pairs on
+  // the retired fork relays' free sets — WIDM3/VMODEM parallel the
+  // slide-or-ring compatibility nets, so (fork AND 1x1) = slide-driven:
+  const leg1x1 = () => {
+    const cs = stBanks[0].request('gate');
+    return { relay: cs.relay, arm: cs.arm, no: cs.no };
+  };
   const uB0 = mkUnion('B0', [0, 2, 10]); // right bottom d0
-  const uB1 = mkUnion('B1', [1, 3, 4, 5, 11]); // right bottom d1
+  const uB1 = mkUnion('B1', [1, 3, 4, 5, 11], [
+    [{ relay: WIDM3, arm: 'H', no: 'G' }, leg1x1()], // legacy wide
+  ]); // right bottom d1
   const uB2 = mkUnion('B2', [6, 7, 8, 9]); // right bottom d2
-  const uT0 = mkUnion('T0', [2, 4, 6]); // right top d0
-  const uT1 = mkUnion('T1', [3, 8]); // right top d1
+  const uT0 = mkUnion('T0', [2, 4, 6], [
+    [{ relay: VMODEM(0), arm: 'H', no: 'G' }, leg1x1()], // legacy tall
+  ]); // right top d0
+  const uT1 = mkUnion('T1', [3, 8], [
+    // the legacy 2x2 (tall AND wide slides): top delta is c+1
+    [{ relay: VMODEM(1), arm: 'H', no: 'G' }, { relay: WIDM4, arm: 'H', no: 'G' }, leg1x1()],
+  ]); // right top d1
   const uT2 = mkUnion('T2', [5, 7, 9, 10, 11]); // right top d2
-  const uT0L = mkUnion('T0L', [2, 3, 6, 9, 10, 11]); // left top d0
+  const uT0L = mkUnion('T0L', [2, 3, 6, 9, 10, 11], [
+    [{ relay: VMODEM(0), arm: 'L', no: 'K' }, leg1x1()], // legacy tall, left
+  ]); // left top d0
   const uT1L = mkUnion('T1L', [5, 8]); // left top d1
   const uHIB = mkUnion('HIB', [5, 6, 7, 8, 9, 10, 11]); // max == cols-3
-  const uWALLB = mkUnion('WALLB', [1, 3, 4]); // max == cols-2
+  const uWALLB = mkUnion('WALLB', [1, 3, 4], [
+    [{ relay: WIDM3, arm: 'L', no: 'K' }, leg1x1()], // legacy wide wall
+  ]); // max == cols-2
   const stpPool = new GatedReadPool({ name: 'STPREAD', source: null, base: L.STPREAD, capacity: L.STPREAD_CAP, w, R, minusOf });
   // refusal returns per SOURCE column, on matrix groups into the master
   const retNode = Array.from({ length: cols }, () => takeGroups(4)); // ~15 refusal taps/source peak (width-invariant)
