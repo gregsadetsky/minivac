@@ -282,6 +282,28 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    measured after: tick 237ms -> 71ms (3.3x), press 402ms -> 117ms, and
    machine count is FREE (100 built machines = 50). npm run check itself
    dropped 341s -> 111s. field scaling no longer pays the machine tax.
+   THE TALL WELL LANDED 2026-08-20, same session: tetrisCircuit(rows) —
+   the whole allocation map became a computed layout (tetrisLayout(rows),
+   asserted equal to the hand-laid exports at rows=8 index by index), the
+   wiring loops thread rows, fan/rail groups grow by measured per-row
+   consumption ("classic size + growth", never smaller, so the 8-row wire
+   list is byte-identical except 8 hole reassignments WITHIN chained —
+   single-net — rail groups, each verified equivalent). columns stay 4 by
+   design (the register/legality/LINE machinery is per-column and scales
+   on its own rung). exactly FOUR scale seams existed, all hand-fit spare
+   holes or literal indices, all caught by the capacity auditor at the
+   first 12-row build: the floor collide's MIRB(7), the SPAWNCLR feed on
+   the last ring pair com, gamma's elevClkCom(7) entry, and the reset
+   rail's third-group link. deep rows (8+) are game-writable only — the
+   3-bit op-write decoder covers rows 0-7; the game's own write path (MIRA
+   triggers) reaches everything. the 12-ROW WELL: 396 relays / 68
+   machines, the full game generalizes — receipts: the tall-well test
+   (four drops complete the deep floor with no operator writes, the clear,
+   all 33 collapse ticks, re-home, mid-well steering) green under fast in
+   14.5s on the FIRST run; the whole 8-row regression suite green;
+   playwright plays the 12-row page end to end (the /tetris/ page now
+   ships the tall well). a MASS-gated dense variant of the tall-well test
+   is the rung's oracle receipt.
    design notes 2026-08-20 (from the live-play report + reading
    baliika/fpga-tetris at the user's suggestion): collapse = top-down row
    scan; on a full row, shift ALL rows above down one — the continuing scan

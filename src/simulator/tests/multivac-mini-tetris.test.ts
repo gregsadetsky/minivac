@@ -1301,7 +1301,104 @@ describe('Multivac: mini-tetris (50 machines)', () => {
     expect(elev(), 'ordinary resets leave the drained chain dark').toEqual(oneHotAt(0));
   });
 
+  // rung 11: the generator is ROWS-parameterized (columns stay 4 — the
+  // register/legality/LINE machinery is per-column and scales on its own
+  // rung). At rows=8 the wire list is electrically identical to the
+  // hand-laid classic (verified by diff: the only changes are hole
+  // assignments within chained — single-net — rail groups). This is the
+  // first taller well: every mechanism at 12 rows — spawn, gravity to the
+  // deep floor, merged locks, the operator-free floor line (deep rows are
+  // game-writable only: the 3-bit op-write decoder covers rows 0-7), the
+  // clear, the full 33-tick collapse (11 stages x alpha/beta/gamma), the
+  // register's re-home and mid-well steering.
+  function runTallWell(engine: 'fast' | 'cktsim') {
+    setSolverEngine(engine);
+    const ROWS = 12;
+    const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS);
+    assertJackCapacity(wires);
+    const m = new MinivacSimulator(wires, false, L.machines);
+    m.initialize();
+    const on = (n: number) => (m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0);
+    const row = (r: number) =>
+      on(L.CELL(r, 0)) + 2 * on(L.CELL(r, 1)) + 4 * on(L.CELL(r, 2)) + 8 * on(L.CELL(r, 3));
+    const field = () => Array.from({ length: ROWS }, (_, r) => row(r));
+    const tokenAt = () => {
+      const hot: number[] = [];
+      for (let i = 0; i < ROWS; i++) if (on(L.RING(i, 2))) hot.push(i);
+      return hot;
+    };
+    const posAt = () => {
+      for (let j = 0; j < 4; j++) if (on(L.POSS(j))) return j;
+      return -1;
+    };
+    const tick = () => {
+      m.setSlide(5, 'right', 1);
+      m.setSlide(5, 'left', 1);
+      expect(m.getState().alerts).toEqual([]);
+    };
+    const press = (btn: number) => {
+      m.pressButton(btn, btnMachine);
+      m.releaseButton(btn, btnMachine);
+    };
+    const start = () => {
+      m.pressButton(6, 1);
+      m.releaseButton(6, 1);
+    };
+
+    expect(posAt(), 'power-on seed reaches the tall well').toBe(0);
+    const model = Array(ROWS).fill(0);
+    // four drops complete the floor row — no operator writes: rows 8-11
+    // are beyond the 3-bit decoder, the game itself is the only writer
+    for (let col = 0; col < 4; col++) {
+      start();
+      for (let k = 0; k < col; k++) press(4); // walk out from the re-homed 0
+      expect(posAt(), `walked to ${col}`).toBe(col);
+      tick(); // spawn
+      expect(tokenAt(), `drop ${col} spawned`).toEqual([0]);
+      for (let r = 1; r <= ROWS - 1; r++) tick(); // to the floor (merged lock)
+      if (col < 3) {
+        model[ROWS - 1] |= 1 << col;
+        expect(field(), `drop ${col} locked deep`).toEqual(model);
+        tick(); // reset: re-homes the register
+        expect(tokenAt()).toEqual([]);
+        expect(posAt(), 'reset re-homes').toBe(0);
+      }
+    }
+    // the 4th drop completed the floor: cleared on the lock press
+    model[ROWS - 1] = 0;
+    expect(field(), 'the deep floor line cleared').toEqual(model);
+    tick(); // reset seeds the elevator at stage 11
+    expect(tokenAt()).toEqual([]);
+    // the full collapse: 11 stages x 3 ticks, spawns deferred throughout
+    for (let t = ROWS - 1; t >= 1; t--) {
+      tick();
+      tick();
+      tick();
+      expect(tokenAt(), `stage ${t} defers the spawn`).toEqual([]);
+      expect(field(), `stage ${t} ripples empty rows`).toEqual(model);
+    }
+    start();
+    tick();
+    expect(tokenAt(), 'the well plays on after the drain').toEqual([0]);
+    for (let r = 1; r <= 5; r++) tick();
+    press(4); // steering mid-well, far above the classic 8 rows
+    expect(posAt(), 'mid-well steering works').toBe(1);
+    for (let r = 6; r <= ROWS - 1; r++) tick();
+    model[ROWS - 1] = 0b0010;
+    expect(field(), 'the steered piece locked at the floor').toEqual(model);
+    tick(); // its reset
+    expect(tokenAt()).toEqual([]);
+    expect(posAt()).toBe(0);
+  }
+
+  it('a 12-row well: the whole game generalizes (fast)', { timeout: 1800000 }, () => {
+    runTallWell('fast');
+  });
+
   const heavy = MASS ? it : it.skip;
+  heavy('the 12-row well under the dense oracle (MINIVAC_MASS=1)', { timeout: 7200000 }, () => {
+    runTallWell('cktsim');
+  });
   heavy('short scenario under the dense oracle (MINIVAC_MASS=1)', { timeout: 7200000 }, () => {
     setSolverEngine('cktsim');
     const g = makeGame();

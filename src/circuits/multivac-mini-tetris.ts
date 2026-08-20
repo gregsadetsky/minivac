@@ -135,6 +135,171 @@ export const VMODEM = (p: number) => 291 + p; // vmode mirrors: the tall forks i
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
+export const MACHINES = 50; // relays through m49.1; m36's coms serve as the junctions
+
+// ---- the ROWS-parameterized layout (rung 11 groundwork) ----
+// The same allocation map as the exported constants, laid out sequentially
+// from a row count. At rows=8 it reproduces every hand-laid index EXACTLY
+// (asserted below against the exports, including the junction gap and the
+// machine count) — the exports stay authoritative for the default
+// geometry; tetrisCircuit(rows) builds from a layout so a taller well is
+// a parameter, not a fork. Columns stay 4: the register, legality, LINE
+// and write machinery are per-column and scale on their own rung.
+export interface TetrisLayout {
+  rows: number;
+  A0: number; A0m: number; A1: number; A2: number;
+  W: (r: number, k: number) => number;
+  CELL: (r: number, j: number) => number;
+  RING: (i: number, part: number) => number;
+  MIRA: (r: number) => number;
+  MIRB: (r: number) => number;
+  RESETM: (x: number) => number;
+  COLLIDE: number; COLLIDEM: number; LKM: number; RSTM: number;
+  SPAWN: number; SPAWNCLR: number; CLEARP: number;
+  LINE: (j: number) => number;
+  PIECE: (j: number) => number;
+  LKS: number; TICKM: number; COLLIDEM2: number; READGATE: number;
+  MIRB2: (r: number) => number;
+  PRESSCUT: (x: number) => number;
+  RAILGATE2: number; RSTM2: number; CPSET: number; VMODE: number;
+  TOPW: (r: number) => number;
+  P2M: number; P2S: number; P2CLR: number; P2GATE: number; P2COL: number; TICKM2: number;
+  P2CUT: (x: number) => number;
+  LINEDLY: number;
+  ELEVC: (t: number) => number;
+  ELEVA: (t: number) => number;
+  ELEVSL: (t: number) => number;
+  SEEDM: (t: number) => number;
+  CLEARPM: number; LANE: number; TICKM3: number; TGM: number; TGS: number;
+  ELEVW1: (t: number) => number;
+  ELEVW2: (t: number) => number;
+  CGA: number; CGB: number; CGB2: number; CUTC1: number; CUTC2: number;
+  JUNC: (k: number) => number;
+  TG2M: number; TG2S: number; CUTC3: number; CUTC4: number;
+  POSA: (j: number) => number;
+  POSS: (j: number) => number;
+  POSM: (j: number) => number;
+  LEFTM: number; RIGHTM: number; ANYBM: number; ANYBM2: number;
+  WIDM: number; WIDM2: number;
+  POSRST: (x: number) => number;
+  TWIN: number; BOOTL: number;
+  POSM2: (j: number) => number;
+  MIRC: (r: number, h: number) => number;
+  LEGINV: (j: number) => number;
+  LEGINV2: (k: number) => number;
+  WIDM3: number; WIDM4: number;
+  MIRCT: (r: number, h: number) => number;
+  LEGINVT: (j: number) => number;
+  LEGINVT2: (k: number) => number;
+  VMODEM: (p: number) => number;
+  machines: number;
+  relays: number; // wired coils (the junction gap is com-only)
+}
+
+export function tetrisLayout(rows: number): TetrisLayout {
+  if (rows < 4 || rows % 2 !== 0) throw new Error('rows must be even and >= 4');
+  const cols = 4;
+  let n = 0;
+  const take = (k: number) => {
+    const a = n;
+    n += k;
+    return a;
+  };
+  const aBase = take(4);
+  const wBase = take(rows * 4);
+  const cellBase = take(rows * cols);
+  const ringBase = take(rows * 3);
+  const mirBase = take(rows * 2);
+  const resetmBase = take(rows / 2);
+  const collideBase = take(7);
+  const lineBase = take(cols);
+  const pieceBase = take(cols);
+  const lksBase = take(4);
+  const mirb2Base = take(rows);
+  const presscutBase = take(rows / 2);
+  const rg2Base = take(3);
+  const vmode = take(1);
+  const topwBase = take(rows - 1); // TOPW(r), r = 1..rows-1
+  const p2Base = take(6);
+  const p2cutBase = take(rows / 2);
+  const linedly = take(1);
+  const elevBase = take(3 * (rows - 1)); // ELEVC/A/SL, t = 1..rows-1
+  const seedmBase = take(rows - 1);
+  const clearpmBase = take(5);
+  const elevwBase = take(2 * (rows - 1));
+  const cgaBase = take(5); // CGA, CGB, CGB2, CUTC1, CUTC2
+  const juncGap = take(rows - 3); // junction-only sections; JUNC(0) shares CUTC2's com
+  const tg2Base = take(4); // TG2M, TG2S, CUTC3, CUTC4
+  const posaBase = take(cols);
+  const possBase = take(cols);
+  const posmBase = take(cols);
+  const btnBase = take(2);
+  const anyBase = take(2);
+  const widBase = take(2);
+  const posrstBase = take(2);
+  const twin = take(1);
+  const bootl = take(1);
+  const posm2Base = take(cols - 1);
+  const mircBase = take(2 * (rows - 1)); // MIRC, r = 0..rows-2
+  const leginvBase = take(cols);
+  const leginv2Base = take(2);
+  const widm34 = take(2);
+  const mirctBase = take(2 * (rows - 2)); // MIRCT, r = 1..rows-2
+  const leginvtBase = take(cols);
+  const leginvt2Base = take(2);
+  const vmodemBase = take(cols);
+  return {
+    rows,
+    A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
+    W: (r, k) => wBase + 4 * r + k,
+    CELL: (r, j) => cellBase + cols * r + j,
+    RING: (i, part) => ringBase + 3 * i + part,
+    MIRA: r => mirBase + 2 * r,
+    MIRB: r => mirBase + 2 * r + 1,
+    RESETM: x => resetmBase + x,
+    COLLIDE: collideBase, COLLIDEM: collideBase + 1, LKM: collideBase + 2, RSTM: collideBase + 3,
+    SPAWN: collideBase + 4, SPAWNCLR: collideBase + 5, CLEARP: collideBase + 6,
+    LINE: j => lineBase + j,
+    PIECE: j => pieceBase + j,
+    LKS: lksBase, TICKM: lksBase + 1, COLLIDEM2: lksBase + 2, READGATE: lksBase + 3,
+    MIRB2: r => mirb2Base + r,
+    PRESSCUT: x => presscutBase + x,
+    RAILGATE2: rg2Base, RSTM2: rg2Base + 1, CPSET: rg2Base + 2, VMODE: vmode,
+    TOPW: r => topwBase + (r - 1),
+    P2M: p2Base, P2S: p2Base + 1, P2CLR: p2Base + 2, P2GATE: p2Base + 3, P2COL: p2Base + 4, TICKM2: p2Base + 5,
+    P2CUT: x => p2cutBase + x,
+    LINEDLY: linedly,
+    ELEVC: t => elevBase + 3 * (t - 1),
+    ELEVA: t => elevBase + 3 * (t - 1) + 1,
+    ELEVSL: t => elevBase + 3 * (t - 1) + 2,
+    SEEDM: t => seedmBase + (t - 1),
+    CLEARPM: clearpmBase, LANE: clearpmBase + 1, TICKM3: clearpmBase + 2, TGM: clearpmBase + 3, TGS: clearpmBase + 4,
+    ELEVW1: t => elevwBase + 2 * (t - 1),
+    ELEVW2: t => elevwBase + 2 * (t - 1) + 1,
+    CGA: cgaBase, CGB: cgaBase + 1, CGB2: cgaBase + 2, CUTC1: cgaBase + 3, CUTC2: cgaBase + 4,
+    JUNC: k => (k === 0 ? cgaBase + 4 : juncGap + k - 1),
+    TG2M: tg2Base, TG2S: tg2Base + 1, CUTC3: tg2Base + 2, CUTC4: tg2Base + 3,
+    POSA: j => posaBase + j,
+    POSS: j => possBase + j,
+    POSM: j => posmBase + j,
+    LEFTM: btnBase, RIGHTM: btnBase + 1, ANYBM: anyBase, ANYBM2: anyBase + 1,
+    WIDM: widBase, WIDM2: widBase + 1,
+    POSRST: x => posrstBase + x,
+    TWIN: twin, BOOTL: bootl,
+    POSM2: j => posm2Base + j,
+    MIRC: (r, h) => mircBase + 2 * r + h,
+    LEGINV: j => leginvBase + j,
+    LEGINV2: k => leginv2Base + (k - 2),
+    WIDM3: widm34, WIDM4: widm34 + 1,
+    MIRCT: (r, h) => mirctBase + 2 * (r - 1) + h,
+    LEGINVT: j => leginvtBase + j,
+    LEGINVT2: k => leginvt2Base + (k - 2),
+    VMODEM: p => vmodemBase + p,
+    machines: Math.ceil(n / 6),
+    relays: n - (rows - 3),
+  };
+}
+
 // ---- the coil-allocation registry: every relay index above, claimed by
 // name over its full domain at module load. Two constants landing on the
 // same COIL index throw immediately (any test run validates) — the ranges
@@ -189,27 +354,93 @@ export const VMODEM = (p: number) => 291 + p; // vmode mirrors: the tall forks i
   for (let j = 0; j < 4; j++) claim('LEGINVT', LEGINVT(j));
   claim('LEGINVT2', LEGINVT2(2), LEGINVT2(3));
   for (let p = 0; p < 4; p++) claim('VMODEM', VMODEM(p));
+
+  // the parameterized layout must reproduce the hand-laid map exactly at
+  // the default geometry — every scalar, every function over its domain,
+  // and the machine count
+  const L = tetrisLayout(8);
+  const eq = (name: string, a: number, b: number) => {
+    if (a !== b) throw new Error(`layout(8).${name} = ${a}, expected ${b}`);
+  };
+  eq('A0', L.A0, A0); eq('A0m', L.A0m, A0m); eq('A1', L.A1, A1); eq('A2', L.A2, A2);
+  for (let r = 0; r < 8; r++) for (let k = 0; k < 4; k++) eq('W', L.W(r, k), W(r, k));
+  for (let r = 0; r < 8; r++) for (let j = 0; j < 4; j++) eq('CELL', L.CELL(r, j), CELL(r, j));
+  for (let i = 0; i < 8; i++) for (let pt = 0; pt < 3; pt++) eq('RING', L.RING(i, pt), RING(i, pt));
+  for (let r = 0; r < 8; r++) { eq('MIRA', L.MIRA(r), MIRA(r)); eq('MIRB', L.MIRB(r), MIRB(r)); eq('MIRB2', L.MIRB2(r), MIRB2(r)); }
+  for (let x = 0; x < 4; x++) { eq('RESETM', L.RESETM(x), RESETM(x)); eq('PRESSCUT', L.PRESSCUT(x), PRESSCUT(x)); eq('P2CUT', L.P2CUT(x), P2CUT(x)); }
+  eq('COLLIDE', L.COLLIDE, COLLIDE); eq('COLLIDEM', L.COLLIDEM, COLLIDEM); eq('LKM', L.LKM, LKM); eq('RSTM', L.RSTM, RSTM);
+  eq('SPAWN', L.SPAWN, SPAWN); eq('SPAWNCLR', L.SPAWNCLR, SPAWNCLR); eq('CLEARP', L.CLEARP, CLEARP);
+  for (let j = 0; j < 4; j++) { eq('LINE', L.LINE(j), LINE(j)); eq('PIECE', L.PIECE(j), PIECE(j)); eq('POSA', L.POSA(j), POSA(j)); eq('POSS', L.POSS(j), POSS(j)); eq('POSM', L.POSM(j), POSM(j)); eq('LEGINV', L.LEGINV(j), LEGINV(j)); eq('LEGINVT', L.LEGINVT(j), LEGINVT(j)); eq('VMODEM', L.VMODEM(j), VMODEM(j)); }
+  eq('LKS', L.LKS, LKS); eq('TICKM', L.TICKM, TICKM); eq('COLLIDEM2', L.COLLIDEM2, COLLIDEM2); eq('READGATE', L.READGATE, READGATE);
+  eq('RAILGATE2', L.RAILGATE2, RAILGATE2); eq('RSTM2', L.RSTM2, RSTM2); eq('CPSET', L.CPSET, CPSET); eq('VMODE', L.VMODE, VMODE);
+  for (let r = 1; r <= 7; r++) eq('TOPW', L.TOPW(r), TOPW(r));
+  eq('P2M', L.P2M, P2M); eq('P2S', L.P2S, P2S); eq('P2CLR', L.P2CLR, P2CLR); eq('P2GATE', L.P2GATE, P2GATE); eq('P2COL', L.P2COL, P2COL); eq('TICKM2', L.TICKM2, TICKM2);
+  eq('LINEDLY', L.LINEDLY, LINEDLY);
+  for (let t = 1; t <= 7; t++) {
+    eq('ELEVC', L.ELEVC(t), ELEVC(t)); eq('ELEVA', L.ELEVA(t), ELEVA(t)); eq('ELEVSL', L.ELEVSL(t), ELEVSL(t));
+    eq('SEEDM', L.SEEDM(t), SEEDM(t)); eq('ELEVW1', L.ELEVW1(t), ELEVW1(t)); eq('ELEVW2', L.ELEVW2(t), ELEVW2(t));
+  }
+  eq('CLEARPM', L.CLEARPM, CLEARPM); eq('LANE', L.LANE, LANE); eq('TICKM3', L.TICKM3, TICKM3); eq('TGM', L.TGM, TGM); eq('TGS', L.TGS, TGS);
+  eq('CGA', L.CGA, CGA); eq('CGB', L.CGB, CGB); eq('CGB2', L.CGB2, CGB2); eq('CUTC1', L.CUTC1, CUTC1); eq('CUTC2', L.CUTC2, CUTC2);
+  for (let k = 0; k <= 5; k++) eq('JUNC', L.JUNC(k), JUNC(k));
+  eq('TG2M', L.TG2M, TG2M); eq('TG2S', L.TG2S, TG2S); eq('CUTC3', L.CUTC3, CUTC3); eq('CUTC4', L.CUTC4, CUTC4);
+  eq('LEFTM', L.LEFTM, LEFTM); eq('RIGHTM', L.RIGHTM, RIGHTM); eq('ANYBM', L.ANYBM, ANYBM); eq('ANYBM2', L.ANYBM2, ANYBM2);
+  eq('WIDM', L.WIDM, WIDM); eq('WIDM2', L.WIDM2, WIDM2); eq('WIDM3', L.WIDM3, WIDM3); eq('WIDM4', L.WIDM4, WIDM4);
+  for (let x = 0; x < 2; x++) eq('POSRST', L.POSRST(x), POSRST(x));
+  eq('TWIN', L.TWIN, TWIN); eq('BOOTL', L.BOOTL, BOOTL);
+  for (let j = 0; j < 3; j++) eq('POSM2', L.POSM2(j), POSM2(j));
+  for (let r = 0; r <= 6; r++) { eq('MIRC0', L.MIRC(r, 0), MIRC(r, 0)); eq('MIRC1', L.MIRC(r, 1), MIRC(r, 1)); }
+  for (let r = 1; r <= 6; r++) { eq('MIRCT0', L.MIRCT(r, 0), MIRCT(r, 0)); eq('MIRCT1', L.MIRCT(r, 1), MIRCT(r, 1)); }
+  eq('LEGINV2(2)', L.LEGINV2(2), LEGINV2(2)); eq('LEGINV2(3)', L.LEGINV2(3), LEGINV2(3));
+  eq('LEGINVT2(2)', L.LEGINVT2(2), LEGINVT2(2)); eq('LEGINVT2(3)', L.LEGINVT2(3), LEGINVT2(3));
+  eq('machines', L.machines, MACHINES);
 }
 export const LEFTBTN = { button: 3, machine: 40 }; // m40.3 button
 export const RIGHTBTN = { button: 4, machine: 40 }; // m40.4 button
 export const WIDSLIDE = { slide: 5, machine: 40 }; // m40.5 slide -> WIDM coils
-export const MACHINES = 50; // relays through m49.1; m36's coms serve as the junctions
 
-export function tetrisCircuit(): {
+export function tetrisCircuit(rows = 8): {
   wires: string[];
   rails: string[][]; // data rail j -> its chained groups
+  layout: TetrisLayout; // this build's index map (== the exports at rows=8)
+  btnMachine: number; // LEFT/RIGHT buttons + WID slide live here (m40 classic)
 } {
+  const L = tetrisLayout(rows);
+  // shadow the default-geometry exports with this build's layout: the
+  // whole wiring body below reads THESE, so a taller well is a parameter
+  const {
+    A0, A0m, A1, A2, W, CELL, RING, MIRA, MIRB, RESETM,
+    COLLIDE, COLLIDEM, LKM, RSTM, SPAWN, SPAWNCLR, CLEARP,
+    LINE, PIECE, LKS, TICKM, COLLIDEM2, READGATE, MIRB2, PRESSCUT,
+    RAILGATE2, RSTM2, CPSET, VMODE, TOPW,
+    P2M, P2S, P2CLR, P2GATE, P2COL, TICKM2, P2CUT, LINEDLY,
+    ELEVC, ELEVA, ELEVSL, SEEDM, CLEARPM, LANE, TICKM3, TGM, TGS,
+    ELEVW1, ELEVW2, CGA, CGB, CGB2, CUTC1, CUTC2, JUNC,
+    TG2M, TG2S, CUTC3, CUTC4,
+    POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
+    POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, LEGINV2, WIDM3, WIDM4,
+    MIRCT, LEGINVT, LEGINVT2, VMODEM,
+  } = L;
+  // buttons/slides are separate hardware from relays; the classic build
+  // put them on m40 = machines - 10, kept as the general rule
+  const btnMachine = L.machines - 10;
   const w: string[] = [];
 
   // rails on 6-hole M10/M11 matrix groups, allocated one list at a time
   // (allocator state lives per-circuit: a second build must start fresh)
   const M_GROUPS: string[] = [];
-  for (let k = 0; k < MACHINES; k++) M_GROUPS.push(`m${k}.M10`, `m${k}.M11`);
+  for (let k = 0; k < L.machines; k++) M_GROUPS.push(`m${k}.M10`, `m${k}.M11`);
   let mNext = 0;
   const takeGroups = (n: number) => {
     if (mNext + n > M_GROUPS.length) throw new Error('out of matrix groups');
     return M_GROUPS.slice(mNext, (mNext += n));
   };
+  // fan/rail group counts: the hand-fit size at the classic 8 rows plus
+  // growth for the extra per-row consumers (tap() spends 4 holes per
+  // group, keeping 2 for the chain links) — deliberately never SMALLER
+  // than the classic size, so the 8-row wire list is untouched
+  const grown = (base: number, perRow: number) =>
+    base + Math.ceil(Math.max(0, (rows - 8) * perRow) / 4);
 
   // ---------- the rung-4 register file, decoder path included ----------
   w.push(
@@ -228,7 +459,7 @@ export function tetrisCircuit(): {
     R(A0m, 'J'), R(A0m, 'G'), R(A0m, 'N'), R(A0m, 'K'),
   ];
 
-  const dataRails = [takeGroups(5), takeGroups(5), takeGroups(5), takeGroups(5)];
+  const dataRails = [takeGroups(grown(5, 2)), takeGroups(grown(5, 2)), takeGroups(grown(5, 2)), takeGroups(grown(5, 2))];
   const railJack = (j: number, hole: number) => dataRails[j][Math.floor(hole / 4)];
   // chain each rail's groups (each link burns one hole on both sides, so a
   // group offers 4 fresh holes; railJack spreads consumers accordingly)
@@ -246,10 +477,13 @@ export function tetrisCircuit(): {
   // breaking holds. The game's lock path does the full OR-write, CLEARP
   // does the clearing, and the register-file file keeps the classic
   // destructive-write machinery.
-  for (let r = 0; r < 8; r++) {
+  for (let r = 0; r < rows; r++) {
     const comA = comOf(W(r, 0));
     const comB = comOf(W(r, 2));
-    w.push(`${sel[r]}/${comA}`);
+    // the 3-bit operator-write decoder addresses 8 rows; on a taller well
+    // the deep rows are game-writable only (locks fire W via the MIRA
+    // triggers, not the decoder)
+    if (r < 8) w.push(`${sel[r]}/${comA}`);
     for (let k = 0; k < 4; k++) {
       const src = k < 2 ? comA : comB;
       w.push(`${src}/${R(W(r, k), 'E')}`, `${R(W(r, k), 'F')}/${minusOf(W(r, k))}`);
@@ -280,10 +514,10 @@ export function tetrisCircuit(): {
   // ring clock rail rides the clock relays' own section coms (chain of 4-hole
   // coms, like the rung-2 shift register); the rail is fed by collide.J below
   const ringClkCom = (i: number) => comOf(RING(i, 0));
-  for (let i = 0; i < 8; i += 2) {
+  for (let i = 0; i < rows; i += 2) {
     if (i > 0) w.push(`${ringClkCom(i - 2)}/${ringClkCom(i)}`);
   }
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < rows; i++) {
     const c = RING(i, 0), a = RING(i, 1), s = RING(i, 2);
     w.push(`${ringClkCom(i - (i % 2))}/${R(c, 'E')}`, `${R(c, 'F')}/${minusOf(c)}`);
     w.push(`${comOf(a)}/${R(a, 'E')}`, `${R(a, 'F')}/${minusOf(a)}`);
@@ -330,7 +564,7 @@ export function tetrisCircuit(): {
   // (the arm's two FEEDS — hold-breaker NO for the lock readback, collision
   // mirror for the sense — are wired at those relays; there is NO shared
   // readback rail anywhere: every shared variant bridged the write rails)
-  for (let r = 0; r < 8; r++) {
+  for (let r = 0; r < rows; r++) {
     for (let j = 0; j < 4; j++) {
       w.push(`${R(CELL(r, j), 'K')}/${tapRail(j)}`);
     }
@@ -356,11 +590,11 @@ export function tetrisCircuit(): {
   // the cells' hold paths have re-closed. Feeding any of this from rail A
   // directly would strand every freshly written cell for one wave and drop
   // it (a bug this file's debug traces caught, twice).
-  const railA = takeGroups(3); // tick-driven, dies instantly on release
-  const railB0 = takeGroups(3); // breaker triggers: live on press OR clear
-  const railB0p = takeGroups(3); // gate triggers: live on press only
+  const railA = takeGroups(grown(3, 0.5)); // tick-driven, dies instantly on release
+  const railB0 = takeGroups(grown(3, 1)); // breaker triggers: live on press OR clear
+  const railB0p = takeGroups(grown(3, 1)); // gate triggers: live on press only
   const colFan = takeGroups(1)[0]; // column feed, via RAILGATE2 (press only)
-  const resetRail = takeGroups(2);
+  const resetRail = takeGroups(grown(2, 0.5));
   const collideNode = takeGroups(1)[0];
   for (const g of [railA, railB0, railB0p, resetRail]) {
     for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
@@ -376,7 +610,7 @@ export function tetrisCircuit(): {
   w.push(`${plusOf(READGATE)}/${R(READGATE, 'L')}`, `${R(READGATE, 'K')}/${tap(railB0p, bpUse)}`);
   w.push(`${tap(railB0p, bpUse)}/${R(RAILGATE2, 'E')}`, `${R(RAILGATE2, 'F')}/${minusOf(RAILGATE2)}`);
   w.push(`${plusOf(RAILGATE2)}/${R(RAILGATE2, 'L')}`, `${R(RAILGATE2, 'K')}/${colFan}`);
-  for (let x = 0; x < 4; x++) {
+  for (let x = 0; x < rows / 2; x++) {
     w.push(`${tap(railA, aUse)}/${R(PRESSCUT(x), 'E')}`, `${R(PRESSCUT(x), 'F')}/${minusOf(PRESSCUT(x))}`);
   }
 
@@ -438,10 +672,10 @@ export function tetrisCircuit(): {
   // arms fed from their own sections' + (a shared collision readrail bridged
   // the write rails through the stacked row's cells; a shared arm-feed rail
   // bridged them one node further up: only fully private feeds are safe).
-  for (let r = 0; r < 8; r++) {
+  for (let r = 0; r < rows; r++) {
     w.push(`${tap(railB0p, bpUse)}/${R(MIRA(r), 'H')}`, `${R(MIRA(r), 'G')}/${comOf(W(r, 0))}`);
     w.push(`${tap(railB0, b0Use)}/${R(MIRA(r), 'L')}`, `${R(MIRA(r), 'K')}/${comOf(W(r, 2))}`);
-    if (r < 7) {
+    if (r < rows - 1) {
       const taps: Array<[number, string, string]> = [
         [MIRB(r), 'H', 'G'], [MIRB(r), 'L', 'K'],
         [MIRB2(r), 'H', 'G'], [MIRB2(r), 'L', 'K'],
@@ -451,8 +685,8 @@ export function tetrisCircuit(): {
         w.push(`${plusOf(mr)}/${R(mr, arm)}`, `${R(mr, no)}/${R(CELL(r + 1, j), 'L')}`);
       }
     } else {
-      // the floor: token at row 7 always collides
-      w.push(`${plusOf(MIRB(7))}/${R(MIRB(7), 'H')}`, `${R(MIRB(7), 'G')}/${collideNode}`);
+      // the floor: the token at the bottom row always collides
+      w.push(`${plusOf(MIRB(rows - 1))}/${R(MIRB(rows - 1), 'H')}`, `${R(MIRB(rows - 1), 'G')}/${collideNode}`);
     }
   }
 
@@ -537,7 +771,7 @@ export function tetrisCircuit(): {
   w.push(`${tap(resetRail, rrUse)}/${R(RSTM, 'E')}`, `${R(RSTM, 'F')}/${minusOf(RSTM)}`);
 
   // reset mirrors: coils on the reset rail (contacts already in the slave holds)
-  for (let x = 0; x < 4; x++) {
+  for (let x = 0; x < rows / 2; x++) {
     w.push(`${tap(resetRail, rrUse)}/${R(RESETM(x), 'E')}`, `${R(RESETM(x), 'F')}/${minusOf(RESETM(x))}`);
   }
 
@@ -550,7 +784,7 @@ export function tetrisCircuit(): {
   w.push(`${R(TICKM, 'G')}/${R(RSTM, 'L')}`, `${R(RSTM, 'K')}/${comOf(SPAWN)}`);
   w.push(`${comOf(SPAWN)}/${R(SPAWN, 'E')}`, `${R(SPAWN, 'F')}/${minusOf(SPAWN)}`);
   w.push(`${plusOf(SPAWNCLR)}/${R(SPAWNCLR, 'H')}`, `${R(SPAWNCLR, 'J')}/${R(SPAWN, 'L')}`, `${R(SPAWN, 'K')}/${comOf(SPAWN)}`);
-  w.push(`${ringClkCom(6)}/${R(SPAWNCLR, 'E')}`, `${R(SPAWNCLR, 'F')}/${minusOf(SPAWNCLR)}`);
+  w.push(`${ringClkCom(rows - 2)}/${R(SPAWNCLR, 'E')}`, `${R(SPAWNCLR, 'F')}/${minusOf(SPAWNCLR)}`); // the LAST ring pair com has the spare hole
   // START arms SPAWN directly: a button IS a private contact, so it may
   // feed the com without a leak (unpressed = open = dead end for the latch)
   w.push(`${plusOf(SPAWN)}/m1.6Y`, `m1.6X/${comOf(SPAWN)}`);
@@ -562,7 +796,7 @@ export function tetrisCircuit(): {
   // group. Row 0 has no TOPW: a vertical lock there clips the top cell.
   const vsec = `m${Math.floor(VMODE / 6)}.${(VMODE % 6) + 1}`;
   w.push(`${vsec}+/${vsec}S`, `${vsec}T/${R(VMODE, 'E')}`, `${R(VMODE, 'F')}/${minusOf(VMODE)}`);
-  for (let r = 1; r < 8; r++) {
+  for (let r = 1; r < rows; r++) {
     w.push(`${comOf(MIRA(r))}/${R(TOPW(r), 'E')}`, `${R(TOPW(r), 'F')}/${minusOf(TOPW(r))}`);
   }
 
@@ -592,8 +826,8 @@ export function tetrisCircuit(): {
   // the phase-2 depth-1 rail (P2S's NO side; its NC side is the reset rail,
   // wired at the tick branch above). P2CLR rides it; P2GATE and the P2CUT
   // bank join in the next increment.
-  const p2railA = takeGroups(2);
-  w.push(`${p2railA[0]}/${p2railA[1]}`);
+  const p2railA = takeGroups(grown(2, 0.5));
+  for (let i = 1; i < p2railA.length; i++) w.push(`${p2railA[i - 1]}/${p2railA[i]}`);
   const p2aUse = { n: 0 };
   w.push(`${R(P2S, 'G')}/${tap(p2railA, p2aUse)}`);
   w.push(`${R(P2S, 'J')}/${tap(resetRail, rrUse)}`);
@@ -616,11 +850,11 @@ export function tetrisCircuit(): {
   // Release unwinds exactly like the press (same depths), so the fresh top
   // row hands off from its gates to its re-closed holds without a gap.
   w.push(`${tap(p2railA, p2aUse)}/${R(P2GATE, 'E')}`, `${R(P2GATE, 'F')}/${minusOf(P2GATE)}`);
-  for (let x = 0; x < 4; x++) {
+  for (let x = 0; x < rows / 2; x++) {
     w.push(`${tap(p2railA, p2aUse)}/${R(P2CUT(x), 'E')}`, `${R(P2CUT(x), 'F')}/${minusOf(P2CUT(x))}`);
   }
-  const p2break = takeGroups(2);
-  const p2gate = takeGroups(3);
+  const p2break = takeGroups(grown(2, 1));
+  const p2gate = takeGroups(grown(3, 1));
   for (const g of [p2break, p2gate]) {
     for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
   }
@@ -634,7 +868,7 @@ export function tetrisCircuit(): {
   // jack spare hole instead. Backfeed out of that node dead-ends at open
   // contacts in every phase (mirrorA of r-1 is off while the token is at r;
   // the decoder leaf dead-ends at the released WRITE button).
-  for (let r = 1; r < 8; r++) {
+  for (let r = 1; r < rows; r++) {
     w.push(`${tap(p2gate, p2gUse)}/${R(TOPW(r), 'H')}`, `${R(TOPW(r), 'G')}/${R(W(r - 1, 0), 'E')}`);
     w.push(`${tap(p2break, p2bUse)}/${R(TOPW(r), 'L')}`, `${R(TOPW(r), 'K')}/${comOf(W(r - 1, 2))}`);
   }
@@ -651,14 +885,14 @@ export function tetrisCircuit(): {
   // pure passive state, no routing, the game unchanged.
   const elevClkCom = (t: number) => comOf(ELEVC(t));
   w.push(`${tap(resetRail, rrUse)}/${elevClkCom(1)}`);
-  for (let t = 3; t <= 7; t += 2) w.push(`${elevClkCom(t - 2)}/${elevClkCom(t)}`);
-  for (let t = 1; t <= 7; t++) {
+  for (let t = 3; t <= rows - 1; t += 2) w.push(`${elevClkCom(t - 2)}/${elevClkCom(t)}`);
+  for (let t = 1; t <= rows - 1; t++) {
     const c = ELEVC(t), a = ELEVA(t), s = ELEVSL(t);
     w.push(`${elevClkCom(t % 2 === 1 ? t : t - 1)}/${R(c, 'E')}`, `${R(c, 'F')}/${minusOf(c)}`);
     w.push(`${plusOf(c)}/${R(c, 'H')}`, `${plusOf(c)}/${R(c, 'L')}`);
     // master D while the clock is low: the slave one stage DOWN the field
-    // (the hole walks up); stage 7's master has only the seed
-    if (t < 7) {
+    // (the hole walks up); the TOP stage's master has only the seed
+    if (t < rows - 1) {
       w.push(`${R(c, 'J')}/${R(ELEVSL(t + 1), 'L')}`, `${R(ELEVSL(t + 1), 'K')}/${comOf(a)}`);
     }
     w.push(`${R(c, 'G')}/${R(a, 'H')}`, `${R(a, 'G')}/${comOf(a)}`); // master holds, clock high
@@ -675,11 +909,11 @@ export function tetrisCircuit(): {
   // most ONE fan consumer conducts — the one-hot token — which is what
   // makes the one-contact fan legal (every other far side is dead).
   w.push(`${comOf(CLEARP)}/${R(CLEARPM, 'E')}`, `${R(CLEARPM, 'F')}/${minusOf(CLEARPM)}`);
-  const seedFan = takeGroups(2);
-  w.push(`${seedFan[0]}/${seedFan[1]}`);
+  const seedFan = takeGroups(grown(2, 1));
+  for (let i = 1; i < seedFan.length; i++) w.push(`${seedFan[i - 1]}/${seedFan[i]}`);
   const sfUse = { n: 0 };
   w.push(`${plusOf(CLEARPM)}/${R(CLEARPM, 'H')}`, `${R(CLEARPM, 'G')}/${tap(seedFan, sfUse)}`);
-  for (let t = 1; t <= 7; t++) {
+  for (let t = 1; t <= rows - 1; t++) {
     w.push(`${R(RING(t, 2), 'E')}/${R(SEEDM(t), 'E')}`, `${R(SEEDM(t), 'F')}/${minusOf(SEEDM(t))}`);
     w.push(`${tap(seedFan, sfUse)}/${R(SEEDM(t), 'H')}`, `${R(SEEDM(t), 'G')}/${comOf(ELEVA(t))}`);
   }
@@ -701,10 +935,10 @@ export function tetrisCircuit(): {
   // the "collapse active" OR: ELEVW1 mirrors (parallel coils on the stage
   // slaves' spare com holes) fan + into laneNode — legal one-contact-per-
   // consumer wired-OR: many sources, ONE consumer (LANE's copy gate)
-  const laneNode = takeGroups(3);
+  const laneNode = takeGroups(grown(3, 1));
   for (let i = 1; i < laneNode.length; i++) w.push(`${laneNode[i - 1]}/${laneNode[i]}`);
   const lnUse = { n: 0 };
-  for (let t = 1; t <= 7; t++) {
+  for (let t = 1; t <= rows - 1; t++) {
     w.push(`${comOf(ELEVSL(t))}/${R(ELEVW1(t), 'E')}`, `${R(ELEVW1(t), 'F')}/${minusOf(ELEVW1(t))}`);
     w.push(`${plusOf(ELEVW1(t))}/${R(ELEVW1(t), 'L')}`, `${R(ELEVW1(t), 'K')}/${tap(laneNode, lnUse)}`);
   }
@@ -727,7 +961,7 @@ export function tetrisCircuit(): {
   // one wave and its TICKM.N self-hold catches it; the slaves copy between
   // ticks (TICKM3.N) and hold through them (TICKM3.G carries laneNode).
   w.push(`${cgbRail}/${R(TGS, 'H')}`, `${R(TGS, 'J')}/${R(TG2S, 'H')}`);
-  w.push(`${R(TG2S, 'J')}/${comOf(TGM)}`, `${R(TG2S, 'G')}/${elevClkCom(7)}`);
+  w.push(`${R(TG2S, 'J')}/${comOf(TGM)}`, `${R(TG2S, 'G')}/${elevClkCom(rows - 1)}`); // gamma enters at the LAST elevator pair com
   w.push(`${R(TGS, 'G')}/${comOf(TG2M)}`);
   w.push(`${comOf(TGM)}/${R(TGM, 'E')}`, `${R(TGM, 'F')}/${minusOf(TGM)}`);
   w.push(`${comOf(TG2M)}/${R(TG2M, 'E')}`, `${R(TG2M, 'F')}/${minusOf(TG2M)}`);
@@ -759,13 +993,13 @@ export function tetrisCircuit(): {
   // through a closed gate. That same leak, deliberately, IS the alpha move:
   // gates-only on the source and the hole, no breakers, nothing to strand.)
   w.push(`${R(TG2S, 'J')}/${R(CGA, 'E')}`, `${R(CGA, 'F')}/${minusOf(CGA)}`);
-  const collapseA = takeGroups(4);
+  const collapseA = takeGroups(grown(4, 2));
   for (let i = 1; i < collapseA.length; i++) w.push(`${collapseA[i - 1]}/${collapseA[i]}`);
   const caUse = { n: 0 };
   w.push(`${plusOf(CGA)}/${R(CGA, 'L')}`, `${R(CGA, 'K')}/${tap(collapseA, caUse)}`);
   w.push(`${R(TGS, 'G')}/${R(CGB2, 'E')}`, `${R(CGB2, 'F')}/${minusOf(CGB2)}`);
-  const cgbRail2 = takeGroups(2);
-  w.push(`${cgbRail2[0]}/${cgbRail2[1]}`);
+  const cgbRail2 = takeGroups(grown(2, 1));
+  for (let i = 1; i < cgbRail2.length; i++) w.push(`${cgbRail2[i - 1]}/${cgbRail2[i]}`);
   const cb2Use = { n: 0 };
   w.push(`${plusOf(CGB2)}/${R(CGB2, 'L')}`, `${R(CGB2, 'K')}/${tap(cgbRail2, cb2Use)}`);
   // the colFan bridge cut, scoped to the WHOLE collapse (laneNode), not per
@@ -777,19 +1011,19 @@ export function tetrisCircuit(): {
   w.push(`${tap(laneNode, lnUse)}/${R(CUTC2, 'E')}`, `${R(CUTC2, 'F')}/${minusOf(CUTC2)}`);
   w.push(`${tap(laneNode, lnUse)}/${R(CUTC3, 'E')}`, `${R(CUTC3, 'F')}/${minusOf(CUTC3)}`);
   w.push(`${tap(laneNode, lnUse)}/${R(CUTC4, 'E')}`, `${R(CUTC4, 'F')}/${minusOf(CUTC4)}`);
-  for (let t = 1; t <= 7; t++) {
+  for (let t = 1; t <= rows - 1; t++) {
     w.push(`${R(ELEVW1(t), 'E')}/${R(ELEVW2(t), 'E')}`, `${R(ELEVW2(t), 'F')}/${minusOf(ELEVW2(t))}`);
-    // source gates: comA of row t-1 (row 0 has a direct spare hole; rows
-    // 1-6 go through their junction, being destinations too)
+    // source gates: comA of row t-1 (row 0 has a direct spare hole; the
+    // middle rows go through their junction, being destinations too)
     const srcATarget = t === 1 ? R(W(0, 1), 'E') : comOf(JUNC(t - 2));
     w.push(`${tap(collapseA, caUse)}/${R(ELEVW1(t), 'H')}`, `${R(ELEVW1(t), 'G')}/${srcATarget}`);
     // destination gates: comA of row t
-    const destTarget = t === 7 ? R(W(7, 1), 'E') : comOf(JUNC(t - 1));
+    const destTarget = t === rows - 1 ? R(W(rows - 1, 1), 'E') : comOf(JUNC(t - 1));
     w.push(`${tap(collapseA, caUse)}/${R(ELEVW2(t), 'H')}`, `${R(ELEVW2(t), 'G')}/${destTarget}`);
     // source breakers: comB of row t-1 (its coil jack's spare hole)
     w.push(`${tap(cgbRail2, cb2Use)}/${R(ELEVW2(t), 'L')}`, `${R(ELEVW2(t), 'K')}/${R(W(t - 1, 2), 'E')}`);
   }
-  for (let x = 1; x <= 6; x++) {
+  for (let x = 1; x <= rows - 2; x++) {
     w.push(`${R(W(x, 1), 'E')}/${comOf(JUNC(x - 1))}`);
   }
 
@@ -819,8 +1053,9 @@ export function tetrisCircuit(): {
   // is a CONTACT or instead: each mirror's spare K from its own +, the two
   // K outputs tied at ANYBM.E, each far side dead-ending at an open
   // contact when its button is up. Costs one wave (ANYBM is depth 2 now).
-  w.push('m40.3+/m40.3Y', `m40.3X/${R(LEFTM, 'E')}`);
-  w.push('m40.4+/m40.4Y', `m40.4X/${R(RIGHTM, 'E')}`);
+  const bm = `m${btnMachine}`;
+  w.push(`${bm}.3+/${bm}.3Y`, `${bm}.3X/${R(LEFTM, 'E')}`);
+  w.push(`${bm}.4+/${bm}.4Y`, `${bm}.4X/${R(RIGHTM, 'E')}`);
   w.push(`${R(LEFTM, 'F')}/${minusOf(LEFTM)}`, `${R(RIGHTM, 'F')}/${minusOf(RIGHTM)}`, `${R(ANYBM, 'F')}/${minusOf(ANYBM)}`);
   w.push(`${plusOf(LEFTM)}/${R(LEFTM, 'L')}`, `${R(LEFTM, 'K')}/${R(ANYBM, 'E')}`);
   w.push(`${plusOf(RIGHTM)}/${R(RIGHTM, 'L')}`, `${R(RIGHTM, 'K')}/${R(ANYBM, 'E')}`);
@@ -899,7 +1134,7 @@ export function tetrisCircuit(): {
   // game just keeps the boot seed feeding the home column it sits at,
   // and every reset's POSRST re-set agrees with it.
   const resetRail3 = takeGroups(1)[0];
-  w.push(`${resetRail[1]}/${resetRail3}`);
+  w.push(`${resetRail[resetRail.length - 1]}/${resetRail3}`);
   w.push(`${resetRail3}/${R(POSRST(0), 'E')}`, `${R(POSRST(0), 'F')}/${minusOf(POSRST(0))}`);
   w.push(`${resetRail3}/${R(POSRST(1), 'E')}`, `${R(POSRST(1), 'F')}/${minusOf(POSRST(1))}`);
   w.push(`${R(POSRST(0), 'G')}/${R(POSS(0), 'E')}`); // home set, reset-scoped
@@ -918,7 +1153,7 @@ export function tetrisCircuit(): {
   // contact; the pos gate makes the backward path always hit one (one-hot:
   // pos can't be j and j+1 at once). POSM2 coils chain off the POSM coil
   // jacks (the slave coms themselves are at capacity 4).
-  w.push('m40.5+/m40.5S', `m40.5T/${R(WIDM, 'E')}`, `m40.5T/${R(WIDM2, 'E')}`);
+  w.push(`${bm}.5+/${bm}.5S`, `${bm}.5T/${R(WIDM, 'E')}`, `${bm}.5T/${R(WIDM2, 'E')}`);
   w.push(`${R(WIDM, 'F')}/${minusOf(WIDM)}`, `${R(WIDM2, 'F')}/${minusOf(WIDM2)}`);
   for (let j = 0; j < 3; j++) {
     w.push(`${R(POSM(j), 'E')}/${R(POSM2(j), 'E')}`, `${R(POSM2(j), 'F')}/${minusOf(POSM2(j))}`);
@@ -942,11 +1177,11 @@ export function tetrisCircuit(): {
   // Backward audit: a rail is fed only through the one closed MIRC row
   // gate; an OFF cell's com behind an OPEN gate can never be energized
   // from the rail side.
-  const legRails = [takeGroups(2), takeGroups(2), takeGroups(2), takeGroups(2)];
-  for (const lg of legRails) w.push(`${lg[0]}/${lg[1]}`);
-  const legUse = [0, 0, 0, 0];
-  const legTap = (j: number) => legRails[j][legUse[j]++ >= 5 ? 1 : 0];
-  for (let r = 0; r <= 6; r++) {
+  const legRails = [takeGroups(grown(2, 1)), takeGroups(grown(2, 1)), takeGroups(grown(2, 1)), takeGroups(grown(2, 1))];
+  for (const lg of legRails) for (let i = 1; i < lg.length; i++) w.push(`${lg[i - 1]}/${lg[i]}`);
+  const legUse = [{ n: 0 }, { n: 0 }, { n: 0 }, { n: 0 }];
+  const legTap = (j: number) => tap(legRails[j], legUse[j]);
+  for (let r = 0; r <= rows - 2; r++) {
     const feed0 = r === 0 ? comOf(MIRA(0)) : R(TOPW(r), 'E');
     w.push(`${feed0}/${R(MIRC(r, 0), 'E')}`, `${R(MIRC(r, 0), 'E')}/${R(MIRC(r, 1), 'E')}`);
     w.push(`${R(MIRC(r, 0), 'F')}/${minusOf(MIRC(r, 0))}`, `${R(MIRC(r, 1), 'F')}/${minusOf(MIRC(r, 1))}`);
@@ -974,11 +1209,11 @@ export function tetrisCircuit(): {
   // rows 1..6 only: row 0 has no row above (the write clips there too)
   // and row 7 is post-lock. dark rails = no top constraint, so flat
   // pieces, no-token steering and the power-on ring never feel this bank.
-  const legTRails = [takeGroups(2), takeGroups(2), takeGroups(2), takeGroups(2)];
-  for (const lg of legTRails) w.push(`${lg[0]}/${lg[1]}`);
-  const legTUse = [0, 0, 0, 0];
-  const legTTap = (j: number) => legTRails[j][legTUse[j]++ >= 5 ? 1 : 0];
-  for (let r = 1; r <= 6; r++) {
+  const legTRails = [takeGroups(grown(2, 1)), takeGroups(grown(2, 1)), takeGroups(grown(2, 1)), takeGroups(grown(2, 1))];
+  for (const lg of legTRails) for (let i = 1; i < lg.length; i++) w.push(`${lg[i - 1]}/${lg[i]}`);
+  const legTUse = [{ n: 0 }, { n: 0 }, { n: 0 }, { n: 0 }];
+  const legTTap = (j: number) => tap(legTRails[j], legTUse[j]);
+  for (let r = 1; r <= rows - 2; r++) {
     w.push(`${R(MIRC(r, 1), 'E')}/${R(MIRCT(r, 0), 'E')}`, `${R(MIRCT(r, 0), 'E')}/${R(MIRCT(r, 1), 'E')}`);
     w.push(`${R(MIRCT(r, 0), 'F')}/${minusOf(MIRCT(r, 0))}`, `${R(MIRCT(r, 1), 'F')}/${minusOf(MIRCT(r, 1))}`);
     for (let j = 0; j < 4; j++) {
@@ -1077,7 +1312,7 @@ export function tetrisCircuit(): {
     }
   }
 
-  return { wires: w, rails: dataRails };
+  return { wires: w, rails: dataRails, layout: L, btnMachine };
 }
 
 

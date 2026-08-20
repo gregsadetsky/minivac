@@ -8,9 +8,11 @@
  * ring steps (edge presses self-loop); this page no longer knows where
  * the piece is, it asks. Everything the game decides (falling, landing,
  * stacking, line clears, the two-row vertical write, the row collapse
- * that walks the stack down after a clear) happens inside the 289-relay
- * circuit; the page only works the tick/shape slides, the LEFT/RIGHT
- * buttons and START — exactly what a human at 50 real Minivacs would do.
+ * that walks the stack down after a clear) happens inside the circuit —
+ * now the 12-ROW WELL: the generator is rows-parameterized (rung 11), so
+ * this page plays 396 relays across 68 minivacs; the page only works the
+ * tick/shape slides, the LEFT/RIGHT buttons and START — exactly what a
+ * human at 68 real Minivacs would do.
  * After a lock the machine owes itself bookkeeping ticks (the vertical
  * phase-2 write, then the reset, which also re-homes the register); the
  * page runs those automatically while the LOCKED slave is up, which also
@@ -22,7 +24,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, MACHINES, TETRIS_IO } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit } from './circuits/multivac-mini-tetris';
 
 // the 'fast' engine: typed-array rewrite of the sparse solver, validated
 // against the dense oracle on 5000 random circuits (zero mismatches, max
@@ -30,8 +32,24 @@ import { tetrisCircuit, MACHINES, TETRIS_IO } from './circuits/multivac-mini-tet
 // from ~1.2s to ~70-100ms. the suite's default engine remains 'sparse'.
 setSolverEngine('fast');
 
-const ROWS = 8;
+const ROWS = 12; // the tall well (rung 11): the generator is rows-parameterized
 const COLS = 4;
+
+const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS);
+const loc = (n: number) => ({ machine: Math.floor(n / 6), index: n % 6 });
+const IO = {
+  tick: { slide: 5, machine: 1 },
+  start: { button: 6, machine: 1 },
+  vmode: { slide: (L.VMODE % 6) + 1, machine: Math.floor(L.VMODE / 6) },
+  wid: { slide: 5, machine: btnMachine },
+  left: { button: 3, machine: btnMachine },
+  right: { button: 4, machine: btnMachine },
+  lockedRelay: loc(L.LKS),
+  collapseRelay: loc(L.LANE),
+  posRelay: (j: number) => loc(L.POSS(j)),
+  cellRelay: (r: number, j: number) => loc(L.CELL(r, j)),
+  tokenRelay: (i: number) => loc(L.RING(i, 2)),
+};
 
 const root = document.getElementById('root')!;
 document.body.style.cssText =
@@ -41,9 +59,9 @@ root.innerHTML = `
   <div style="text-align:center;padding:24px">
     <h1 style="font-size:16px;font-weight:600;letter-spacing:.06em;color:#e8e2d0;margin:0 0 4px">
       multivac tetris</h1>
-    <div style="color:#7a828c;margin-bottom:18px">289 relays / ${MACHINES} minivacs — pure wiring</div>
-    <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center;margin-bottom:6px"></div>
-    <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center"></div>
+    <div style="color:#7a828c;margin-bottom:18px">${L.relays} relays / ${L.machines} minivacs — pure wiring</div>
+    <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},44px);gap:8px;justify-content:center;margin-bottom:6px"></div>
+    <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},44px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
     <div style="margin-top:10px;color:#5c646e">
       &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = piece shape &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; enter = start
@@ -64,7 +82,7 @@ for (let r = 0; r < ROWS; r++) {
   for (let j = 0; j < COLS; j++) {
     const d = document.createElement('div');
     d.style.cssText =
-      'width:56px;height:56px;border-radius:10px;background:#1b2027;transition:background .12s';
+      'width:44px;height:44px;border-radius:9px;background:#1b2027;transition:background .12s';
     grid.appendChild(d);
     pixels[r].push(d);
   }
@@ -77,9 +95,8 @@ for (let j = 0; j < COLS; j++) {
   colMarks.push(d);
 }
 
-const { wires } = tetrisCircuit();
 document.getElementById('dump')!.textContent =
-  `${wires.length} wires, ${MACHINES} machines\n\n` + wires.join('\n');
+  `${wires.length} wires, ${L.machines} machines\n\n` + wires.join('\n');
 
 let width = 1; // 1 or 2 columns (the WID slide)
 let tall = false; // VMODE: the piece is 2 cells tall (the vertical rung)
@@ -96,7 +113,7 @@ function relay(loc: { machine: number; index: number }): boolean {
 // the piece's column lives in the machine: the position register's
 // one-hot slaves (seeded at the home column from power-on)
 function posAt(): number {
-  for (let j = 0; j < COLS; j++) if (relay(TETRIS_IO.posRelay(j))) return j;
+  for (let j = 0; j < COLS; j++) if (relay(IO.posRelay(j))) return j;
   return -1;
 }
 
@@ -111,13 +128,13 @@ function press(b: { button: number; machine: number }) {
 }
 
 function tokenRow(): number {
-  for (let i = 0; i < ROWS; i++) if (relay(TETRIS_IO.tokenRelay(i))) return i;
+  for (let i = 0; i < ROWS; i++) if (relay(IO.tokenRelay(i))) return i;
   return -1;
 }
 
 function rowCells(r: number): number {
   let n = 0;
-  for (let j = 0; j < COLS; j++) if (relay(TETRIS_IO.cellRelay(r, j))) n++;
+  for (let j = 0; j < COLS; j++) if (relay(IO.cellRelay(r, j))) n++;
   return n;
 }
 
@@ -135,8 +152,8 @@ function wouldOverlap(nPos: number, nWidth: number, nTall: boolean): boolean {
   const m = (nWidth === 2 ? 0b11 : 0b1) << nPos;
   for (let j = 0; j < COLS; j++) {
     if (((m >> j) & 1) === 0) continue;
-    if (relay(TETRIS_IO.cellRelay(tok, j))) return true;
-    if (nTall && tok > 0 && relay(TETRIS_IO.cellRelay(tok - 1, j))) return true;
+    if (relay(IO.cellRelay(tok, j))) return true;
+    if (nTall && tok > 0 && relay(IO.cellRelay(tok - 1, j))) return true;
   }
   return false;
 }
@@ -146,7 +163,7 @@ function render(note?: string) {
   const m = mask();
   for (let r = 0; r < ROWS; r++) {
     for (let j = 0; j < COLS; j++) {
-      const on = relay(TETRIS_IO.cellRelay(r, j));
+      const on = relay(IO.cellRelay(r, j));
       const inPiece = r === tok || (tall && tok > 0 && r === tok - 1);
       const isPiece = inPiece && ((m >> j) & 1) === 1;
       pixels[r][j].style.background = isPiece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
@@ -176,9 +193,9 @@ function act(label: string, fn: () => string | void) {
 }
 
 function applyShape() {
-  const w = TETRIS_IO.wid;
+  const w = IO.wid;
   sim.setSlide(w.slide, width === 2 ? 'right' : 'left', w.machine);
-  const v = TETRIS_IO.vmode;
+  const v = IO.vmode;
   sim.setSlide(v.slide, tall ? 'right' : 'left', v.machine);
 }
 
@@ -196,7 +213,7 @@ document.addEventListener('keydown', e => {
     const next = Math.min(COLS - width, Math.max(0, p + dir));
     if (next === p) return;
     act(`column ${next}`, () => {
-      press(dir > 0 ? TETRIS_IO.right : TETRIS_IO.left);
+      press(dir > 0 ? IO.right : IO.left);
       if (posAt() === p) return 'blocked — the contacts refused the step';
     });
   } else if (e.key === 'ArrowUp') {
@@ -223,7 +240,7 @@ document.addEventListener('keydown', e => {
     }
     act('shape', () => {
       if (nPos < p) {
-        press(TETRIS_IO.left); // widening at the wall: step in first
+        press(IO.left); // widening at the wall: step in first
         if (posAt() !== nPos) return 'blocked — no room for that shape here';
       }
       width = nWidth;
@@ -245,7 +262,7 @@ document.addEventListener('keydown', e => {
     const cellsBefore = Array.from({ length: ROWS }, (_, r) => rowCells(r));
     const step = (n: number) =>
       setTimeout(() => {
-        const t = TETRIS_IO.tick;
+        const t = IO.tick;
         sim.setSlide(t.slide, 'right', t.machine);
         render('holding the tick…');
         setTimeout(() => {
@@ -253,9 +270,9 @@ document.addEventListener('keydown', e => {
           ticks++;
           // the machine owes itself ticks while LOCKED (phase 2 / reset)
           // or while a collapse walks the stack down (up to 21 more)
-          if ((relay(TETRIS_IO.lockedRelay) || relay(TETRIS_IO.collapseRelay)) && n < 26) {
+          if ((relay(IO.lockedRelay) || relay(IO.collapseRelay)) && n < 3 * ROWS + 6) {
             render(
-              relay(TETRIS_IO.collapseRelay)
+              relay(IO.collapseRelay)
                 ? 'line cleared — the stack falls…'
                 : 'locked — the machine runs its bookkeeping ticks…'
             );
@@ -279,7 +296,7 @@ document.addEventListener('keydown', e => {
       return;
     }
     act('start', () => {
-      const b = TETRIS_IO.start;
+      const b = IO.start;
       sim.pressButton(b.button, b.machine);
       sim.releaseButton(b.button, b.machine);
     });
@@ -288,7 +305,7 @@ document.addEventListener('keydown', e => {
 
 // boot: build + settle the machine off the main paint
 setTimeout(() => {
-  sim = new MinivacSimulator(wires, false, MACHINES);
+  sim = new MinivacSimulator(wires, false, L.machines);
   sim.initialize();
   applyShape();
   busy = false;
