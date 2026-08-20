@@ -31,6 +31,66 @@ export const minusOf = (n: number) => `m${Math.floor(n / 6)}.${(n % 6) + 1}-`;
 // source now (wider-well phase C shifts bank sizes; literals would
 // break). the inline comments document each bank; jack ranges in
 // them describe TODAY'S map and move with the allocator.
+export const NSTATES = 12; // ring states (the page's cycle length)
+// the shape set — geometry per ring state as (bottom offset/width, top
+// offset/width): the bottom row sits at register position p+bOff, the
+// top at p+tOff. Order MUST match the ring (the L/J/T triples appended
+// in 3b-4a, their 180-degree overhang forms in 3b-4c). SINGLE SOURCE OF
+// TRUTH: the page renders from it and the wider-well emitter derives
+// its step/reshape check tables from it (_notes/wider-well.md).
+export const SHAPES = [
+  { label: '1x1', bOff: 0, bW: 1, tOff: 0, tW: 0 },
+  { label: '2 wide', bOff: 0, bW: 2, tOff: 0, tW: 0 },
+  { label: '2 tall', bOff: 0, bW: 1, tOff: 0, tW: 1 },
+  { label: '2x2 square', bOff: 0, bW: 2, tOff: 0, tW: 2 },
+  { label: 'S', bOff: 0, bW: 2, tOff: -1, tW: 2 },
+  { label: 'Z', bOff: 0, bW: 2, tOff: 1, tW: 2 },
+  { label: 'L', bOff: 0, bW: 3, tOff: 0, tW: 1 },
+  { label: 'J', bOff: 0, bW: 3, tOff: 2, tW: 1 },
+  { label: 'T', bOff: 0, bW: 3, tOff: 1, tW: 1 },
+  { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3 },
+  { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3 },
+  { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3 },
+] as const;
+if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
+// legal register positions for a shape at a given width (both rows fit)
+export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
+  min: Math.max(0, -s.bOff, s.tW > 0 ? -s.tOff : 0),
+  max: Math.min(cols - s.bOff - s.bW, s.tW > 0 ? cols - s.tOff - s.tW : cols),
+});
+
+// the UP-transition emitter's resource counts, a pure function of the
+// geometry: branches exist where a position is legal for BOTH states of
+// a ring step; each branch spends one pos-fan set and one read set per
+// entering cell (bottom reads the occupancy rails, top the top rails).
+export function upResourceCounts(cols: number) {
+  const span = (o: number, w2: number, p: number) => Array.from({ length: w2 }, (_, k) => p + o + k);
+  const posUse = Array(cols).fill(0) as number[];
+  const botUse = Array(cols).fill(0) as number[];
+  const topUse = Array(cols).fill(0) as number[];
+  for (let i = 0; i < NSTATES; i++) {
+    const s1 = SHAPES[i];
+    const s2 = SHAPES[(i + 1) % NSTATES];
+    const r1 = shapeRange(s1, cols);
+    const r2 = shapeRange(s2, cols);
+    for (let p = r1.min; p <= r1.max; p++) {
+      if (p < r2.min || p > r2.max) continue;
+      posUse[p]++;
+      const b1 = new Set(span(s1.bOff, s1.bW, p));
+      const t1 = new Set(s1.tW ? span(s1.tOff, s1.tW, p) : []);
+      for (const c of span(s2.bOff, s2.bW, p)) if (!b1.has(c) && c >= 0 && c < cols) botUse[c]++;
+      if (s2.tW) for (const c of span(s2.tOff, s2.tW, p)) if (!t1.has(c) && c >= 0 && c < cols) topUse[c]++;
+    }
+  }
+  const rel = (u: number[]) => u.map((x) => Math.ceil(x / 2));
+  return {
+    posUse, botUse, topUse,
+    posRelays: rel(posUse), botRelays: rel(botUse), topRelays: rel(topUse),
+    posTotal: rel(posUse).reduce((a, b) => a + b, 0),
+    readTotal: rel(botUse).reduce((a, b) => a + b, 0) + rel(topUse).reduce((a, b) => a + b, 0),
+  };
+}
+
 const L8 = tetrisLayout(8);
 export const A0 = L8.A0, A0m = L8.A0m, A1 = L8.A1, A2 = L8.A2; // decoder address relays
 export const W = L8.W; // write groups, k = 0..3
@@ -207,33 +267,6 @@ export const ZG = L8.ZG; // Z mirrors: ZG(0,1) = NOT-Z coil gates, ZG(2,3) = LTZ
 // entirely (the legality trees don't know 3-wide yet — 4b re-classes
 // them; position first, then reshape: the transition network gates the
 // entry at pos {0,1} and reads the delta cells).
-export const NSTATES = 12; // ring states (the page's cycle length)
-// the shape set — geometry per ring state as (bottom offset/width, top
-// offset/width): the bottom row sits at register position p+bOff, the
-// top at p+tOff. Order MUST match the ring (the L/J/T triples appended
-// in 3b-4a, their 180-degree overhang forms in 3b-4c). SINGLE SOURCE OF
-// TRUTH: the page renders from it and the wider-well emitter derives
-// its step/reshape check tables from it (_notes/wider-well.md).
-export const SHAPES = [
-  { label: '1x1', bOff: 0, bW: 1, tOff: 0, tW: 0 },
-  { label: '2 wide', bOff: 0, bW: 2, tOff: 0, tW: 0 },
-  { label: '2 tall', bOff: 0, bW: 1, tOff: 0, tW: 1 },
-  { label: '2x2 square', bOff: 0, bW: 2, tOff: 0, tW: 2 },
-  { label: 'S', bOff: 0, bW: 2, tOff: -1, tW: 2 },
-  { label: 'Z', bOff: 0, bW: 2, tOff: 1, tW: 2 },
-  { label: 'L', bOff: 0, bW: 3, tOff: 0, tW: 1 },
-  { label: 'J', bOff: 0, bW: 3, tOff: 2, tW: 1 },
-  { label: 'T', bOff: 0, bW: 3, tOff: 1, tW: 1 },
-  { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3 },
-  { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3 },
-  { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3 },
-] as const;
-if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
-// legal register positions for a shape at a given width (both rows fit)
-export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
-  min: Math.max(0, -s.bOff, s.tW > 0 ? -s.tOff : 0),
-  max: Math.min(cols - s.bOff - s.bW, s.tW > 0 ? cols - s.tOff - s.tW : cols),
-});
 // the cells a step must check, as OFFSETS from the target position q:
 // stepping RIGHT enters bottom q+bOff+bW-1 (its rightmost bottom cell)
 // and top q+tOff+tW-1; LEFT enters q+bOff and q+tOff. every other
@@ -430,6 +463,8 @@ export interface TetrisLayout {
   FANPOS: number; FANPOS_CAP: number;
   FANRAIL: number; FANRAIL_CAP: number;
   FANMIR: number; FANMIR_CAP: number;
+  UPPOS: number; UPPOS_CAP: number;
+  UPREAD: number; UPREAD_CAP: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -518,6 +553,9 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const fanPosBase = take(4 * cols); // per-position mirror banks
   const fanRailBase = take(4); // T-fan offset rails (T-1, T0, T1, T2)
   const fanMirBase = take(6 * Math.ceil(cols / 2) + 8); // rail mirrors (private tap sets)
+  const upC = upResourceCounts(cols);
+  const upPosBase = take(upC.posTotal); // UP-transition pos fan mirrors
+  const upReadBase = take(upC.readTotal); // UP-transition delta reads
   return {
     rows,
     cols,
@@ -601,6 +639,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     FANPOS: fanPosBase, FANPOS_CAP: 4 * cols,
     FANRAIL: fanRailBase, FANRAIL_CAP: 4,
     FANMIR: fanMirBase, FANMIR_CAP: 6 * Math.ceil(cols / 2) + 8,
+    UPPOS: upPosBase, UPPOS_CAP: upC.posTotal,
+    UPREAD: upReadBase, UPREAD_CAP: upC.readTotal,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -706,6 +746,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let k = 0; k < L8.FANPOS_CAP; k++) claim('FANPOS', L8.FANPOS + k);
   for (let k = 0; k < L8.FANRAIL_CAP; k++) claim('FANRAIL', L8.FANRAIL + k);
   for (let k = 0; k < L8.FANMIR_CAP; k++) claim('FANMIR', L8.FANMIR + k);
+  for (let k = 0; k < L8.UPPOS_CAP; k++) claim('UPPOS', L8.UPPOS + k);
+  for (let k = 0; k < L8.UPREAD_CAP; k++) claim('UPREAD', L8.UPREAD + k);
 
 }
 
@@ -1514,7 +1556,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // from the rail side.
   // grown to 3 base groups in 3b-4b: LTB3 taps the col-3 rail (and the
   // uniform growth leaves room for the coming overhang forms)
-  const legRails = Array.from({ length: cols }, () => takeGroups(grown(3, 1)));
+  const legRails = Array.from({ length: cols }, () => takeGroups(grown(4, 1))); // +1 group: the UP emitter's read heads tap here too
   for (const lg of legRails) for (let i = 1; i < lg.length; i++) w.push(`${lg[i - 1]}/${lg[i]}`);
   const legUse = Array.from({ length: cols }, () => ({ n: 0 }));
   const legTap = (j: number) => tap(legRails[j], legUse[j]);
@@ -1546,7 +1588,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // pieces, no-token steering and the power-on ring never feel this bank.
   // grown to 3 base groups in 3b-3b: the mode-gated coil feeds (NOT-Z /
   // NOT-S gates + the LTS/LTZ reads) add two taps per column
-  const legTRails = Array.from({ length: cols }, () => takeGroups(grown(3, 1)));
+  const legTRails = Array.from({ length: cols }, () => takeGroups(grown(4, 1))); // +1 group: the UP emitter's top read heads
   for (const lg of legTRails) for (let i = 1; i < lg.length; i++) w.push(`${lg[i - 1]}/${lg[i]}`);
   const legTUse = Array.from({ length: cols }, () => ({ n: 0 }));
   const legTTap = (j: number) => tap(legTRails[j], legTUse[j]);
@@ -1886,6 +1928,83 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     if (outs.length > 0) w.push(`${outs[outs.length - 1]}/${R(PIECET(j), 'E')}`);
   }
 
+  let upEndTail: string | null = null; // the UP end chain's tail, landed at the clock com below
+  // ---------- the UP-transition emitter (replaces POSM4/5/6 + the read
+  // banks + the three per-era transition blocks) ----------
+  // for every ring step i -> i+1 and every position legal for BOTH
+  // states: one branch = the master mirror's contact -> a pos-fan
+  // contact (one-hot arms chained, the BCUT-lesson-legal shape) ->
+  // series hops through the entering cells' reads (arm -> NC: a stored
+  // cell opens the branch) -> the shared end chain -> the ring clock
+  // com. a position missing from the target's range simply has no
+  // branch: the bound refusal costs nothing. reads are PLAIN rail
+  // copies (the one-hot pos fan already scopes each branch); pos fans
+  // feed through fanPos free sets, read chains head at rail tap holes.
+  {
+    const upC = upResourceCounts(cols);
+    const span = (o: number, w2: number, p: number) => Array.from({ length: w2 }, (_, k) => p + o + k);
+    const ncOf = (cs: { arm: string }) => (cs.arm === 'H' ? 'J' : 'N');
+    let upOff = 0;
+    const upPos: (MirrorBank | null)[] = [];
+    for (let p = 0; p < cols; p++) {
+      if (upC.posRelays[p] === 0) {
+        upPos.push(null);
+        continue;
+      }
+      const bank = new MirrorBank({ name: `UPPOS${p}`, source: null, base: L.UPPOS + upOff, capacity: upC.posRelays[p], w, R, minusOf });
+      const feed = fanPos[p].request('gate');
+      w.push(`${plusOf(feed.relay)}/${R(feed.relay, feed.arm)}`, `${R(feed.relay, feed.no)}/${R(L.UPPOS + upOff, 'E')}`);
+      upOff += upC.posRelays[p];
+      upPos.push(bank);
+    }
+    let rdOff = 0;
+    const mkReads = (kind: 'bot' | 'top', col: number, relays: number) => {
+      if (relays === 0) return null;
+      const base = L.UPREAD + rdOff;
+      const bank = new MirrorBank({ name: `UPR${kind}${col}`, source: null, base, capacity: relays, w, R, minusOf });
+      w.push(`${kind === 'bot' ? legTap(col) : legTTap(col)}/${R(base, 'E')}`);
+      rdOff += relays;
+      return bank;
+    };
+    const botBank = Array.from({ length: cols }, (_, c) => mkReads('bot', c, upC.botRelays[c]));
+    const topBank = Array.from({ length: cols }, (_, c) => mkReads('top', c, upC.topRelays[c]));
+    const ends: string[] = [];
+    for (let t = 0; t < NSTATES; t++) {
+      // MMIR(t) mirrors MASTER t, which is up while the ring sits at
+      // t's PREDECESSOR — it gates the transition INTO t (the hand's
+      // convention; pairing it with t -> t+1 was an off-by-one that
+      // walked on the wrong checks until a range mismatch refused)
+      const s1 = SHAPES[(t + NSTATES - 1) % NSTATES];
+      const s2 = SHAPES[t];
+      const r1 = shapeRange(s1, cols);
+      const r2 = shapeRange(s2, cols);
+      const mm = t < 6 ? MMIR(t) : t < 9 ? MMIR2(t) : MMIR3(t);
+      let armChain: string | null = null;
+      for (let p = r1.min; p <= r1.max; p++) {
+        if (p < r2.min || p > r2.max) continue;
+        const pc = (upPos[p] as MirrorBank).request('gate');
+        w.push(`${armChain ?? `${R(mm, 'G')}`}/${R(pc.relay, pc.arm)}`);
+        armChain = R(pc.relay, pc.arm);
+        const b1 = new Set(span(s1.bOff, s1.bW, p));
+        const t1 = new Set(s1.tW ? span(s1.tOff, s1.tW, p) : []);
+        const deltas: Array<{ kind: 'bot' | 'top'; col: number }> = [];
+        for (const c of span(s2.bOff, s2.bW, p)) if (!b1.has(c) && c >= 0 && c < cols) deltas.push({ kind: 'bot', col: c });
+        if (s2.tW) for (const c of span(s2.tOff, s2.tW, p)) if (!t1.has(c) && c >= 0 && c < cols) deltas.push({ kind: 'top', col: c });
+        let cur = R(pc.relay, pc.no);
+        for (const d of deltas) {
+          const rb = (d.kind === 'bot' ? botBank : topBank)[d.col] as MirrorBank;
+          const rc = rb.request('gate');
+          w.push(`${cur}/${R(rc.relay, rc.arm)}`);
+          cur = R(rc.relay, ncOf(rc));
+        }
+        ends.push(cur);
+      }
+    }
+    for (let k = 1; k < ends.length; k++) w.push(`${ends[k - 1]}/${ends[k]}`);
+    upEndTail = ends[ends.length - 1];
+  }
+
+
   // ---------- game over: the stack topped out ----------
   // GAMEOVER latches on any LOCK AT ROW 0 (a row-0 clearing lock also
   // tops out — documented simplification) and its NC sits in the START
@@ -2049,6 +2168,8 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   const SH = (i: number, part: number) =>
     i < 6 ? SHR(i, part) : i < 9 ? SHR2(i, part) : SHR3(i, part);
   const shrClkCom = (i: number) => comOf(SH(i, 0));
+  // the UP-transition end chain conducts the clock into the ring here
+  if (upEndTail !== null) w.push(`${upEndTail}/${shrClkCom(0)}`);
   w.push(`${bmS}.2+/${bmS}.2Y`, `${bmS}.2X/${R(UPM, 'E')}`, `${R(UPM, 'F')}/${minusOf(UPM)}`);
   // UPM's clock contact feeds the ring through the 3b-3c transition
   // legality network (wired below) instead of a plain wire
@@ -2157,62 +2278,22 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // every rail is dark, so all in-bounds transitions stay free.
   for (let i = 0; i < 6; i++)
     w.push(`${R(SHR(i, 1), 'E')}/${R(MMIR(i), 'E')}`, `${R(MMIR(i), 'F')}/${minusOf(MMIR(i))}`);
-  w.push(`${R(POSM3(0), 'E')}/${R(POSM4(0), 'E')}`);
-  w.push(`${R(POSM3(2), 'E')}/${R(POSM4(1), 'E')}`, `${R(POSM4(1), 'E')}/${R(POSM4(2), 'E')}`);
-  w.push(`${R(POSM3(3), 'E')}/${R(POSM4(3), 'E')}`, `${R(POSM4(3), 'E')}/${R(POSM4(4), 'E')}`);
-  w.push(`${R(POSM(3), 'E')}/${R(POSM4(5), 'E')}`); // pos3: POSM(3)'s own sets are the sample bus + self-loop, untouchable
-  for (let k = 0; k < 3; k++)
-    w.push(`${R(LEGB(k + 1), 'E')}/${R(LEGB2(k), 'E')}`);
-  w.push(`${legTTap(0)}/${R(UTR(0), 'E')}`);
-  w.push(`${legTTap(1)}/${R(UTR(1), 'E')}`, `${R(UTR(1), 'E')}/${R(UTR(2), 'E')}`);
-  w.push(`${legTTap(2)}/${R(UTR(3), 'E')}`, `${R(UTR(3), 'E')}/${R(UTR(4), 'E')}`);
-  w.push(`${legTTap(3)}/${R(UTR(5), 'E')}`, `${R(UTR(5), 'E')}/${R(UTR(6), 'E')}`);
-  for (const m of [POSM4(0), POSM4(1), POSM4(2), POSM4(3), POSM4(4), POSM4(5), LEGB2(0), LEGB2(1), LEGB2(2), UTR(0), UTR(1), UTR(2), UTR(3), UTR(4), UTR(5), UTR(6)])
-    w.push(`${R(m, 'F')}/${minusOf(m)}`);
   // the root: UPM's clock contact chained through the six M arms
   w.push(`${R(UPM, 'G')}/${R(MMIR(0), 'H')}`);
   for (let i = 1; i < 6; i++) w.push(`${R(MMIR(i - 1), 'H')}/${R(MMIR(i), 'H')}`);
   // into 0 (Z -> 1x1): footprint shrinks, always legal
   // into 1 (1x1 -> 2wide): new bottom cell at p+1
   w.push(`${R(MMIR(1), 'G')}/${R(POSM3(0), 'L')}`);
-  w.push(`${R(POSM3(0), 'L')}/${R(POSM4(1), 'H')}`, `${R(POSM4(1), 'H')}/${R(POSM4(3), 'H')}`);
   w.push(`${R(POSM3(0), 'K')}/${R(LEGB(1), 'L')}`);
-  w.push(`${R(POSM4(1), 'G')}/${R(LEGB(2), 'L')}`);
-  w.push(`${R(POSM4(3), 'G')}/${R(LEGB(3), 'L')}`);
   // into 2 (2wide -> 2tall): new top cell at p
-  w.push(`${R(MMIR(2), 'G')}/${R(POSM4(0), 'H')}`);
-  w.push(`${R(POSM4(0), 'H')}/${R(POSM4(1), 'L')}`, `${R(POSM4(1), 'L')}/${R(POSM4(3), 'L')}`);
-  w.push(`${R(POSM4(3), 'L')}/${R(POSM4(5), 'H')}`);
-  w.push(`${R(POSM4(0), 'G')}/${R(UTR(0), 'H')}`);
-  w.push(`${R(POSM4(1), 'K')}/${R(UTR(1), 'H')}`);
-  w.push(`${R(POSM4(3), 'K')}/${R(UTR(3), 'H')}`);
-  w.push(`${R(POSM4(5), 'G')}/${R(UTR(5), 'H')}`);
   // into 3 (2tall -> O): new bottom AND top cells at p+1
-  w.push(`${R(MMIR(3), 'G')}/${R(POSM4(0), 'L')}`);
-  w.push(`${R(POSM4(0), 'L')}/${R(POSM4(2), 'H')}`, `${R(POSM4(2), 'H')}/${R(POSM4(4), 'H')}`);
-  w.push(`${R(POSM4(0), 'K')}/${R(LEGB2(0), 'H')}`, `${R(LEGB2(0), 'J')}/${R(UTR(1), 'L')}`);
-  w.push(`${R(POSM4(2), 'G')}/${R(LEGB2(1), 'H')}`, `${R(LEGB2(1), 'J')}/${R(UTR(3), 'L')}`);
-  w.push(`${R(POSM4(4), 'G')}/${R(LEGB2(2), 'H')}`, `${R(LEGB2(2), 'J')}/${R(UTR(5), 'L')}`);
   // into 4 (O -> S): new top cell at p-1 (no branch at pos 0: the bound)
-  w.push(`${R(MMIR(4), 'G')}/${R(POSM4(2), 'L')}`, `${R(POSM4(2), 'L')}/${R(POSM4(4), 'L')}`);
-  w.push(`${R(POSM4(2), 'K')}/${R(UTR(0), 'L')}`);
-  w.push(`${R(POSM4(4), 'K')}/${R(UTR(2), 'H')}`);
   // into 5 (S -> Z): new top cells at p+1 and p+2 (only pos 1 is in range)
   w.push(`${R(MMIR(5), 'G')}/${R(POSM3(2), 'L')}`);
-  w.push(`${R(POSM3(2), 'K')}/${R(UTR(4), 'H')}`, `${R(UTR(4), 'J')}/${R(UTR(6), 'H')}`);
   // into 0 REWIRED in 3b-4c: the ring's 0-predecessor is T2 now, whose
   // bottom {p+1} does NOT cover 1x1's {p} — the wrap checks (tok, p)
-  w.push(`${R(MMIR(0), 'G')}/${R(POSM6(2), 'L')}`, `${R(POSM6(2), 'L')}/${R(POSM6(5), 'L')}`);
-  w.push(`${R(POSM6(2), 'K')}/${R(LEGB3(2), 'H')}`);
-  w.push(`${R(POSM6(5), 'K')}/${R(LEGB3(0), 'L')}`);
   // the join: every branch's free-side output chains into the clock com
-  w.push(`${R(LEGB3(2), 'J')}/${R(LEGB3(0), 'N')}`, `${R(LEGB3(0), 'N')}/${R(LEGB(1), 'N')}`);
   w.push(`${R(LEGB(1), 'N')}/${R(LEGB(2), 'N')}`, `${R(LEGB(2), 'N')}/${R(LEGB(3), 'N')}`);
-  w.push(`${R(LEGB(3), 'N')}/${R(UTR(0), 'J')}`, `${R(UTR(0), 'J')}/${R(UTR(1), 'J')}`);
-  w.push(`${R(UTR(1), 'J')}/${R(UTR(3), 'J')}`, `${R(UTR(3), 'J')}/${R(UTR(5), 'J')}`);
-  w.push(`${R(UTR(5), 'J')}/${R(UTR(1), 'N')}`, `${R(UTR(1), 'N')}/${R(UTR(3), 'N')}`);
-  w.push(`${R(UTR(3), 'N')}/${R(UTR(5), 'N')}`, `${R(UTR(5), 'N')}/${R(UTR(0), 'N')}`);
-  w.push(`${R(UTR(0), 'N')}/${R(UTR(2), 'J')}`, `${R(UTR(2), 'J')}/${R(UTR(6), 'J')}`);
 
   // ---------- 3b-4a: L1 / J1 / T1 (the upright 3-wide forms) ----------
   // state mirrors chain off the new slaves; the TRP rail (= L1|J1|T1)
@@ -2224,14 +2305,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(SHR2(6, 1), 'E')}/${R(MMIR2(6), 'E')}`);
   w.push(`${R(SHR2(7, 1), 'E')}/${R(MMIR2(7), 'E')}`);
   w.push(`${R(SHR2(8, 1), 'E')}/${R(MMIR2(8), 'E')}`);
-  w.push(`${R(POSM4(0), 'E')}/${R(POSM5(0), 'E')}`);
-  for (let k = 1; k < 4; k++) w.push(`${R(POSM5(k - 1), 'E')}/${R(POSM5(k), 'E')}`);
-  w.push(`${R(POSM4(2), 'E')}/${R(POSM5(4), 'E')}`);
-  for (let k = 5; k < 8; k++) w.push(`${R(POSM5(k - 1), 'E')}/${R(POSM5(k), 'E')}`);
-  w.push(`${R(UTR(0), 'E')}/${R(UTR2(0), 'E')}`);
-  w.push(`${R(UTR(2), 'E')}/${R(UTR2(1), 'E')}`);
-  w.push(`${R(UTR(4), 'E')}/${R(UTR2(2), 'E')}`);
-  for (const m of [MMIR2(6), MMIR2(7), MMIR2(8), POSM5(0), POSM5(1), POSM5(2), POSM5(3), POSM5(4), POSM5(5), POSM5(6), POSM5(7), UTR2(0), UTR2(1), UTR2(2), TRP, TRPM(0), TRPM(1), L1M(0), L1M(1), J1M(0), J1M(1), T1M(0), T1M(1), WID3M])
+  for (const m of [MMIR2(6), MMIR2(7), MMIR2(8), TRP, TRPM(0), TRPM(1), L1M(0), L1M(1), J1M(0), J1M(1), T1M(0), T1M(1), WID3M])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
   // the TRP coil: a wired-OR of one contact per new state
   w.push(`${plusOf(L1M(0))}/${R(L1M(0), 'H')}`, `${plusOf(J1M(0))}/${R(J1M(0), 'H')}`, `${plusOf(T1M(0))}/${R(T1M(0), 'H')}`);
@@ -2259,20 +2333,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // moves the top stem p -> p+2; J1->T1 moves it p+2 -> p+1)
   w.push(`${R(MMIR(5), 'H')}/${R(MMIR2(6), 'H')}`);
   w.push(`${R(MMIR2(6), 'H')}/${R(MMIR2(7), 'H')}`, `${R(MMIR2(7), 'H')}/${R(MMIR2(8), 'H')}`);
-  w.push(`${R(MMIR2(6), 'G')}/${R(POSM5(2), 'H')}`, `${R(POSM5(2), 'H')}/${R(POSM5(6), 'H')}`);
-  w.push(`${R(POSM5(2), 'G')}/${R(LEGB2(1), 'L')}`, `${R(LEGB2(1), 'N')}/${R(UTR2(0), 'H')}`);
-  w.push(`${R(POSM5(6), 'G')}/${R(LEGB2(2), 'L')}`, `${R(LEGB2(2), 'N')}/${R(UTR2(1), 'H')}`);
-  w.push(`${R(MMIR2(7), 'G')}/${R(POSM5(2), 'L')}`, `${R(POSM5(2), 'L')}/${R(POSM5(6), 'L')}`);
-  w.push(`${R(POSM5(2), 'K')}/${R(UTR2(2), 'H')}`);
-  w.push(`${R(POSM5(6), 'K')}/${R(UTR(6), 'L')}`);
-  w.push(`${R(MMIR2(8), 'G')}/${R(POSM5(3), 'H')}`, `${R(POSM5(3), 'H')}/${R(POSM5(7), 'H')}`);
-  w.push(`${R(POSM5(3), 'G')}/${R(UTR(2), 'L')}`);
-  w.push(`${R(POSM5(7), 'G')}/${R(UTR(4), 'L')}`);
   // the join grows the new tails before entering the clock com
-  w.push(`${R(UTR(6), 'J')}/${R(UTR2(0), 'J')}`, `${R(UTR2(0), 'J')}/${R(UTR2(1), 'J')}`);
-  w.push(`${R(UTR2(1), 'J')}/${R(UTR2(2), 'J')}`, `${R(UTR2(2), 'J')}/${R(UTR(6), 'N')}`);
-  w.push(`${R(UTR(6), 'N')}/${R(UTR(2), 'N')}`, `${R(UTR(2), 'N')}/${R(UTR(4), 'N')}`);
-  w.push(`${R(UTR(4), 'N')}/${shrClkCom(0)}`);
 
   // ---------- 3b-4b coils: the re-classed gates and triple reads ------
   // mirror chains for the extra contacts
@@ -2315,34 +2376,16 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(TRPM(0), 'K')}/${R(TTM(0), 'K')}`, `${R(TTM(0), 'K')}/${R(STAGM2, 'E')}`);
   // the T fan: six TT x pos branches onto the column nets' free holes
   // pos mirror chains for the new contacts
-  w.push(`${R(POSM5(3), 'E')}/${R(POSM6(0), 'E')}`, `${R(POSM6(0), 'E')}/${R(POSM6(1), 'E')}`, `${R(POSM6(1), 'E')}/${R(POSM6(2), 'E')}`);
-  w.push(`${R(POSM5(7), 'E')}/${R(POSM6(3), 'E')}`, `${R(POSM6(3), 'E')}/${R(POSM6(4), 'E')}`, `${R(POSM6(4), 'E')}/${R(POSM6(5), 'E')}`);
   // the overhang reads: LTOT (TT top col3), LTOB (L2 bottoms), T2B (T2
   // bottoms), UTR3 (a parallel coil on the top col3 rail), LEGB3 mirrors
-  w.push(`${R(UTR(6), 'E')}/${R(UTR3, 'E')}`);
-  w.push(`${R(LEGB2(0), 'E')}/${R(LEGB3(0), 'E')}`);
-  w.push(`${R(LEGB2(1), 'E')}/${R(LEGB3(1), 'E')}`);
-  w.push(`${R(LEGB(0), 'E')}/${R(LEGB3(2), 'E')}`);
   // transitions into the overhangs (the root chain extends; deltas only)
   w.push(`${R(MMIR2(8), 'H')}/${R(MMIR3(9), 'H')}`);
   w.push(`${R(MMIR3(9), 'H')}/${R(MMIR3(10), 'H')}`, `${R(MMIR3(10), 'H')}/${R(MMIR3(11), 'H')}`);
   // into 9 (T1 -> L2): the top grows cols p and p+2
-  w.push(`${R(MMIR3(9), 'G')}/${R(POSM6(1), 'H')}`, `${R(POSM6(1), 'H')}/${R(POSM6(4), 'H')}`);
-  w.push(`${R(POSM6(1), 'G')}/${R(UTR2(0), 'L')}`, `${R(UTR2(0), 'N')}/${R(UTR2(2), 'L')}`);
-  w.push(`${R(POSM6(4), 'G')}/${R(UTR2(1), 'L')}`, `${R(UTR2(1), 'N')}/${R(UTR3, 'H')}`);
   // into 10 (L2 -> J2): the bottom moves to col p
-  w.push(`${R(MMIR3(10), 'G')}/${R(POSM6(1), 'L')}`, `${R(POSM6(1), 'L')}/${R(POSM6(4), 'L')}`);
-  w.push(`${R(POSM6(1), 'K')}/${R(LEGB(0), 'L')}`);
-  w.push(`${R(POSM6(4), 'K')}/${R(LEGB2(0), 'L')}`);
   // into 11 (J2 -> T2): the bottom moves to col p+1
-  w.push(`${R(MMIR3(11), 'G')}/${R(POSM6(2), 'H')}`, `${R(POSM6(2), 'H')}/${R(POSM6(5), 'H')}`);
-  w.push(`${R(POSM6(2), 'G')}/${R(LEGB3(0), 'H')}`);
-  w.push(`${R(POSM6(5), 'G')}/${R(LEGB3(1), 'H')}`);
   // the join grows the overhang tails
-  w.push(`${R(UTR2(2), 'N')}/${R(UTR3, 'J')}`, `${R(UTR3, 'J')}/${R(LEGB(0), 'N')}`);
-  w.push(`${R(LEGB(0), 'N')}/${R(LEGB2(0), 'N')}`, `${R(LEGB2(0), 'N')}/${R(LEGB3(0), 'J')}`);
-  w.push(`${R(LEGB3(0), 'J')}/${R(LEGB3(1), 'J')}`, `${R(LEGB3(1), 'J')}/${R(LEGB3(2), 'J')}`);
-  for (const m of [MMIR3(9), MMIR3(10), MMIR3(11), TT, TTM(0), TTM(1), TTM(2), TTM(3), TTM(4), BCUT, BCUTM, L2M(0), L2M(1), L2M(2), J2M, T2M(0), T2M(1), T2M(2), UTR3, LEGB3(0), LEGB3(1), LEGB3(2), POSM6(0), POSM6(1), POSM6(2), POSM6(3), POSM6(4), POSM6(5)])
+  for (const m of [MMIR3(9), MMIR3(10), MMIR3(11), TT, TTM(0), TTM(1), TTM(2), TTM(3), TTM(4), BCUT, BCUTM, L2M(0), L2M(1), L2M(2), J2M, T2M(0), T2M(1), T2M(2)])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
 
   // ---------- 3b-5: the self-tick oscillator (see the constants) -------

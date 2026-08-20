@@ -427,6 +427,27 @@ UP emitter resource plan (17:35Z, concrete):
 - estimate: ~45-50 relays at cols=4 (the hand spent ~35; the pools
   over-allocate and a later shrink pass can tighten).
 
+## the UP emitter LANDED (bring-up log, ~17:55Z)
+
+emitted: per target state t, MMIR(t) (up at t's PREDECESSOR — master-
+indexed!) -> chained pos-fan arms -> per-branch series read hops (arm
+-> NC) -> one global end chain -> shrClkCom(0). resources exactly as
+planned (UPPOS via fanPos free sets, read banks headed at rail tap
+holes, both sized by upResourceCounts from the geometry — the same
+function sizes the layout takes and drives the emitter).
+bring-up bugs, in order: (1) shrClkCom is declared in the ring section
+— the end tail is stashed and landed there; (2) upResourceCounts/
+SHAPES had to hoist above the L8 derivation (module TDZ); (3) the
+line-based kill ORPHANED a for-header whose body died — it captured
+the next minus-sweep loop as its body and tripled ~16 wires (the dup
+scan caught it; era sweeps then pruned of dead names); (4) legTap col3
+ran dry — rails grown(3,1) -> grown(4,1); (5) THE off-by-one: pairing
+MMIR(i) with i -> i+1 walked the wrong checks (empty-field walks pass
+on ANY conducting branch — luck), until a range mismatch refused; the
+mirror gates the transition INTO its index. walk + reshape-legality
+green; full file running. the hand's unreachable pos-3 into-2 branch
+is not emitted (ranges exclude it).
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
