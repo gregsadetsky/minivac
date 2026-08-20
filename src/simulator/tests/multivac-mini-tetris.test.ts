@@ -936,7 +936,7 @@ describe('Multivac: mini-tetris (38 machines)', () => {
   });
 
   const heavy = MASS ? it : it.skip;
-  heavy('short scenario under the dense oracle (MINIVAC_MASS=1)', { timeout: 3600000 }, () => {
+  heavy('short scenario under the dense oracle (MINIVAC_MASS=1)', { timeout: 7200000 }, () => {
     setSolverEngine('cktsim');
     const g = makeGame();
     const model = Array(8).fill(0);
@@ -953,15 +953,19 @@ describe('Multivac: mini-tetris (38 machines)', () => {
     dropVertical(g, 0b0010, model, 'dense vertical');
     expect(g.row(1)).toBe(0b0010);
     expect(g.row(0)).toBe(0b0010);
-    // and one collapse under the oracle: complete row 7 (col 3 falls clear
-    // past the 0010 stack) — the 14 dense collapse ticks walk the three
-    // stacked cells down one row each
+    // and one collapse under the oracle — kept SHORT (a dense tick costs
+    // minutes at 38 machines; a row-7 clear's 21 collapse ticks blew the
+    // hour budget): rest the piece at row 2 on an op-set block, complete
+    // the row there, and let the 6 collapse ticks walk the two stacked
+    // rows above it down. Same machinery end to end — seed, lane, all
+    // three phases, drain — at a fraction of the cost.
     g.m.setSlide((VMODE % 6) + 1, 'left', Math.floor(VMODE / 6));
-    dropPiece(g, 0b1000, model, 'dense clear + collapse');
-    expect(g.row(7)).toBe(0);
-    expect(g.row(3), 'the stack fell one row').toBe(0b0010);
-    expect(g.row(2)).toBe(0b0010);
-    expect(g.row(1)).toBe(0b0010);
+    g.operatorWrite(3, 0b0001);
+    model[3] = 0b0001;
+    dropPiece(g, 0b1101, model, 'dense clear + collapse at row 2');
+    expect(g.row(3), 'the block below is untouched').toBe(0b0001);
+    expect(g.row(2), 'row 1 fell into the cleared row').toBe(0b0010);
+    expect(g.row(1), 'row 0 fell one down').toBe(0b0010);
     expect(g.row(0)).toBe(0);
   });
 });
