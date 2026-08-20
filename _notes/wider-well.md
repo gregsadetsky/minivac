@@ -293,6 +293,31 @@ bound mirrors + ret groups (counted, generous caps, assert spent<=cap).
 freed banks stay claimed-but-unwired (dead index space, zero netlist
 cost; compaction later).
 
+## step-tree emitter, final spec (audit resolved, 15:55Z)
+
+- LEGB seam RESOLVED: LEGINV2 coils are parallel copies on the SAME
+  rail nets, so all four LEGB feeds re-home to LEGINV(j).E (2-hole
+  budgets fit once LEGINV2 dies). LEGB + its UP-network consumers
+  survive untouched.
+- per-tree chain ORDER: bound refusals FIRST, then the gated reads,
+  then the step (a refused state must never reach a read that would
+  index out of the well).
+- reads CLIP: a read at column c+d with c+d outside [0, cols) is
+  skipped — every member state is bound-refused before it anyway.
+- d0-top reads REUSE LEGINVT(c) (coil re-wired PLAIN — the ZG NOT-gate
+  dies; the T0/T0L union contacts gate the sample path instead). d0-
+  bottom reuses LEGINV(c) the same way (gates in the path, coil as-is).
+- union rails (10): B0{1x1,2tall,J2} B1{2wide,O,S,Z,T2} B2{L,J,T,L2}
+  T0{2tall,S,L1} T1{O,T1} T2{Z,J1,L2,J2,T2} T0L{2tall,O,L1,L2,J2,T2}
+  T1L{Z,T1} HIB{Z,L,J,T,L2,J2,T2} WALLB{2wide,O,S}; left singletons
+  S(top c-1), J1(top c+2), T2(bottom c+1, changeover: NC chains the
+  left-d0 gate), L2(bottom c+2, changeover ditto).
+- counts at 4: pool reads 18, union rails 10, union-gate mirrors ~25,
+  state-member mirrors ~24 -> tail ~106 relays (+18 machines at 8
+  rows) while ~35 die unwired. uniformity costs ~3x the hand's tree
+  relays; accepted (tick +~20%, more armatures on the wall).
+- ret taps: ~6/tree; count exactly while emitting, assert <= cap.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
