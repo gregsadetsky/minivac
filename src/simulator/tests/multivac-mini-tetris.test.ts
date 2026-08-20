@@ -1540,27 +1540,31 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     expect(rails(), 'O: wide and tall').toEqual([1, 1, 0]);
     expect(topBank()).toBe(0);
 
+    // 3b-3c: entering S at pos 0 is OUT OF ITS FIT RANGE — the transition
+    // network has no into-S branch there, so the UP simply does not clock
+    up();
+    expect(shapeAt(), 'S at pos 0 refused in contacts: the ring held').toBe(3);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt()).toBe(1);
     up(); // S: the top pair = the bottom pair shifted LEFT, from the LIVE register
     expect(shapeAt()).toBe(4);
     expect(rails(), 'S: wide, tall, staggered').toEqual([1, 1, 1]);
-    expect(topBank(), 'S at pos 0 (out of bounds): empty top, omitted term').toBe(0);
-    g.pressBtn(TETRIS_IO.right);
-    expect(g.posAt()).toBe(1);
     expect(topBank(), 'S at pos 1: top pair 0-1').toBe(0b0011);
     g.pressBtn(TETRIS_IO.right);
     expect(g.posAt()).toBe(2);
     expect(topBank(), 'S at pos 2: top pair 1-2').toBe(0b0110);
 
+    up(); // S -> Z at pos 2: Z's range ends at pos 1 — refused too
+    expect(shapeAt(), 'Z at pos 2 refused in contacts').toBe(4);
+    g.pressBtn(TETRIS_IO.left);
     up(); // Z: shifted RIGHT
     expect(shapeAt()).toBe(5);
     expect(rails(), 'Z: wide, tall, staggered').toEqual([1, 1, 1]);
-    expect(topBank(), 'Z at pos 2 (out of bounds): empty top, omitted term').toBe(0);
-    g.pressBtn(TETRIS_IO.left);
     expect(topBank(), 'Z at pos 1: top pair 2-3').toBe(0b1100);
     g.pressBtn(TETRIS_IO.left);
     expect(topBank(), 'Z at pos 0: top pair 1-2').toBe(0b0110);
 
-    up(); // wraps home
+    up(); // Z -> 1x1 always steps (the footprint shrinks); wraps home
     expect(shapeAt()).toBe(0);
     expect(rails()).toEqual([0, 0, 0]);
     expect(topBank()).toBe(0);
@@ -1582,7 +1586,11 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     const g = makeGame();
     const up = () => g.pressBtn(TETRIS_IO.up);
     const model = Array(8).fill(0);
-    for (let k = 0; k < 5; k++) up(); // 1x1 -> ... -> Z
+    // walk to pos 1 first: the transition network (3b-3c) refuses
+    // entering S out of its fit range, and the cycle passes through S
+    g.pressBtn(TETRIS_IO.right);
+    for (let k = 0; k < 5; k++) up(); // 1x1 -> ... -> Z at pos 1
+    g.pressBtn(TETRIS_IO.left); // Z's home drop happens at pos 0
     g.pressStart();
     // Z at the home column: bottom 0-1, top 1-2
     g.tick(); // spawn
@@ -1595,8 +1603,10 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     g.tick(); // reset (re-homes the register)
     expect(g.tokenAt()).toEqual([]);
 
-    // the S next: wrap the ring around (5 more UPs), walk to pos 2 —
-    // bottom 2-3, top 1-2; the bottom pair senses the Z's top at (6,2)
+    // the S next: wrap the ring around (5 more UPs, from pos 1 so the
+    // S entry conducts), walk to pos 2 — bottom 2-3, top 1-2; the bottom
+    // pair senses the Z's top at (6,2)
+    g.pressBtn(TETRIS_IO.right); // re-homed 0 -> 1
     for (let k = 0; k < 5; k++) up();
     let guard = 4;
     while (g.posAt() < 2 && guard-- > 0) g.pressBtn(TETRIS_IO.right);
@@ -1628,8 +1638,8 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     let g = makeGame();
     const up = () => g.pressBtn(TETRIS_IO.up);
     g.operatorWrite(4, 0b0001); // stored at (4,0): S-left's target top col
+    g.pressBtn(TETRIS_IO.right); // pos 1 first: the S entry needs its range (3b-3c)
     for (let k = 0; k < 4; k++) up(); // -> S
-    g.pressBtn(TETRIS_IO.right);
     g.pressBtn(TETRIS_IO.right); // S at pos 2 (bottom 2-3, top 1-2)
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // spawn + fall to token row 5
@@ -1669,8 +1679,8 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     // position's fall path.)
     g = makeGame();
     g.operatorWrite(4, 0b0001); // the tower at (4,0); pos-1 fall path clear
-    for (let k = 0; k < 5; k++) g.pressBtn(TETRIS_IO.up); // -> Z
-    g.pressBtn(TETRIS_IO.right); // Z at pos 1 (bottom 1-2, top 2-3)
+    g.pressBtn(TETRIS_IO.right); // pos 1: in range for every entry on the cycle
+    for (let k = 0; k < 5; k++) g.pressBtn(TETRIS_IO.up); // -> Z at pos 1 (bottom 1-2, top 2-3)
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the tower
     expect(g.tokenAt()).toEqual([5]);
@@ -1692,7 +1702,9 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     // looked at now refuses a Z right step in contacts.
     g = makeGame();
     g.operatorWrite(4, 0b1000); // the tower at (4,3); pos-0 fall path clear
-    for (let k = 0; k < 5; k++) g.pressBtn(TETRIS_IO.up); // -> Z at home 0
+    g.pressBtn(TETRIS_IO.right); // pos 1 for the cycle...
+    for (let k = 0; k < 5; k++) g.pressBtn(TETRIS_IO.up); // -> Z
+    g.pressBtn(TETRIS_IO.left); // ...then home to 0 for the drop
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5 (top {1,2} clears col 3)
     expect(g.tokenAt()).toEqual([5]);
@@ -1704,6 +1716,119 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     expect(g.row(7), 'Z bottom 0-1').toBe(0b0011);
     expect(g.row(6), 'Z top 1-2').toBe(0b0110);
     expect(g.row(4), 'the tower kept').toBe(0b1000);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // 3b-3c: UP-TRANSITION legality — the ring's clock conducts only when
+  // the target shape's NEW cells are free at the current spot (checked on
+  // the occupancy rails through the energized next-master's branch). A
+  // blocked UP simply never clocks: the ring, register and field hold.
+  // The fit-range refusals are covered in the ring-walk test; these are
+  // the five occupancy cases, each blocked then allowed a row later.
+  it('reshape legality: a blocked UP never clocks the ring (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const shapeAt = (g: ReturnType<typeof makeGame>) => {
+      for (let i = 0; i < 6; i++) {
+        const r = TETRIS_IO.shapeRelay(i);
+        if (g.m.getMachineState(r.machine).relays[r.index]) return i;
+      }
+      return -1;
+    };
+
+    // 1x1 -> 2wide: the new bottom cell (tok, p+1) is stored
+    let g = makeGame();
+    g.operatorWrite(5, 0b0010); // the tower at (5,1)
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // 1x1 at pos 0, token 5
+    expect(g.tokenAt()).toEqual([5]);
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'widening onto the tower: refused').toBe(0);
+    expect(g.posAt(), 'the register held through the refusal').toBe(0);
+    g.tick(); // token 6: the row beside is clear now
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'a row later the same UP conducts').toBe(1);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // 2wide -> 2tall: slid UNDER an overhang, the new top cell is stored
+    g = makeGame();
+    g.operatorWrite(7, 0b0110); // the floor stack
+    g.operatorWrite(4, 0b0001); // the overhang cell at (4,0)
+    g.pressBtn(TETRIS_IO.up); // 2wide
+    g.pressBtn(TETRIS_IO.right); // pos 1
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the overhang
+    expect(g.tokenAt()).toEqual([5]);
+    g.pressBtn(TETRIS_IO.left); // flat pieces slide under overhangs freely
+    expect(g.posAt()).toBe(0);
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'growing tall under the overhang: refused').toBe(1);
+    g.pressBtn(TETRIS_IO.right); // step back out
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'out from under it the UP conducts').toBe(2);
+    g.tick(); // merged lock at 6 on the floor stack
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(6), '2tall bottom on the stack').toBe(0b0010);
+    expect(g.row(5), '2tall top').toBe(0b0010);
+    expect(g.row(4), 'the overhang kept').toBe(0b0001);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // 2tall -> O: the new COLUMN is checked on BOTH rows (bottom then top)
+    g = makeGame();
+    g.operatorWrite(5, 0b0010); // the tower at (5,1)
+    g.pressBtn(TETRIS_IO.up);
+    g.pressBtn(TETRIS_IO.up); // 2tall at pos 0
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'O onto the tower row: refused by the bottom read').toBe(2);
+    g.tick(); // token 6: the tower is now one row UP of the token
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'O under the tower: refused by the top read').toBe(2);
+    g.tick(); // token 7: floor lock as the narrow tall piece
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7)).toBe(0b0001);
+    expect(g.row(6)).toBe(0b0001);
+    expect(g.row(5), 'the tower kept').toBe(0b0010);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // O -> S: the new top cell sits one column LEFT
+    g = makeGame();
+    g.operatorWrite(4, 0b0001); // the floater at (4,0)
+    g.pressBtn(TETRIS_IO.right); // pos 1
+    for (let k = 0; k < 3; k++) g.pressBtn(TETRIS_IO.up); // O
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'S under the floater: refused').toBe(3);
+    g.tick(); // token 6
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'clear of it the UP conducts').toBe(4);
+    g.tick(); // floor lock at 7
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'S bottom 1-2').toBe(0b0110);
+    expect(g.row(6), 'S top 0-1').toBe(0b0011);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // S -> Z: the new top pair sits one and two columns RIGHT
+    g = makeGame();
+    g.operatorWrite(4, 0b1000); // the floater at (4,3)
+    g.pressBtn(TETRIS_IO.right); // pos 1
+    for (let k = 0; k < 4; k++) g.pressBtn(TETRIS_IO.up); // S
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'Z under the far floater: refused').toBe(4);
+    g.tick(); // token 6
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt(g), 'clear of it the UP conducts').toBe(5);
+    g.tick(); // floor lock at 7
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'Z bottom 1-2').toBe(0b0110);
+    expect(g.row(6), 'Z top 2-3').toBe(0b1100);
     expect(g.m.getState().alerts).toEqual([]);
   });
 

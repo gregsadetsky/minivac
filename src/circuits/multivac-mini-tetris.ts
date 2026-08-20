@@ -181,6 +181,22 @@ export const LTS = (k: number) => 381 + k; // S-only top reads: k=0 col0, k=1 co
 export const LTZ = (k: number) => 383 + k; // Z-only top reads: k=0 col1, k=1 col2, k=2,3 col3
 export const SG = (k: number) => 387 + k; // S mirrors: SG(0) = the NOT-S coil gates, SG(1) = the LTS coil gates
 export const ZG = (k: number) => 389 + k; // Z mirrors: ZG(0,1) = NOT-Z coil gates, ZG(2,3) = LTZ gates + the Z bound
+// 3b-3c — UP-transition legality: the ring's clock feed conducts through
+// a check network instead of a plain wire. The energized MASTER (one-hot:
+// the current state's successor, sampled while the clock is low) names
+// the TARGET state, so each transition is one M-contact fanning to
+// one-hot pos branches whose series NC hops check the target footprint's
+// NEW cells (covered cells can't be stored). An illegal UP just never
+// raises the clock — no return path, the ring holds. Invalid positions
+// have no branch at all, which is the bounds refusal for free.
+export const MMIR = (i: number) => 393 + i; // master mirrors: gate the into-state-i branch (393..398)
+export const POSM4 = (k: number) => 399 + k; // pos mirrors for the branches: k=0 pos0, k=1,2 pos1, k=3,4 pos2, k=5 pos3 (399..404)
+// (POSM4(5) exists because NOTHING on POSM(3) was borrowable: its L arm
+// IS the right-press sample bus and its K is the edge self-loop — tying
+// a check node there let a join backfeed fire the D-tap trees and wipe
+// the register to [1,1,1,1], caught by the ring walk test mid-build)
+export const LEGB2 = (k: number) => 405 + k; // second bottom-rail reads for cols 1,2,3 (405..407)
+export const UTR = (k: number) => 408 + k; // top-rail reads: k=0 col0, k=1,2 col1, k=3,4 col2, k=5,6 col3 (408..414)
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
@@ -189,11 +205,11 @@ export const ZG = (k: number) => 389 + k; // Z mirrors: ZG(0,1) = NOT-Z coil gat
 // free. (They lived on m40 through the piece rung, sharing sections with
 // relays whose + jacks HAPPENED to be unused; the 12-row layout landed
 // TWIN's + on the shared section and the capacity auditor caught it.)
-export const LEFTBTN = { button: 3, machine: 66 };
-export const RIGHTBTN = { button: 4, machine: 66 };
-export const UPBTN = { button: 2, machine: 66 }; // steps the shape ring (press+release = one step)
-export const WIDSLIDE = { slide: 5, machine: 66 };
-export const MACHINES = 67; // relays through m65.2 + the dedicated button machine m66; m36's coms serve as the junctions
+export const LEFTBTN = { button: 3, machine: 70 };
+export const RIGHTBTN = { button: 4, machine: 70 };
+export const UPBTN = { button: 2, machine: 70 }; // steps the shape ring (press+release = one step)
+export const WIDSLIDE = { slide: 5, machine: 70 };
+export const MACHINES = 71; // relays through m69.0 + the dedicated button machine m70; m36's coms serve as the junctions
 
 // ---- the ROWS-parameterized layout (rung 11 groundwork) ----
 // The same allocation map as the exported constants, laid out sequentially
@@ -260,6 +276,8 @@ export interface TetrisLayout {
   POSM3: (k: number) => number;
   LTS: (k: number) => number; LTZ: (k: number) => number;
   SG: (k: number) => number; ZG: (k: number) => number;
+  MMIR: (i: number) => number; POSM4: (k: number) => number;
+  LEGB2: (k: number) => number; UTR: (k: number) => number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -323,6 +341,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const shrBase = take(20); // the shape ring: 6 states x (clk, master, slave) + UPM + SHBOOT
   const smBase = take(15); // state mirrors SM x4, ZM x4, OM, I2TM, I2WM + POSM3 x4
   const ltBase = take(12); // 3b-3b: LTS x2, LTZ x4, SG x2, ZG x4
+  const upcBase = take(22); // 3b-3c: MMIR x6, POSM4 x6, LEGB2 x3, UTR x7
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -380,6 +399,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
     POSM3: k => smBase + 11 + k,
     LTS: k => ltBase + k, LTZ: k => ltBase + 2 + k,
     SG: k => ltBase + 6 + k, ZG: k => ltBase + 8 + k,
+    MMIR: i => upcBase + i, POSM4: k => upcBase + 6 + k,
+    LEGB2: k => upcBase + 12 + k, UTR: k => upcBase + 15 + k,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -456,6 +477,10 @@ export function tetrisLayout(rows: number): TetrisLayout {
   claim('LTS', LTS(0), LTS(1));
   for (let k = 0; k < 4; k++) claim('LTZ', LTZ(k));
   claim('SG/ZG', SG(0), SG(1), ZG(0), ZG(1), ZG(2), ZG(3));
+  for (let i = 0; i < 6; i++) claim('MMIR', MMIR(i));
+  for (let k = 0; k < 6; k++) claim('POSM4', POSM4(k));
+  claim('LEGB2', LEGB2(0), LEGB2(1), LEGB2(2));
+  for (let k = 0; k < 7; k++) claim('UTR', UTR(k));
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -511,6 +536,10 @@ export function tetrisLayout(rows: number): TetrisLayout {
   eq('LTS', L.LTS(0), LTS(0)); eq('LTS', L.LTS(1), LTS(1));
   for (let k = 0; k < 4; k++) { eq('LTZ', L.LTZ(k), LTZ(k)); eq('ZG', L.ZG(k), ZG(k)); }
   eq('SG', L.SG(0), SG(0)); eq('SG', L.SG(1), SG(1));
+  for (let i = 0; i < 6; i++) eq('MMIR', L.MMIR(i), MMIR(i));
+  for (let k = 0; k < 6; k++) eq('POSM4', L.POSM4(k), POSM4(k));
+  for (let k = 0; k < 3; k++) eq('LEGB2', L.LEGB2(k), LEGB2(k));
+  for (let k = 0; k < 7; k++) eq('UTR', L.UTR(k), UTR(k));
   eq('machines', L.machines, MACHINES);
   eq('btnMachine', L.btnMachine, LEFTBTN.machine);
   eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
@@ -540,6 +569,7 @@ export function tetrisCircuit(rows = 8): {
     MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     LTS, LTZ, SG, ZG,
+    MMIR, POSM4, LEGB2, UTR,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
   // every anchor that shared a machine with relays eventually collided
@@ -1666,7 +1696,9 @@ export function tetrisCircuit(rows = 8): {
   // shape persists across locks, exactly like the slides it derives.
   const shrClkCom = (i: number) => comOf(SHR(i, 0));
   w.push(`${bmS}.2+/${bmS}.2Y`, `${bmS}.2X/${R(UPM, 'E')}`, `${R(UPM, 'F')}/${minusOf(UPM)}`);
-  w.push(`${plusOf(UPM)}/${R(UPM, 'H')}`, `${R(UPM, 'G')}/${shrClkCom(0)}`);
+  // UPM's clock contact feeds the ring through the 3b-3c transition
+  // legality network (wired below) instead of a plain wire
+  w.push(`${plusOf(UPM)}/${R(UPM, 'H')}`);
   for (let i = 2; i < 6; i += 2) w.push(`${shrClkCom(i - 2)}/${shrClkCom(i)}`);
   for (let i = 0; i < 6; i++) {
     const c = SHR(i, 0), a = SHR(i, 1), sl = SHR(i, 2);
@@ -1765,6 +1797,72 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${legTTap(2)}/${R(ZG(2), 'L')}`, `${R(ZG(2), 'K')}/${R(LTZ(1), 'E')}`);
   w.push(`${legTTap(3)}/${R(ZG(3), 'H')}`, `${R(ZG(3), 'G')}/${R(LTZ(2), 'E')}`);
   w.push(`${R(LTZ(2), 'E')}/${R(LTZ(3), 'E')}`);
+
+  // ---------- 3b-3c: UP-transition legality (the last seam) ----------
+  // The clock conducts ONLY through a legal transition's branch: the
+  // energized master (one-hot, the current state's successor) names the
+  // target state; each transition is one MMIR contact whose output fans
+  // to one-hot pos branches; each branch's series NC hops check the
+  // target footprint's NEW cells on the occupancy rails (covered cells
+  // can't be stored, so checking the delta suffices). No branch = no
+  // clock = the bounds refusal for free (S has no into-4 branch at pos
+  // 0, Z none at pos 2, wide shapes none at pos 3). A refused UP needs
+  // NO return path — nothing samples, the ring simply holds. Pre-spawn
+  // every rail is dark, so all in-bounds transitions stay free.
+  for (let i = 0; i < 6; i++)
+    w.push(`${R(SHR(i, 1), 'E')}/${R(MMIR(i), 'E')}`, `${R(MMIR(i), 'F')}/${minusOf(MMIR(i))}`);
+  w.push(`${R(POSM3(0), 'E')}/${R(POSM4(0), 'E')}`);
+  w.push(`${R(POSM3(2), 'E')}/${R(POSM4(1), 'E')}`, `${R(POSM4(1), 'E')}/${R(POSM4(2), 'E')}`);
+  w.push(`${R(POSM3(3), 'E')}/${R(POSM4(3), 'E')}`, `${R(POSM4(3), 'E')}/${R(POSM4(4), 'E')}`);
+  w.push(`${R(POSM(3), 'E')}/${R(POSM4(5), 'E')}`); // pos3: POSM(3)'s own sets are the sample bus + self-loop, untouchable
+  for (let k = 0; k < 3; k++)
+    w.push(`${R(LEGB(k + 1), 'E')}/${R(LEGB2(k), 'E')}`);
+  w.push(`${legTTap(0)}/${R(UTR(0), 'E')}`);
+  w.push(`${legTTap(1)}/${R(UTR(1), 'E')}`, `${R(UTR(1), 'E')}/${R(UTR(2), 'E')}`);
+  w.push(`${legTTap(2)}/${R(UTR(3), 'E')}`, `${R(UTR(3), 'E')}/${R(UTR(4), 'E')}`);
+  w.push(`${legTTap(3)}/${R(UTR(5), 'E')}`, `${R(UTR(5), 'E')}/${R(UTR(6), 'E')}`);
+  for (const m of [POSM4(0), POSM4(1), POSM4(2), POSM4(3), POSM4(4), POSM4(5), LEGB2(0), LEGB2(1), LEGB2(2), UTR(0), UTR(1), UTR(2), UTR(3), UTR(4), UTR(5), UTR(6)])
+    w.push(`${R(m, 'F')}/${minusOf(m)}`);
+  // the root: UPM's clock contact chained through the six M arms
+  w.push(`${R(UPM, 'G')}/${R(MMIR(0), 'H')}`);
+  for (let i = 1; i < 6; i++) w.push(`${R(MMIR(i - 1), 'H')}/${R(MMIR(i), 'H')}`);
+  // into 0 (Z -> 1x1): footprint shrinks, always legal
+  // into 1 (1x1 -> 2wide): new bottom cell at p+1
+  w.push(`${R(MMIR(1), 'G')}/${R(POSM3(0), 'L')}`);
+  w.push(`${R(POSM3(0), 'L')}/${R(POSM4(1), 'H')}`, `${R(POSM4(1), 'H')}/${R(POSM4(3), 'H')}`);
+  w.push(`${R(POSM3(0), 'K')}/${R(LEGB(1), 'L')}`);
+  w.push(`${R(POSM4(1), 'G')}/${R(LEGB(2), 'L')}`);
+  w.push(`${R(POSM4(3), 'G')}/${R(LEGB(3), 'L')}`);
+  // into 2 (2wide -> 2tall): new top cell at p
+  w.push(`${R(MMIR(2), 'G')}/${R(POSM4(0), 'H')}`);
+  w.push(`${R(POSM4(0), 'H')}/${R(POSM4(1), 'L')}`, `${R(POSM4(1), 'L')}/${R(POSM4(3), 'L')}`);
+  w.push(`${R(POSM4(3), 'L')}/${R(POSM4(5), 'H')}`);
+  w.push(`${R(POSM4(0), 'G')}/${R(UTR(0), 'H')}`);
+  w.push(`${R(POSM4(1), 'K')}/${R(UTR(1), 'H')}`);
+  w.push(`${R(POSM4(3), 'K')}/${R(UTR(3), 'H')}`);
+  w.push(`${R(POSM4(5), 'G')}/${R(UTR(5), 'H')}`);
+  // into 3 (2tall -> O): new bottom AND top cells at p+1
+  w.push(`${R(MMIR(3), 'G')}/${R(POSM4(0), 'L')}`);
+  w.push(`${R(POSM4(0), 'L')}/${R(POSM4(2), 'H')}`, `${R(POSM4(2), 'H')}/${R(POSM4(4), 'H')}`);
+  w.push(`${R(POSM4(0), 'K')}/${R(LEGB2(0), 'H')}`, `${R(LEGB2(0), 'J')}/${R(UTR(1), 'L')}`);
+  w.push(`${R(POSM4(2), 'G')}/${R(LEGB2(1), 'H')}`, `${R(LEGB2(1), 'J')}/${R(UTR(3), 'L')}`);
+  w.push(`${R(POSM4(4), 'G')}/${R(LEGB2(2), 'H')}`, `${R(LEGB2(2), 'J')}/${R(UTR(5), 'L')}`);
+  // into 4 (O -> S): new top cell at p-1 (no branch at pos 0: the bound)
+  w.push(`${R(MMIR(4), 'G')}/${R(POSM4(2), 'L')}`, `${R(POSM4(2), 'L')}/${R(POSM4(4), 'L')}`);
+  w.push(`${R(POSM4(2), 'K')}/${R(UTR(0), 'L')}`);
+  w.push(`${R(POSM4(4), 'K')}/${R(UTR(2), 'H')}`);
+  // into 5 (S -> Z): new top cells at p+1 and p+2 (only pos 1 is in range)
+  w.push(`${R(MMIR(5), 'G')}/${R(POSM3(2), 'L')}`);
+  w.push(`${R(POSM3(2), 'K')}/${R(UTR(4), 'H')}`, `${R(UTR(4), 'J')}/${R(UTR(6), 'H')}`);
+  // the join: every branch's free-side output chains into the clock com
+  w.push(`${R(MMIR(0), 'G')}/${R(LEGB(1), 'N')}`);
+  w.push(`${R(LEGB(1), 'N')}/${R(LEGB(2), 'N')}`, `${R(LEGB(2), 'N')}/${R(LEGB(3), 'N')}`);
+  w.push(`${R(LEGB(3), 'N')}/${R(UTR(0), 'J')}`, `${R(UTR(0), 'J')}/${R(UTR(1), 'J')}`);
+  w.push(`${R(UTR(1), 'J')}/${R(UTR(3), 'J')}`, `${R(UTR(3), 'J')}/${R(UTR(5), 'J')}`);
+  w.push(`${R(UTR(5), 'J')}/${R(UTR(1), 'N')}`, `${R(UTR(1), 'N')}/${R(UTR(3), 'N')}`);
+  w.push(`${R(UTR(3), 'N')}/${R(UTR(5), 'N')}`, `${R(UTR(5), 'N')}/${R(UTR(0), 'N')}`);
+  w.push(`${R(UTR(0), 'N')}/${R(UTR(2), 'J')}`, `${R(UTR(2), 'J')}/${R(UTR(6), 'J')}`);
+  w.push(`${R(UTR(6), 'J')}/${shrClkCom(0)}`);
 
   return { wires: w, rails: dataRails, layout: L, btnMachine };
 }

@@ -214,28 +214,14 @@ function rowCells(r: number): number {
   return n;
 }
 
-// lateral legality lives IN THE CONTACTS: every D-tap runs through
-// LEGINV/LEGINVT changeovers reading "target column occupied at the
-// token row / one row above it", so the machine itself refuses sideways
-// moves into stored cells — bottom AND top cell of a tall piece, wide
-// edges included (the page just presses the button and reads back
-// whether the register stepped). Since 3b-3b the trees read the TRUE
-// target top columns (S/Z shifted pairs included) and the fit bounds
-// refuse in contacts too, so steering has NO seam left. This JS check
-// remains for exactly ONE: the ArrowUp RESHAPE (the shape ring steps
-// unconditionally until 3b-3c gates the UP path in contacts).
-function wouldOverlap(nPos: number, nIx: number): boolean {
-  const s = SHAPES[nIx];
-  const tok = tokenRow();
-  if (tok < 0) return false;
-  const bm = (s.w === 2 ? 0b11 : 0b1) << nPos;
-  const tm = !s.tall ? 0 : s.stag === 0 ? bm : (0b11 << (nPos + s.stag)) & 0b1111;
-  for (let j = 0; j < COLS; j++) {
-    if (((bm >> j) & 1) === 1 && relay(IO.cellRelay(tok, j))) return true;
-    if (tok > 0 && ((tm >> j) & 1) === 1 && relay(IO.cellRelay(tok - 1, j))) return true;
-  }
-  return false;
-}
+// every gameplay rule lives IN THE CONTACTS now: lateral legality (the
+// D-tap changeover trees, TRUE staggered top columns included), the fit
+// bounds, the collision, AND — since 3b-3c — the RESHAPE: the shape
+// ring's clock only conducts when the target shape's new cells are free
+// at the current spot. The page presses buttons and reads back what the
+// machine did; it holds no game model at all. The one guard left is the
+// Enter key's double-spawn interlock (a 1961 operator's discipline,
+// documented at the handler).
 
 function render(note?: string) {
   clatter();
@@ -328,11 +314,13 @@ document.addEventListener('keydown', e => {
       // nothing to re-sync: the machine's T fan follows the register
     });
   } else if (e.key === 'ArrowUp') {
-    // step the SHAPE RING — a machine button, exactly like LEFT/RIGHT:
-    // the one-hot ring advances 1x1 -> 2wide -> 2tall -> 2x2 -> S -> Z and
-    // wraps; WID/VMODE/STAG and the whole top-mask bank derive from ring
-    // contacts. The page only pre-checks the fit (the overlap guard and
-    // the bounds clamp stay JS until 3b-3c refuses the UP in contacts).
+    // step the SHAPE RING — a machine button, exactly like LEFT/RIGHT.
+    // Since 3b-3c the transition legality lives in the contacts too: the
+    // ring's clock only conducts when the target shape's new cells are
+    // free here and its fit range allows this column, so the page just
+    // presses and reads back. The clamp steps first are operator
+    // kindness — walking into the target's range (S needs pos>=1, Z
+    // pos<=1, wide shapes pos<=2) instead of letting the bound refuse.
     if (busy) return;
     const p = posAt();
     if (p < 0) return;
@@ -341,13 +329,8 @@ document.addEventListener('keydown', e => {
     const nMin = ns.stag < 0 ? 1 : 0;
     const nMax = COLS - ns.w + (ns.stag > 0 ? -1 : 0);
     const nPos = Math.min(nMax, Math.max(nMin, p));
-    if (wouldOverlap(nPos, nIx)) {
-      render('blocked — no room for that shape here');
-      return;
-    }
     act(ns.label, () => {
-      // clamping into the new shape's bounds = operator steps, still
-      // machine-checked per the CURRENT shape's footprint
+      // the clamp = operator steps, machine-checked per the CURRENT shape
       let cur = p;
       let guard = 0;
       while (cur !== nPos && guard++ < COLS) {
@@ -356,9 +339,8 @@ document.addEventListener('keydown', e => {
         if (stepped === cur) break; // the contacts refused
         cur = stepped;
       }
-      if (cur !== nPos) return 'blocked — no room for that shape here';
       press(IO.up);
-      if (shapeAt() !== nIx) return 'the ring did not step (unexpected)';
+      if (shapeAt() !== nIx) return 'blocked — the contacts refused the reshape';
     });
   } else if (e.key === 'ArrowDown' || e.key === ' ') {
     // one tick — plus however many the machine owes itself afterwards: a
