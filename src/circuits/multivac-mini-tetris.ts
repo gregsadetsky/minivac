@@ -134,6 +134,62 @@ export const LEGINVT2 = (k: number) => 287 + k; // k=2,3: top second-reads for t
 export const VMODEM = (p: number) => 291 + p; // vmode mirrors: the tall forks in the D-tap trees (291..294)
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
+
+// ---- the coil-allocation registry: every relay index above, claimed by
+// name over its full domain at module load. Two constants landing on the
+// same COIL index throw immediately (any test run validates) — the ranges
+// are hand-laid and the file has grown by five rungs; a silent collision
+// would wire two mechanisms into one relay. JUNC is exempt: it claims COM
+// jacks only (a section's com is electrically separate from its coil, so
+// junctions deliberately coexist with CUTC2/TG2M/TG2S/CUTC3's coils).
+// This registry is also the first brick of the ROWSxCOLS parameterization:
+// the map's shape is now data the generator can check itself against.
+{
+  const claimed = new Map<number, string>();
+  const claim = (name: string, ...idx: number[]) => {
+    for (const i of idx) {
+      const prev = claimed.get(i);
+      if (prev) throw new Error(`relay ${i} claimed by both ${prev} and ${name}`);
+      claimed.set(i, name);
+    }
+  };
+  claim('A0/A0m/A1/A2', A0, A0m, A1, A2);
+  for (let r = 0; r < 8; r++) for (let k = 0; k < 4; k++) claim('W', W(r, k));
+  for (let r = 0; r < 8; r++) for (let j = 0; j < 4; j++) claim('CELL', CELL(r, j));
+  for (let i = 0; i < 8; i++) for (let part = 0; part < 3; part++) claim('RING', RING(i, part));
+  for (let r = 0; r < 8; r++) claim('MIRA', MIRA(r));
+  for (let r = 0; r < 8; r++) claim('MIRB', MIRB(r));
+  for (let x = 0; x < 4; x++) claim('RESETM', RESETM(x));
+  claim('COLLIDE..CPSET', COLLIDE, COLLIDEM, LKM, RSTM, SPAWN, SPAWNCLR, CLEARP);
+  for (let j = 0; j < 4; j++) claim('LINE', LINE(j));
+  for (let j = 0; j < 4; j++) claim('PIECE', PIECE(j));
+  claim('LKS/TICKM/COLLIDEM2/READGATE', LKS, TICKM, COLLIDEM2, READGATE);
+  for (let r = 0; r < 8; r++) claim('MIRB2', MIRB2(r));
+  for (let x = 0; x < 4; x++) claim('PRESSCUT', PRESSCUT(x));
+  claim('RAILGATE2/RSTM2/CPSET/VMODE', RAILGATE2, RSTM2, CPSET, VMODE);
+  for (let r = 1; r <= 7; r++) claim('TOPW', TOPW(r));
+  claim('P2M..TICKM2', P2M, P2S, P2CLR, P2GATE, P2COL, TICKM2);
+  for (let x = 0; x < 4; x++) claim('P2CUT', P2CUT(x));
+  claim('LINEDLY', LINEDLY);
+  for (let t = 1; t <= 7; t++) claim('ELEVC/A/SL', ELEVC(t), ELEVA(t), ELEVSL(t));
+  for (let t = 1; t <= 7; t++) claim('SEEDM', SEEDM(t));
+  claim('CLEARPM/LANE/TICKM3/TGM/TGS', CLEARPM, LANE, TICKM3, TGM, TGS);
+  for (let t = 1; t <= 7; t++) claim('ELEVW1/2', ELEVW1(t), ELEVW2(t));
+  claim('CGA/CGB/CGB2/CUTC/TG2', CGA, CGB, CGB2, CUTC1, CUTC2, TG2M, TG2S, CUTC3, CUTC4);
+  for (let j = 0; j < 4; j++) claim('POSA', POSA(j));
+  for (let j = 0; j < 4; j++) claim('POSS', POSS(j));
+  for (let j = 0; j < 4; j++) claim('POSM', POSM(j));
+  claim('button/mode mirrors', LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2, TWIN, BOOTL, WIDM3, WIDM4);
+  for (let x = 0; x < 2; x++) claim('POSRST', POSRST(x));
+  for (let j = 0; j < 3; j++) claim('POSM2', POSM2(j));
+  for (let r = 0; r <= 6; r++) claim('MIRC', MIRC(r, 0), MIRC(r, 1));
+  for (let j = 0; j < 4; j++) claim('LEGINV', LEGINV(j));
+  claim('LEGINV2', LEGINV2(2), LEGINV2(3));
+  for (let r = 1; r <= 6; r++) claim('MIRCT', MIRCT(r, 0), MIRCT(r, 1));
+  for (let j = 0; j < 4; j++) claim('LEGINVT', LEGINVT(j));
+  claim('LEGINVT2', LEGINVT2(2), LEGINVT2(3));
+  for (let p = 0; p < 4; p++) claim('VMODEM', VMODEM(p));
+}
 export const LEFTBTN = { button: 3, machine: 40 }; // m40.3 button
 export const RIGHTBTN = { button: 4, machine: 40 }; // m40.4 button
 export const WIDSLIDE = { slide: 5, machine: 40 }; // m40.5 slide -> WIDM coils
