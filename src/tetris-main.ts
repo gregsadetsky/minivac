@@ -25,7 +25,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, SHAPES, shapeRange } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE } from './circuits/multivac-mini-tetris';
 
 // the 'fast' engine: typed-array rewrite of the sparse solver, validated
 // against the dense oracle on 5000 random circuits (zero mismatches, max
@@ -71,7 +71,7 @@ root.innerHTML = `
     <div style="margin-top:14px;color:#5c646e;font-size:11px">the machine wall — every armature, live</div>
     <canvas id="wall" style="margin-top:4px;image-rendering:pixelated"></canvas>
     <div style="margin-top:10px;color:#5c646e">
-      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = shape &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; a = auto-gravity &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
+      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = rotate (pre-spawn: pick shape) &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; a = auto-gravity &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
     </div>
     <details style="margin-top:18px;color:#5c646e;text-align:left;max-width:520px">
       <summary style="cursor:pointer;text-align:center">dump the circuit</summary>
@@ -465,11 +465,21 @@ function handleKey(key: string) {
     if (busy) return;
     const p = posAt();
     if (p < 0) return;
-    const nIx = (shapeAt() + 1) % SHAPES.length;
+    // UP means two things and the MACHINE decides which: with a piece
+    // falling the ring's D-feeds are re-aimed at the rotation partner
+    // (NOTOK down), pre-spawn they point at the selection successor.
+    // The page just mirrors that map so its clamp walks toward the
+    // right target and its readback knows what to expect.
+    const cur0 = shapeAt();
+    const nIx = tokenRow() >= 0 ? ROT_STATE(cur0) : (cur0 + 1) % SHAPES.length;
+    if (nIx === cur0) {
+      render('this piece has only one orientation');
+      return;
+    }
     const ns = SHAPES[nIx];
     const { min: nMin, max: nMax } = shapeRange(ns, COLS);
     const nPos = Math.min(nMax, Math.max(nMin, p));
-    act(ns.label, () => {
+    act(tokenRow() >= 0 ? `rotate: ${ns.label}` : ns.label, () => {
       // the clamp = operator steps, machine-checked per the CURRENT shape
       let cur = p;
       let guard = 0;
@@ -480,7 +490,10 @@ function handleKey(key: string) {
         cur = stepped;
       }
       press(IO.up);
-      if (shapeAt() !== nIx) return 'blocked — the contacts refused the reshape';
+      if (shapeAt() !== nIx)
+        return tokenRow() >= 0
+          ? 'blocked — the contacts refused the rotation'
+          : 'blocked — the contacts refused the reshape';
     });
   } else if (e.key === 'ArrowDown' || e.key === ' ') {
     if (busy) return;

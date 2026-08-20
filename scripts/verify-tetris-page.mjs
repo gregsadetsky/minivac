@@ -412,10 +412,32 @@ const cellsOf = (ix, pos, row) => {
   if (g.tW > 0 && row > 0) for (let k = 0; k < g.tW; k++) cs.push([row - 1, pos + g.tOff + k]);
   return cs.filter(([r, c]) => r >= 0 && r < NR && c >= 0 && c < NC);
 };
+// the ring's rotation map: {0,3,4,5} hold one orientation, 1<->2, and
+// i<->i+3 across the L/J/T pairs (mirrors ROT_STATE in the circuit)
+const ROT_IX = (i) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 ? (i < 9 ? i + 3 : i - 3) : i);
 const modelKey = (key) => {
   const m = model;
   if (key === 'Enter') { if (!m.piece) m.armed = true; return; }
-  if (key === 'ArrowUp') { m.shapeIx = (m.shapeIx + 1) % 12; if (m.piece) m.piece.ix = m.shapeIx; return; }
+  if (key === 'ArrowUp') {
+    // UP is the chooser pre-spawn and the ROTATION mid-fall (the machine
+    // re-aims the ring's D-feeds on NOTOK). one-orientation shapes hold.
+    if (m.piece) {
+      const rot = ROT_IX(m.piece.ix);
+      if (rot === m.piece.ix) return; // singleton: the ring refuses
+      const g2 = geo(rot);
+      // the machine also refuses a rotation whose footprint is out of
+      // range here or lands on stored cells
+      const minP = Math.max(0, -g2.bOff, -g2.tOff);
+      const maxP = Math.min(NC - g2.bOff - g2.bW, g2.tW > 0 ? NC - g2.tOff - g2.tW : NC);
+      if (m.piece.pos < minP || m.piece.pos > maxP) return;
+      if (cellsOf(rot, m.piece.pos, m.piece.row).some(([r, c]) => m.field[r][c])) return;
+      m.piece.ix = rot;
+      m.shapeIx = rot;
+      return;
+    }
+    m.shapeIx = (m.shapeIx + 1) % 12;
+    return;
+  }
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
     if (!m.piece) return;
     const d = key === 'ArrowRight' ? 1 : -1;
@@ -562,6 +584,76 @@ try {
   const r1 = m2 ? Number(m2[1]) : 99; // locked counts as fully advanced
   if (r1 < r0 + 2) throw new Error(`key queue dropped presses: row ${r0} -> ${after}`);
   console.log(`key queue verified: row ${r0} -> ${m2 ? 'row ' + r1 : 'locked'} on a 3-press burst`);
+}
+
+// LAST+1: ROTATION on the page — UP turns a falling piece inside its
+// own family (L <-> L flip) and refuses on a one-orientation shape,
+// while pre-spawn it still walks the chooser. This is the page's half
+// of the rotation rung: its successor map must mirror the machine's.
+{
+  const labelOf = (st) => {
+    const m2 = st.match(/—\s*([^—]+?)\s*(?:at row \d+|\(enter to spawn\))/);
+    return m2 ? m2[1].trim() : null;
+  };
+  // clear whatever is falling
+  for (let i = 0; i < 40; i++) {
+    const st = await status();
+    if (/enter to spawn/.test(st) || /game over/i.test(st)) break;
+    await page.keyboard.press('ArrowDown');
+    await waitIdle('rot clear');
+  }
+  const st0 = await status();
+  if (/game over/i.test(st0)) {
+    console.log('rotation probe skipped: the scripted game ended in a top-out');
+  } else {
+    // walk the chooser to L (pre-spawn: the full cycle still works)
+    let picked = null;
+    for (let i = 0; i < 14; i++) {
+      picked = labelOf(await status());
+      if (picked === 'L') break;
+      await page.keyboard.press('ArrowUp');
+      await waitIdle('chooser');
+    }
+    if (picked !== 'L') throw new Error(`chooser never reached L: ${await status()}`);
+    await page.keyboard.press('Enter');
+    await waitIdle('rot spawn');
+    await page.keyboard.press('ArrowDown');
+    await waitIdle('rot tick');
+    await page.keyboard.press('ArrowUp');
+    const s1 = await waitIdle('rotate');
+    if (labelOf(s1) !== 'L flip') throw new Error(`mid-fall UP did not rotate: ${s1}`);
+    await page.keyboard.press('ArrowUp');
+    const s2 = await waitIdle('rotate back');
+    if (labelOf(s2) !== 'L') throw new Error(`rotation did not return: ${s2}`);
+    console.log('rotation verified: L -> L flip -> L on a falling piece');
+    // and a one-orientation shape refuses (the page says so; the ring holds)
+    for (let i = 0; i < 40; i++) {
+      const st = await status();
+      if (/enter to spawn/.test(st) || /game over/i.test(st)) break;
+      await page.keyboard.press('ArrowDown');
+      await waitIdle('rot clear 2');
+    }
+    if (!/game over/i.test(await status())) {
+      let sq = null;
+      for (let i = 0; i < 14; i++) {
+        sq = labelOf(await status());
+        if (sq === '2x2 square') break;
+        await page.keyboard.press('ArrowUp');
+        await waitIdle('chooser 2');
+      }
+      if (sq === '2x2 square') {
+        await page.keyboard.press('Enter');
+        await waitIdle('sq spawn');
+        await page.keyboard.press('ArrowDown');
+        await waitIdle('sq tick');
+        await page.keyboard.press('ArrowUp');
+        const s3 = await waitIdle('sq rotate');
+        if (!/one orientation/.test(s3) && labelOf(s3) !== '2x2 square')
+          throw new Error(`the square should not rotate: ${s3}`);
+        console.log('singleton verified: the square refuses to rotate');
+      }
+    }
+  }
 }
 
 console.log(doubleClearOk ? 'PAGE VERIFICATION PASSED (incl. double clear)' : 'PAGE VERIFICATION PASSED (double clear still open)');

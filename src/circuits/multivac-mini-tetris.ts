@@ -66,16 +66,38 @@ export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
 // geometry: branches exist where a position is legal for BOTH states of
 // a ring step; each branch spends one pos-fan set and one read set per
 // entering cell (bottom reads the occupancy rails, top the top rails).
+// the ring's two edge sets share one physical branch per target: SELECT
+// (pre-spawn, the full 0..11 cycle) and ROTATE (mid-fall, within the
+// piece's orientation group: {0,3,4,5} hold one orientation, 1<->2,
+// i<->i+3 inside 6..11). pre-spawn every occupancy rail is dark, so the
+// branch carries the ROTATION pair's deltas and serves selection too —
+// upResourceCounts asserts the pos ranges coincide per shared branch.
+export const ROT_STATE = (i: number) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 ? (i < 9 ? i + 3 : i - 3) : i);
+// the state whose deltas the target's branch checks (the mid-fall
+// source when one exists, else the selection predecessor)
+export const DELTA_SOURCE = (t: number) => (ROT_STATE(t) !== t ? ROT_STATE(t) : (t + NSTATES - 1) % NSTATES);
+
 export function upResourceCounts(cols: number) {
   const span = (o: number, w2: number, p: number) => Array.from({ length: w2 }, (_, k) => p + o + k);
   const posUse = Array(cols).fill(0) as number[];
   const botUse = Array(cols).fill(0) as number[];
   const topUse = Array(cols).fill(0) as number[];
-  for (let i = 0; i < NSTATES; i++) {
-    const s1 = SHAPES[i];
-    const s2 = SHAPES[(i + 1) % NSTATES];
+  for (let t = 0; t < NSTATES; t++) {
+    const src = DELTA_SOURCE(t);
+    const s1 = SHAPES[src];
+    const s2 = SHAPES[t];
     const r1 = shapeRange(s1, cols);
     const r2 = shapeRange(s2, cols);
+    // a shared branch must serve BOTH edges: its pos set (range(src) n
+    // range(t)) has to equal the selection edge's (range(prev) n
+    // range(t)) — the reviewer's hand-check said they coincide at 4 and
+    // 6; this assert is the mechanical version
+    const prev = SHAPES[(t + NSTATES - 1) % NSTATES];
+    const rp = shapeRange(prev, cols);
+    const lo = Math.max(r1.min, r2.min);
+    const hi = Math.min(r1.max, r2.max);
+    if (Math.max(rp.min, r2.min) !== lo || Math.min(rp.max, r2.max) !== hi)
+      throw new Error(`shared branch ranges diverge at target ${t}`);
     for (let p = r1.min; p <= r1.max; p++) {
       if (p < r2.min || p > r2.max) continue;
       posUse[p]++;
@@ -469,6 +491,7 @@ export interface TetrisLayout {
   FANPOS: number; FANPOS_CAP: number;
   FANRAIL: number; FANRAIL_CAP: number;
   FANMIR: number; FANMIR_CAP: number;
+  NOTOK: number; NOTM: (k: number) => number; TOKM0: number;
   MIRBX: (r: number, k: number) => number; MIRBX_CAP: number;
   MIRCX: (r: number, k: number) => number; MIRCX_CAP: number;
   MIRCTX: (r: number, k: number) => number; MIRCTX_CAP: number;
@@ -573,6 +596,9 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const mirctXBase = take(mirbExtra * (rows - 2)); // top-rail gates beyond MIRCT x2
   const cutXBase = take(mirbExtra * 5); // 5 cut families x extra pairs beyond cols 4
   const posrstXBase = take(mirbExtra); // reset re-home NCs beyond POSRST x2
+  // rotation (the ring's mid-fall successor): NOTOK + its contact
+  // mirrors + the row-0 token mirror the SEEDM bank lacks
+  const rotBase = take(7);
   const upC = upResourceCounts(cols);
   const upPosBase = take(upC.posTotal); // UP-transition pos fan mirrors
   const upReadBase = take(upC.readTotal); // UP-transition delta reads
@@ -662,6 +688,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     FANPOS: fanPosBase, FANPOS_CAP: 4 * cols,
     FANRAIL: fanRailBase, FANRAIL_CAP: 4,
     FANMIR: fanMirBase, FANMIR_CAP: 6 * Math.ceil(cols / 2) + 8,
+    NOTOK: rotBase, NOTM: k => rotBase + 1 + k, TOKM0: rotBase + 6,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -779,6 +806,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let k = 0; k < L8.FANPOS_CAP; k++) claim('FANPOS', L8.FANPOS + k);
   for (let k = 0; k < L8.FANRAIL_CAP; k++) claim('FANRAIL', L8.FANRAIL + k);
   for (let k = 0; k < L8.FANMIR_CAP; k++) claim('FANMIR', L8.FANMIR + k);
+  claim('rotation', L8.NOTOK, L8.NOTM(0), L8.NOTM(1), L8.NOTM(2), L8.NOTM(3), L8.NOTM(4), L8.TOKM0);
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -805,7 +833,8 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     RAILGATE2, RSTM2, CPSET, VMODE, TOPW,
     P2M, P2S, P2CLR, P2GATE, P2COL, TICKM2, P2CUT, LINEDLY,
     ELEVC, ELEVA, ELEVSL, SEEDM, CLEARPM, LANE, TICKM3, TGM, TGS,
-    LINEDLY2, CPSET2, CLEARP2, CLEARPM2, SCPM, P2SM, CLEARPM2B, CLEARPM2C, P2SM2, SEEDM2, MIRBX, MIRCX, MIRCTX, CUTX, POSRSTX,
+    LINEDLY2, CPSET2, CLEARP2, CLEARPM2, SCPM, P2SM, CLEARPM2B, CLEARPM2C, P2SM2, SEEDM2, MIRBX, MIRCX, MIRCTX,
+    NOTOK, NOTM, TOKM0, CUTX, POSRSTX,
     ELEVW1, ELEVW2, CGA, CGB, CGB2, CUTC1, CUTC2, JUNC,
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
@@ -2127,7 +2156,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       // t's PREDECESSOR — it gates the transition INTO t (the hand's
       // convention; pairing it with t -> t+1 was an off-by-one that
       // walked on the wrong checks until a range mismatch refused)
-      const s1 = SHAPES[(t + NSTATES - 1) % NSTATES];
+      const s1 = SHAPES[DELTA_SOURCE(t)]; // rotation-pair deltas; selection rides the dark rails
       const s2 = SHAPES[t];
       const r1 = shapeRange(s1, cols);
       const r2 = shapeRange(s2, cols);
@@ -2366,6 +2395,42 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // 9..11 in the 4c block (SHR3)
   const SH = (i: number, part: number) =>
     i < 6 ? SHR(i, part) : i < 9 ? SHR2(i, part) : SHR3(i, part);
+  // ---------- rotation: NOTOK and the D-feed muxes ----------
+  // UP means two different things and the difference lives in the
+  // MASTER SAMPLING, not in the clock network: each master's coil com
+  // is fed through its predecessor slave's set2, so re-aiming those
+  // wires re-aims the ring's successor. NOTOK ("no token anywhere")
+  // routes them: energized (pre-spawn) the feeds point at the
+  // selection successor — the full 0..11 cycle, the piece chooser —
+  // and de-energized (a piece is falling) they point at the rotation
+  // partner instead. A self-rotating state's mux NC goes NOWHERE, so
+  // mid-fall no master is fed at all and the branch network has
+  // nothing to conduct: the singletons (1x1, O, S, Z) refuse rotation
+  // natively, the same "no branch = no clock" refusal the bounds use.
+  // NOTOK itself is a series chain of NC contacts on the ring-slave
+  // mirrors: SEEDM(t) parallels ring slave t (t >= 1) with an unspent
+  // set2, and TOKM0 adds the row-0 mirror the SEEDM bank never had
+  // (tokens spawn at row 0 — the cross-review caught that gap).
+  w.push(`${R(RING(0, 2), 'E')}/${R(TOKM0, 'E')}`, `${R(TOKM0, 'F')}/${minusOf(TOKM0)}`);
+  w.push(`${plusOf(TOKM0)}/${R(TOKM0, 'L')}`);
+  let notChain = R(TOKM0, 'N');
+  for (let t = 1; t <= rows - 1; t++) {
+    w.push(`${notChain}/${R(SEEDM(t), 'L')}`);
+    notChain = R(SEEDM(t), 'N');
+  }
+  w.push(`${notChain}/${R(NOTOK, 'E')}`, `${R(NOTOK, 'F')}/${minusOf(NOTOK)}`);
+  for (let k = 0; k < 5; k++)
+    w.push(`${k === 0 ? R(NOTOK, 'E') : R(NOTM(k - 1), 'E')}/${R(NOTM(k), 'E')}`, `${R(NOTM(k), 'F')}/${minusOf(NOTM(k))}`);
+  const notSets: Array<{ relay: number; arm: string; no: string; nc: string }> = [];
+  for (const rel of [NOTOK, NOTM(0), NOTM(1), NOTM(2), NOTM(3), NOTM(4)]) {
+    notSets.push({ relay: rel, arm: 'H', no: 'G', nc: 'J' });
+    notSets.push({ relay: rel, arm: 'L', no: 'K', nc: 'N' });
+  }
+  let notN = 0;
+  const takeNot = () => {
+    if (notN >= notSets.length) throw new Error('rotation mux contacts exhausted');
+    return notSets[notN++];
+  };
   const shrClkCom = (i: number) => comOf(SH(i, 0));
   // the UP-transition end chain conducts the clock into the ring here
   if (upEndTail !== null) w.push(`${upEndTail}/${shrClkCom(0)}`);
@@ -2380,8 +2445,22 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${comOf(a)}/${R(a, 'E')}`, `${R(a, 'F')}/${minusOf(a)}`);
     w.push(`${comOf(sl)}/${R(sl, 'E')}`, `${R(sl, 'F')}/${minusOf(sl)}`);
     w.push(`${plusOf(c)}/${R(c, 'H')}`, `${plusOf(c)}/${R(c, 'L')}`);
-    const prev = SH((i + NSTATES - 1) % NSTATES, 2);
-    w.push(`${R(c, 'J')}/${R(prev, 'L')}`, `${R(prev, 'K')}/${comOf(a)}`);
+    const prevIx = (i + NSTATES - 1) % NSTATES;
+    const prev = SH(prevIx, 2);
+    w.push(`${R(c, 'J')}/${R(prev, 'L')}`);
+    if (ROT_STATE(prevIx) === i) {
+      // this slave's rotation partner IS its selection successor (the
+      // domino's 2wide -> 2tall): one wire serves both meanings
+      w.push(`${R(prev, 'K')}/${comOf(a)}`);
+    } else {
+      const mx = takeNot();
+      w.push(`${R(prev, 'K')}/${R(mx.relay, mx.arm)}`);
+      w.push(`${R(mx.relay, mx.no)}/${comOf(a)}`); // NOTOK up: select
+      if (ROT_STATE(prevIx) !== prevIx)
+        w.push(`${R(mx.relay, mx.nc)}/${comOf(SH(ROT_STATE(prevIx), 1))}`); // down: rotate
+      // (a self-rotating state leaves the NC unwired: mid-fall its
+      // successor master is simply never fed, so UP refuses)
+    }
     w.push(`${R(c, 'G')}/${R(a, 'H')}`, `${R(a, 'G')}/${comOf(a)}`); // master holds, clock high
     w.push(`${R(c, 'K')}/${R(a, 'L')}`, `${R(a, 'K')}/${comOf(sl)}`); // slave := master
     w.push(`${R(c, 'N')}/${R(sl, 'H')}`, `${R(sl, 'G')}/${comOf(sl)}`); // slave holds, clock low
@@ -2482,17 +2561,13 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   for (let i = 1; i < 6; i++) w.push(`${R(MMIR(i - 1), 'H')}/${R(MMIR(i), 'H')}`);
   // into 0 (Z -> 1x1): footprint shrinks, always legal
   // into 1 (1x1 -> 2wide): new bottom cell at p+1
-  w.push(`${R(MMIR(1), 'G')}/${R(POSM3(0), 'L')}`);
-  w.push(`${R(POSM3(0), 'K')}/${R(LEGB(1), 'L')}`);
   // into 2 (2wide -> 2tall): new top cell at p
   // into 3 (2tall -> O): new bottom AND top cells at p+1
   // into 4 (O -> S): new top cell at p-1 (no branch at pos 0: the bound)
   // into 5 (S -> Z): new top cells at p+1 and p+2 (only pos 1 is in range)
-  w.push(`${R(MMIR(5), 'G')}/${R(POSM3(2), 'L')}`);
   // into 0 REWIRED in 3b-4c: the ring's 0-predecessor is T2 now, whose
   // bottom {p+1} does NOT cover 1x1's {p} — the wrap checks (tok, p)
   // the join: every branch's free-side output chains into the clock com
-  w.push(`${R(LEGB(1), 'N')}/${R(LEGB(2), 'N')}`, `${R(LEGB(2), 'N')}/${R(LEGB(3), 'N')}`);
 
   // ---------- 3b-4a: L1 / J1 / T1 (the upright 3-wide forms) ----------
   // state mirrors chain off the new slaves; the TRP rail (= L1|J1|T1)

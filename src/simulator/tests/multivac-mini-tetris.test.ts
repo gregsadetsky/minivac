@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET, SHAPES, shapeRange } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET, SHAPES, shapeRange, NSTATES, ROT_STATE } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -2160,6 +2160,125 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
   // full top row down one and the second clear would miss it). without
   // this, the leftover full row is PERMANENT: nothing can ever lock
   // inside a full row, so it never becomes the token row again.
+  // ROTATION (the rotation-groups rung): UP means two things and the
+  // MACHINE picks which. The successor lives in the ring's D-feeds —
+  // each master's coil com is fed through its predecessor slave's set2
+  // — so NOTOK ("no token anywhere", an NC-series chain over the
+  // ring-slave mirrors) re-aims those wires: energized pre-spawn they
+  // point at the selection successor (the full 0..11 chooser cycle),
+  // de-energized mid-fall they point at the ROTATION partner (1<->2,
+  // and i<->i+3 across the L/J/T pairs). A shape with one orientation
+  // has its mux NC wired NOWHERE, so mid-fall no master is fed at all
+  // and the clock has no branch to conduct: 1x1/O/S/Z refuse rotation
+  // exactly the way an out-of-range bound refuses.
+  it('rotation: UP turns the piece mid-fall, picks the shape pre-spawn (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const shapeAt = () => {
+      for (let i = 0; i < NSTATES; i++) {
+        const r = TETRIS_IO.shapeRelay(i);
+        if (g.m.getMachineState(r.machine).relays[r.index]) return i;
+      }
+      return -1;
+    };
+    const up = () => g.pressBtn(TETRIS_IO.up);
+    const walkTo = (target: number) => {
+      let guard = 0;
+      while (shapeAt() !== target && guard++ < 2 * NSTATES) up();
+      expect(shapeAt(), `walked the chooser to ${target}`).toBe(target);
+    };
+    // PRE-SPAWN the chooser still walks every state (S needs pos >= 1)
+    g.pressBtn(TETRIS_IO.right);
+    const cycle: number[] = [];
+    for (let k = 0; k < NSTATES; k++) {
+      up();
+      cycle.push(shapeAt());
+    }
+    expect(cycle, 'the pre-spawn chooser cycles all twelve').toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0]);
+
+    // MID-FALL the same button rotates: L1 <-> L2, both directions
+    walkTo(6);
+    g.pressStart();
+    for (let t = 0; t < 10 && g.tokenAt().length === 0; t++) g.tick();
+    g.tick();
+    expect(g.tokenAt().length, 'a piece is falling').toBe(1);
+    up();
+    expect(shapeAt(), 'L1 rotates to its flip').toBe(9);
+    up();
+    expect(shapeAt(), 'and back again').toBe(6);
+    // it is ROTATION, not the chooser: the selection successor (7 = J)
+    // is never reachable from a falling L
+    for (let k = 0; k < 4; k++) up();
+    expect([6, 9], 'UP mid-fall stays inside the L family').toContain(shapeAt());
+
+    // ONE-ORIENTATION shapes refuse mid-fall (no master is fed at all)
+    for (let t = 0; t < 30 && g.tokenAt().length > 0; t++) g.tick();
+    walkTo(3); // O
+    g.pressStart();
+    for (let t = 0; t < 10 && g.tokenAt().length === 0; t++) g.tick();
+    g.tick();
+    const held = shapeAt();
+    up();
+    up();
+    expect(shapeAt(), 'the square has one orientation: the ring holds').toBe(held);
+    expect(g.m.getState().alerts, 'a refused rotation is quiet').toEqual([]);
+  });
+
+  // the mux flip under both clock phases: NOTOK re-aims the ring's
+  // D-feeds the instant a token appears or dies, and that can happen
+  // while UP is HELD (shape clock high). The masters are pinned by
+  // their own holds while the clock is high, so a flip mid-press
+  // cannot smear the ring — it re-samples on release. Invariants, not
+  // a hand-derived value: one-hot, quiet, and still steppable after.
+  it('rotation: the D-feed mux flips safely under a held UP (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const shapeAt = () => {
+      const on: number[] = [];
+      for (let i = 0; i < NSTATES; i++) {
+        const r = TETRIS_IO.shapeRelay(i);
+        if (g.m.getMachineState(r.machine).relays[r.index]) on.push(i);
+      }
+      return on;
+    };
+    const holdUp = (body: () => void) => {
+      g.m.pressButton(TETRIS_IO.up.button, TETRIS_IO.up.machine);
+      body();
+      g.m.releaseButton(TETRIS_IO.up.button, TETRIS_IO.up.machine);
+    };
+    // (a) a token APPEARS while UP is held: NOTOK drops mid-press
+    g.pressBtn(TETRIS_IO.right); // pos 1, clear of the S bound
+    g.pressStart();
+    holdUp(() => g.tick()); // the spawn tick lands inside the press
+    expect(shapeAt().length, 'one-hot across a spawn under a held UP').toBe(1);
+    expect(g.m.getState().alerts, 'quiet across the flip').toEqual([]);
+    expect(g.tokenAt().length, 'the piece still spawned').toBe(1);
+    // the ring still steps afterwards (now as a rotation: 1x1 holds, so
+    // walk the falling piece's own family instead — any legal press)
+    const mid = shapeAt()[0];
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt().length, 'still one-hot after').toBe(1);
+    expect([mid, ROT_STATE(mid)], 'UP mid-fall stays in the family').toContain(shapeAt()[0]);
+    // (b) the token DIES while UP is held: NOTOK rises mid-press
+    for (let t = 0; t < 30 && g.tokenAt().length > 0; t++) {
+      if (t === 12) break;
+      g.tick();
+    }
+    holdUp(() => {
+      for (let t = 0; t < 20 && g.tokenAt().length > 0; t++) g.tick();
+    });
+    expect(shapeAt().length, 'one-hot across a lock under a held UP').toBe(1);
+    expect(g.m.getState().alerts, 'quiet across the second flip').toEqual([]);
+    // and the chooser works again now that the field is clear of pieces
+    // (the lock re-homes the register to column 0, where entering S has
+    // no branch — the operator steps back into range first, as ever)
+    g.pressBtn(TETRIS_IO.right);
+    const after = shapeAt()[0];
+    g.pressBtn(TETRIS_IO.up);
+    expect(shapeAt().length, 'one-hot after the chooser step').toBe(1);
+    expect(shapeAt()[0], 'the chooser advances pre-spawn').not.toBe(after);
+  });
+
   it('the double clear: one lock completes both its rows (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
@@ -2325,8 +2444,9 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       expect(shape6(), `walked to state ${ix}`).toBe(ix);
       expect(pos6(), `walked to pos ${tp}`).toBe(tp);
     };
-    press6(6, 1);
-    tick6();
+    // the chooser walk runs PRE-SPAWN: since the rotation rung UP means
+    // "rotate" while a piece falls, and the fans read shape+pos with or
+    // without a token, so the masks are the same either way
     for (const [ix, p, label] of [
       [4, 2, 'S at the seam'], [4, 4, 'S in the new columns'], [6, 3, 'L1 spanning 3-5'],
       [8, 3, 'T1 at 3'], [9, 3, 'L2 overhang'], [11, 3, 'T2 at its max'],
@@ -2338,8 +2458,9 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // the bound: T2's top spans p..p+2, so pos 4 must refuse at 6 cols
     press6(4, btnMachine);
     expect(pos6(), 'T2 refused past its six-col maximum').toBe(3);
-    // and the overhang writes through the new columns
-    for (let t = 0; t < 12; t++) {
+    // and the overhang writes through the new columns (spawn it now)
+    press6(6, 1);
+    for (let t = 0; t < 20; t++) {
       tick6();
       let live = false;
       for (let i = 0; i < 8; i++) if (rel(L.RING(i, 2))) live = true;
