@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, SHR, WIDM, STAGM, PIECET } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -1514,13 +1514,18 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     const rel = (idx: number) => (g.m.getMachineState(Math.floor(idx / 6)).relays[idx % 6] ? 1 : 0);
     const shapeAt = () => {
       const hot: number[] = [];
-      for (let i = 0; i < 6; i++) if (rel(SHR(i, 2))) hot.push(i);
+      for (let i = 0; i < 9; i++) {
+        const r = TETRIS_IO.shapeRelay(i);
+        if (g.m.getMachineState(r.machine).relays[r.index]) hot.push(i);
+      }
       expect(hot.length, 'the ring is one-hot').toBe(1);
       return hot[0];
     };
     const rails = () => [rel(WIDM), rel(VMODE), rel(STAGM)];
     const topBank = () =>
       rel(PIECET(0)) + 2 * rel(PIECET(1)) + 4 * rel(PIECET(2)) + 8 * rel(PIECET(3));
+    const botBank = () =>
+      rel(PIECE(0)) + 2 * rel(PIECE(1)) + 4 * rel(PIECE(2)) + 8 * rel(PIECE(3));
     const up = () => g.pressBtn(TETRIS_IO.up);
 
     // power-on: state 0 (1x1), every rail down, the T bank dark
@@ -1564,10 +1569,37 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     g.pressBtn(TETRIS_IO.left);
     expect(topBank(), 'Z at pos 0: top pair 1-2').toBe(0b0110);
 
-    up(); // Z -> 1x1 always steps (the footprint shrinks); wraps home
+    // 3b-4a: the ring continues into the upright triples. Z -> L1 (the
+    // delta cells read dark pre-spawn, and pos 0 is in every range here)
+    up();
+    expect(shapeAt(), 'Z steps into L1 now, not home').toBe(6);
+    expect(rails(), 'L1: wide, tall, T-fan phase 2').toEqual([1, 1, 1]);
+    expect(botBank(), 'L1 bottom: the triple at pos 0').toBe(0b0111);
+    expect(topBank(), 'L1 top: the stem on the left').toBe(0b0001);
+    // the NS-CUT: while a triple is up, LEFT/RIGHT are fully inert (the
+    // legality trees cannot see 3-wide yet — 4b lifts this)
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'steering a triple: refused outright').toBe(0);
+    up(); // L1 -> J1: the stem moves to the right end
+    expect(shapeAt()).toBe(7);
+    expect(botBank()).toBe(0b0111);
+    expect(topBank(), 'J1 top: the stem on the right').toBe(0b0100);
+    up(); // J1 -> T1: the stem centers
+    expect(shapeAt()).toBe(8);
+    expect(botBank()).toBe(0b0111);
+    expect(topBank(), 'T1 top: the stem centered').toBe(0b0010);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'still cut').toBe(0);
+    up(); // T1 -> 1x1: the footprint shrinks, always legal; wraps home
     expect(shapeAt()).toBe(0);
     expect(rails()).toEqual([0, 0, 0]);
     expect(topBank()).toBe(0);
+    expect(botBank(), 'back to the single').toBe(0b0001);
+    // steering is live again the moment the triple leaves
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'the cut lifted with the shape').toBe(1);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt()).toBe(0);
 
     // compatibility: the operator slides still work (union semantics) —
     // hardware and ring feed the same coil nets
@@ -1603,11 +1635,12 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     g.tick(); // reset (re-homes the register)
     expect(g.tokenAt()).toEqual([]);
 
-    // the S next: wrap the ring around (5 more UPs, from pos 1 so the
-    // S entry conducts), walk to pos 2 — bottom 2-3, top 1-2; the bottom
-    // pair senses the Z's top at (6,2)
+    // the S next: wrap the ring around (8 more UPs — the cycle passes
+    // the L/J/T triples now; pre-spawn their delta checks read dark
+    // rails), from pos 1 so every entry conducts; then walk to pos 2 —
+    // bottom 2-3, top 1-2; the bottom pair senses the Z's top at (6,2)
     g.pressBtn(TETRIS_IO.right); // re-homed 0 -> 1
-    for (let k = 0; k < 5; k++) up();
+    for (let k = 0; k < 8; k++) up();
     let guard = 4;
     while (g.posAt() < 2 && guard-- > 0) g.pressBtn(TETRIS_IO.right);
     expect(g.posAt()).toBe(2);
@@ -1716,6 +1749,79 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     expect(g.row(7), 'Z bottom 0-1').toBe(0b0011);
     expect(g.row(6), 'Z top 1-2').toBe(0b0110);
     expect(g.row(4), 'the tower kept').toBe(0b1000);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // 3b-4a: the upright triples PLAY — L, J and T lock a 3-wide bottom
+  // and their offset stem through the T fan, stacked into a tower; and
+  // entering a triple mid-fall reads the delta cells (a stored cell
+  // where L1's third column would land refuses the UP).
+  it('the triples lock: L, J and T write their rows (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    let g = makeGame();
+    const up = () => g.pressBtn(TETRIS_IO.up);
+    const model = Array(8).fill(0);
+    // the cycle transits S/Z, so walk to pos 1 first; the NS-cut then
+    // pins the triples there (position BEFORE the shape — the doctrine)
+    g.pressBtn(TETRIS_IO.right);
+    for (let k = 0; k < 6; k++) up(); // -> L1 at pos 1
+    g.pressStart();
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick(); // floor lock
+    model[7] = 0b1110;
+    expect(g.field(), 'L: the triple bottom').toEqual(model);
+    g.tick(); // phase 2 rides the T fan (the STAG rail includes triples)
+    model[6] = 0b0010;
+    expect(g.field(), 'L: the stem on the left end').toEqual(model);
+    g.tick(); // reset re-homes the register; the next drops walk back
+    up(); // -> J1 (at pos 0 for a moment; entry checks are dark)
+    expect(g.posAt()).toBe(0);
+    // J1 is a triple: steering is cut, so its drop happens at pos 0
+    g.tick(); // spawn
+    for (let r = 1; r <= 5; r++) g.tick(); // rests at 5 on the L's stem
+    model[5] = 0b0111;
+    expect(g.field(), 'J: the triple bottom on the stack').toEqual(model);
+    g.tick(); // phase 2
+    model[4] = 0b0100;
+    expect(g.field(), 'J: the stem on the right end').toEqual(model);
+    g.tick(); // reset
+    up(); // -> T1 at pos 0
+    g.tick(); // spawn
+    for (let r = 1; r <= 3; r++) g.tick(); // rests at 3 on the J
+    model[3] = 0b0111;
+    expect(g.field(), 'T: the triple bottom').toEqual(model);
+    g.tick(); // phase 2
+    model[2] = 0b0010;
+    expect(g.field(), 'T: the stem centered').toEqual(model);
+    g.tick(); // reset
+    expect(g.tokenAt()).toEqual([]);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // mid-fall entry checks: a Z falling beside a stored cell where L1's
+    // third bottom column would land — the UP refuses in contacts
+    g = makeGame();
+    g.operatorWrite(6, 0b0100); // stored at (6,2)
+    g.pressBtn(TETRIS_IO.right);
+    for (let k = 0; k < 5; k++) up(); // -> Z at pos 1
+    g.pressBtn(TETRIS_IO.left); // home to 0
+    g.pressStart();
+    // Z's own notch ({2} = top minus bottom) rests it ON the stored cell:
+    // merged lock on arrival at 6 — the rails are live at the token row
+    for (let t = 0; t <= 6; t++) g.tick();
+    expect(g.tokenAt()).toEqual([6]);
+    expect(g.row(6), 'the notch rested the Z; bottom merged').toBe(0b0111);
+    g.pressBtn(TETRIS_IO.up); // L1's third column reads the stored row
+    const hot: number[] = [];
+    for (let i = 0; i < 9; i++) {
+      const r = TETRIS_IO.shapeRelay(i);
+      if (g.m.getMachineState(r.machine).relays[r.index]) hot.push(i);
+    }
+    expect(hot, 'L1 onto the stored cell: the ring held Z').toEqual([5]);
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(6)).toBe(0b0111);
+    expect(g.row(5), 'Z top 1-2 above the rest row').toBe(0b0110);
+    expect(g.row(7), 'the floor stayed empty').toBe(0);
     expect(g.m.getState().alerts).toEqual([]);
   });
 

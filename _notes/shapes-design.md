@@ -95,6 +95,43 @@ scaling.
     patterns via per-pattern group rails (states sharing a mask pattern
     share a rail, so branches stay 2 contacts deep).
 
+## 3b-4 worked plan (paper pass, 2026-08-20 ~11:10Z)
+
+state order (APPEND — 0-5 stay stable): 6 L1=(111,100) B={p..p+2}
+T={p}; 7 L2=(001,111) B={p+2} T={p..p+2}; 8 J1 B=triple T={p+2};
+9 J2 B={p} T=triple; 10 T1 B=triple T={p+1}; 11 T2 B={p+1} T=triple.
+all six have a 3-wide row -> pos range {0,1}.
+
+- BOTTOM fan is CUMULATIVE + one cut: base {p} (suppressed by BCUT for
+  L2/T2), +WIDM adds {p+1} (rail gains 6,8,10,11 — T2's bottom {p+1} =
+  BCUT + WIDM, free), +WID3 adds {p+2} (new rail: 6,7,8,10 — L2 {p+2} =
+  BCUT + WID3 without WIDM). J2's {p} = plain narrow. PIECE(j).E jacks
+  are FULL: the WID3 feeds enter at the WIDM-branch contact-output
+  jacks' free holes (same net).
+- TOP fan: + L1 pos(j) x2, J1 pos(j-2) x2, T1 pos(j-1) x2, and a TT
+  rail (L2|J2|T2) with 6 pos branches for the triple top. PIECET(j).E
+  full -> new branches tie at the 3a chain-output jacks' free holes.
+- VMODE rail: +6 states, STAGM rail becomes "phase 2 reads the T fan" =
+  every state with T != B (4..11) — the notch term stays correct (T\B
+  drives it; L1/J1/T1 have T subset of B, term reads piece-covered cells,
+  harmless). rail chains are FULL interior: SPLICE (break the last link,
+  chain the new contacts, rejoin).
+- STEERING for 6..11: 4a ships a NS-CUT — the LEFT/RIGHT sample-bus
+  feeds route through NOT-(new-shape) contacts, so steering L/J/T is
+  refused ENTIRELY until 4b re-classes the legality trees (no unsound
+  state ever; pre-spawn positioning happens BEFORE entering the shape,
+  and the transition network gates entering at pos {0,1}).
+- TRANSITIONS must grow IN 4a (master 6 = Z's successor: without its
+  branch the cycle dies at Z): 7 new conduct branches (5->6 ... 11->0),
+  each <=2 positions x <=3 delta checks; 11->0 (T2 -> 1x1: B {p+1} ->
+  {p}!) needs (tok,p) — NOT covered by T2's footprint.
+- the page: SHAPES entries become (label, bOff, bW, tOff, tW) tuples;
+  mask()/topMask() compute from tuples; the cycle labels L/J/T.
+- budget: ring 18 + mirrors ~8 + WID3/BCUT ~6 + T-fan ~10 + NS-cut 2 +
+  transitions ~14 = ~58-70 relays -> ~480 total, ~82 machines.
+- 4b: legality per top-geometry class; the NS-cut dies. 4c: nothing
+  left (transitions land in 4a) — 4b closes the rung; MASS then.
+
 each increment lands with the usual receipts; MASS at 3b-3c and 3b-4.
 
 ## 3b-3a worked plan (paper pass, 2026-08-20)

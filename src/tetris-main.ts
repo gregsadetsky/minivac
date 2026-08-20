@@ -25,7 +25,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, NSTATES } from './circuits/multivac-mini-tetris';
 
 // the 'fast' engine: typed-array rewrite of the sparse solver, validated
 // against the dense oracle on 5000 random circuits (zero mismatches, max
@@ -44,7 +44,7 @@ const IO = {
   left: { button: 3, machine: btnMachine },
   right: { button: 4, machine: btnMachine },
   up: { button: 2, machine: btnMachine },
-  shapeRelay: (i: number) => loc(L.SHR(i, 2)),
+  shapeRelay: (i: number) => loc(i < 6 ? L.SHR(i, 2) : L.SHR2(i, 2)),
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
   gameOverRelay: loc(L.GAMEOVER),
@@ -101,35 +101,42 @@ for (let j = 0; j < COLS; j++) {
 document.getElementById('dump')!.textContent =
   `${wires.length} wires, ${L.machines} machines\n\n` + wires.join('\n');
 
-// the shape set — a page-side MIRROR of the machine's shape ring states
-// (3b-3a): the shape itself is machine state now, a 6-state one-hot ring
-// stepped by the UP button, and this array just gives each state its
-// label and render geometry. Order MUST match the ring. stag: -1 = top
-// pair shifted left (S), +1 = right (Z), 0 = symmetric.
+// the shape set — a page-side MIRROR of the machine's shape ring states:
+// a 9-state one-hot ring stepped by the UP button; this array just gives
+// each state its label and render geometry as (bottom width, top offset,
+// top width) — the bottom row sits at the register position p, the top
+// at p+tOff. Order MUST match the ring: L/J/T appended in 3b-4a (3-wide
+// bottoms, one-cell stems; steering them is contact-refused until 4b
+// re-classes the legality trees — position first, then shape).
 const SHAPES = [
-  { label: '1x1', w: 1, tall: false, stag: 0 },
-  { label: '2 wide', w: 2, tall: false, stag: 0 },
-  { label: '2 tall', w: 1, tall: true, stag: 0 },
-  { label: '2x2 square', w: 2, tall: true, stag: 0 },
-  { label: 'S', w: 2, tall: true, stag: -1 },
-  { label: 'Z', w: 2, tall: true, stag: 1 },
+  { label: '1x1', bW: 1, tOff: 0, tW: 0 },
+  { label: '2 wide', bW: 2, tOff: 0, tW: 0 },
+  { label: '2 tall', bW: 1, tOff: 0, tW: 1 },
+  { label: '2x2 square', bW: 2, tOff: 0, tW: 2 },
+  { label: 'S', bW: 2, tOff: -1, tW: 2 },
+  { label: 'Z', bW: 2, tOff: 1, tW: 2 },
+  { label: 'L', bW: 3, tOff: 0, tW: 1 },
+  { label: 'J', bW: 3, tOff: 2, tW: 1 },
+  { label: 'T', bW: 3, tOff: 1, tW: 1 },
 ] as const;
+if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
 // the selected shape lives IN THE RELAYS (like the position): read it back
 function shapeAt(): number {
   for (let i = 0; i < SHAPES.length; i++) if (relay(IO.shapeRelay(i))) return i;
   return 0;
 }
 const shape = () => SHAPES[shapeAt()];
-const width = () => shape().w;
-const tall = () => shape().tall;
+const width = () => shape().bW;
 let busy = true;
 let ticks = 0;
 let sim: MinivacSimulator;
 const shapeLabel = () => shape().label;
-// position bounds per shape: the bottom pair must fit, and a staggered
-// top pair must fit too (S needs pos >= 1, Z needs pos <= 1)
-const minPos = () => (shape().stag < 0 ? 1 : 0);
-const maxPos = () => COLS - width() + (shape().stag > 0 ? -1 : 0);
+// position bounds per shape: BOTH rows must fit the well
+const minPos = () => Math.max(0, -shape().tOff);
+const maxPos = () => {
+  const s = shape();
+  return Math.min(COLS - s.bW, s.tW > 0 ? COLS - s.tOff - s.tW : COLS);
+};
 
 function relay(loc: { machine: number; index: number }): boolean {
   return sim.getMachineState(loc.machine).relays[loc.index];
@@ -177,19 +184,19 @@ function posAt(): number {
 
 function mask(): number {
   const p = posAt();
-  return p < 0 ? 0 : (width() === 2 ? 0b11 : 0b1) << p;
+  return p < 0 ? 0 : (((1 << width()) - 1) << p) & 0b1111;
 }
 
 function topMask(): number {
+  const s = shape();
   const p = posAt();
-  if (p < 0 || !tall()) return 0;
-  const st = shape().stag;
-  if (st === 0) return mask();
+  if (p < 0 || s.tW === 0) return 0;
   // out-of-bounds = EMPTY top, mirroring the machine's T fan exactly (its
   // invalid-pos branches are omitted); happens transiently after a reset
   // re-homes the register, before the operator steps back in bounds
-  const sh = p + st;
-  return sh < 0 || sh > 2 ? 0 : (0b11 << sh) & 0b1111;
+  const sh = p + s.tOff;
+  if (sh < 0 || sh + s.tW > COLS) return 0;
+  return (((1 << s.tW) - 1) << sh) & 0b1111;
 }
 
 function press(b: { button: number; machine: number }) {
@@ -326,8 +333,8 @@ document.addEventListener('keydown', e => {
     if (p < 0) return;
     const nIx = (shapeAt() + 1) % SHAPES.length;
     const ns = SHAPES[nIx];
-    const nMin = ns.stag < 0 ? 1 : 0;
-    const nMax = COLS - ns.w + (ns.stag > 0 ? -1 : 0);
+    const nMin = Math.max(0, -ns.tOff);
+    const nMax = Math.min(COLS - ns.bW, ns.tW > 0 ? COLS - ns.tOff - ns.tW : COLS);
     const nPos = Math.min(nMax, Math.max(nMin, p));
     act(ns.label, () => {
       // the clamp = operator steps, machine-checked per the CURRENT shape
@@ -374,8 +381,9 @@ document.addEventListener('keydown', e => {
             step(n + 1);
           } else {
             // n>0 means a lock's bookkeeping ran, i.e. the register was
-            // re-homed — staggered shapes need their bounds + TOPMASK back
-            if (n > 0 && shape().stag !== 0 && !relay(IO.gameOverRelay)) resyncPiece();
+            // re-homed — shapes whose range excludes the home column need
+            // their bounds back (resync no-ops when already in range)
+            if (n > 0 && !relay(IO.gameOverRelay)) resyncPiece();
             busy = false;
             const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
             render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
