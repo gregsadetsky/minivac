@@ -4,7 +4,7 @@
  * The pixels ARE relay armatures: each cell reads a field-cell relay, the
  * falling piece reads the token ring's slaves, the piece's COLUMN reads
  * the position register's slaves, and since the shape ring (3b-3a) the
- * piece's SHAPE reads a 6-state one-hot ring stepped by the UP button —
+ * piece's SHAPE reads a 12-state one-hot ring stepped by the UP button —
  * steering AND reshaping are machine state: this page no longer knows
  * where the piece is or what shape it has, it asks. Everything the game
  * decides (falling, landing,
@@ -44,7 +44,7 @@ const IO = {
   left: { button: 3, machine: btnMachine },
   right: { button: 4, machine: btnMachine },
   up: { button: 2, machine: btnMachine },
-  shapeRelay: (i: number) => loc(i < 6 ? L.SHR(i, 2) : L.SHR2(i, 2)),
+  shapeRelay: (i: number) => loc(i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : L.SHR3(i, 2)),
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
   gameOverRelay: loc(L.GAMEOVER),
@@ -102,22 +102,26 @@ document.getElementById('dump')!.textContent =
   `${wires.length} wires, ${L.machines} machines\n\n` + wires.join('\n');
 
 // the shape set — a page-side MIRROR of the machine's shape ring states:
-// a 9-state one-hot ring stepped by the UP button; this array just gives
-// each state its label and render geometry as (bottom width, top offset,
-// top width) — the bottom row sits at the register position p, the top
-// at p+tOff. Order MUST match the ring: L/J/T appended in 3b-4a (3-wide
-// bottoms, one-cell stems; steering them is contact-refused until 4b
-// re-classes the legality trees — position first, then shape).
+// a 12-state one-hot ring stepped by the UP button; this array just
+// gives each state its label and render geometry as (bottom offset and
+// width, top offset and width) — the bottom row sits at the register
+// position p+bOff, the top at p+tOff. Order MUST match the ring: the
+// L/J/T triples appended in 3b-4a, their 180-degree OVERHANG forms
+// (3-wide tops over offset single bottoms) in 3b-4c; every 2-row-box
+// orientation of the family is here.
 const SHAPES = [
-  { label: '1x1', bW: 1, tOff: 0, tW: 0 },
-  { label: '2 wide', bW: 2, tOff: 0, tW: 0 },
-  { label: '2 tall', bW: 1, tOff: 0, tW: 1 },
-  { label: '2x2 square', bW: 2, tOff: 0, tW: 2 },
-  { label: 'S', bW: 2, tOff: -1, tW: 2 },
-  { label: 'Z', bW: 2, tOff: 1, tW: 2 },
-  { label: 'L', bW: 3, tOff: 0, tW: 1 },
-  { label: 'J', bW: 3, tOff: 2, tW: 1 },
-  { label: 'T', bW: 3, tOff: 1, tW: 1 },
+  { label: '1x1', bOff: 0, bW: 1, tOff: 0, tW: 0 },
+  { label: '2 wide', bOff: 0, bW: 2, tOff: 0, tW: 0 },
+  { label: '2 tall', bOff: 0, bW: 1, tOff: 0, tW: 1 },
+  { label: '2x2 square', bOff: 0, bW: 2, tOff: 0, tW: 2 },
+  { label: 'S', bOff: 0, bW: 2, tOff: -1, tW: 2 },
+  { label: 'Z', bOff: 0, bW: 2, tOff: 1, tW: 2 },
+  { label: 'L', bOff: 0, bW: 3, tOff: 0, tW: 1 },
+  { label: 'J', bOff: 0, bW: 3, tOff: 2, tW: 1 },
+  { label: 'T', bOff: 0, bW: 3, tOff: 1, tW: 1 },
+  { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3 },
+  { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3 },
+  { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3 },
 ] as const;
 if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
 // the selected shape lives IN THE RELAYS (like the position): read it back
@@ -126,16 +130,15 @@ function shapeAt(): number {
   return 0;
 }
 const shape = () => SHAPES[shapeAt()];
-const width = () => shape().bW;
 let busy = true;
 let ticks = 0;
 let sim: MinivacSimulator;
 const shapeLabel = () => shape().label;
 // position bounds per shape: BOTH rows must fit the well
-const minPos = () => Math.max(0, -shape().tOff);
+const minPos = () => Math.max(0, -shape().bOff, -shape().tOff);
 const maxPos = () => {
   const s = shape();
-  return Math.min(COLS - s.bW, s.tW > 0 ? COLS - s.tOff - s.tW : COLS);
+  return Math.min(COLS - s.bOff - s.bW, s.tW > 0 ? COLS - s.tOff - s.tW : COLS);
 };
 
 function relay(loc: { machine: number; index: number }): boolean {
@@ -183,8 +186,12 @@ function posAt(): number {
 }
 
 function mask(): number {
+  const s = shape();
   const p = posAt();
-  return p < 0 ? 0 : (((1 << width()) - 1) << p) & 0b1111;
+  if (p < 0) return 0;
+  const sh = p + s.bOff;
+  if (sh < 0 || sh + s.bW > COLS) return 0; // mirrors the fan's omitted terms
+  return (((1 << s.bW) - 1) << sh) & 0b1111;
 }
 
 function topMask(): number {
@@ -333,8 +340,8 @@ document.addEventListener('keydown', e => {
     if (p < 0) return;
     const nIx = (shapeAt() + 1) % SHAPES.length;
     const ns = SHAPES[nIx];
-    const nMin = Math.max(0, -ns.tOff);
-    const nMax = Math.min(COLS - ns.bW, ns.tW > 0 ? COLS - ns.tOff - ns.tW : COLS);
+    const nMin = Math.max(0, -ns.bOff, -ns.tOff);
+    const nMax = Math.min(COLS - ns.bOff - ns.bW, ns.tW > 0 ? COLS - ns.tOff - ns.tW : COLS);
     const nPos = Math.min(nMax, Math.max(nMin, p));
     act(ns.label, () => {
       // the clamp = operator steps, machine-checked per the CURRENT shape

@@ -1514,7 +1514,7 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     const rel = (idx: number) => (g.m.getMachineState(Math.floor(idx / 6)).relays[idx % 6] ? 1 : 0);
     const shapeAt = () => {
       const hot: number[] = [];
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 12; i++) {
         const r = TETRIS_IO.shapeRelay(i);
         if (g.m.getMachineState(r.machine).relays[r.index]) hot.push(i);
       }
@@ -1595,7 +1595,31 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     expect(topBank(), 'T1 top: the stem centered').toBe(0b0010);
     g.pressBtn(TETRIS_IO.left);
     expect(g.posAt(), 'the left edge self-loops as ever').toBe(0);
-    up(); // T1 -> 1x1: the footprint shrinks, always legal; wraps home
+    // 3b-4c: the OVERHANG trio — 3-wide TOPS over offset single bottoms
+    up(); // T1 -> L2: the base column is CUT, the bottom rides WID3 alone
+    expect(shapeAt(), 'T1 steps into L2 now, not home').toBe(9);
+    expect(rails(), 'L2: NOT wide-paired, tall, T-fan phase 2').toEqual([0, 1, 1]);
+    expect(botBank(), 'L2 bottom: the single at p+2').toBe(0b0100);
+    expect(topBank(), 'L2 top: the triple').toBe(0b0111);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'an overhang steps right').toBe(1);
+    expect(botBank(), 'the bottom followed to col 3').toBe(0b1000);
+    expect(topBank()).toBe(0b1110);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'the 3-wide TOP bound: pos 2 refused').toBe(1);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt()).toBe(0);
+    up(); // L2 -> J2: the bottom moves to the base column
+    expect(shapeAt()).toBe(10);
+    expect(rails(), 'J2: plain base bottom').toEqual([0, 1, 1]);
+    expect(botBank(), 'J2 bottom: the single at p').toBe(0b0001);
+    expect(topBank()).toBe(0b0111);
+    up(); // J2 -> T2: the bottom centers (the WIDM tap with the base cut)
+    expect(shapeAt()).toBe(11);
+    expect(rails(), 'T2: rides the wide tap').toEqual([1, 1, 1]);
+    expect(botBank(), 'T2 bottom: the single at p+1').toBe(0b0010);
+    expect(topBank()).toBe(0b0111);
+    up(); // T2 -> 1x1: the wrap (now checked: T2 uncovers col p — dark here)
     expect(shapeAt()).toBe(0);
     expect(rails()).toEqual([0, 0, 0]);
     expect(topBank()).toBe(0);
@@ -1635,12 +1659,13 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     g.tick(); // reset (re-homes the register)
     expect(g.tokenAt()).toEqual([]);
 
-    // the S next: wrap the ring around (8 more UPs — the cycle passes
-    // the L/J/T triples now; pre-spawn their delta checks read dark
-    // rails), from pos 1 so every entry conducts; then walk to pos 2 —
-    // bottom 2-3, top 1-2; the bottom pair senses the Z's top at (6,2)
+    // the S next: wrap the ring around (11 more UPs — the cycle passes
+    // the upright triples AND the overhang trio now; pre-spawn their
+    // delta checks read dark rails), from pos 1 so every entry conducts;
+    // then walk to pos 2 — bottom 2-3, top 1-2; the bottom pair senses
+    // the Z's top at (6,2)
     g.pressBtn(TETRIS_IO.right); // re-homed 0 -> 1
-    for (let k = 0; k < 8; k++) up();
+    for (let k = 0; k < 11; k++) up();
     let guard = 4;
     while (g.posAt() < 2 && guard-- > 0) g.pressBtn(TETRIS_IO.right);
     expect(g.posAt()).toBe(2);
@@ -1894,6 +1919,69 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     g.tick(); // reset
     expect(g.row(7), 'L bottom at home').toBe(0b0111);
     expect(g.row(6), 'L stem at col 0').toBe(0b0001);
+    expect(g.row(4), 'the tower kept').toBe(0b0001);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // 3b-4c: the OVERHANG TRIO PLAYS — L2/J2/T2 lock a single offset
+  // bottom cell under a 3-wide top; the notch machinery (3b-2) rests
+  // their wide tops on stored content; and their steering reads the true
+  // footprint (the OVR bypass skips the false base-column check, the
+  // LTOB/T2B hops read the real bottoms).
+  it('the overhangs lock: offset bottoms under triple tops (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    let g = makeGame();
+    const up = () => g.pressBtn(TETRIS_IO.up);
+    const model = Array(8).fill(0);
+    // L2 at pos 0 (walk to 1 for the S transit, home for the drop)
+    g.pressBtn(TETRIS_IO.right);
+    for (let k = 0; k < 9; k++) up(); // -> L2
+    g.pressBtn(TETRIS_IO.left);
+    g.pressStart();
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick(); // floor lock
+    model[7] = 0b0100;
+    expect(g.field(), 'L2: the single bottom at p+2').toEqual(model);
+    g.tick(); // phase 2: the triple top
+    model[6] = 0b0111;
+    expect(g.field(), 'L2: the triple top').toEqual(model);
+    g.tick(); // reset
+    up(); // -> J2 at the re-homed 0
+    g.tick(); // spawn
+    // J2's bottom (col 0) rests by the ordinary bottom term on the L2's
+    // top stem at (6,0)
+    for (let r = 1; r <= 5; r++) g.tick(); // merged lock at 5
+    model[5] = 0b0001;
+    expect(g.field(), 'J2: the single bottom on the stack').toEqual(model);
+    g.tick(); // phase 2
+    model[4] = 0b0111;
+    expect(g.field(), 'J2: the triple top above').toEqual(model);
+    g.tick(); // reset
+    expect(g.tokenAt()).toEqual([]);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // T2 steering: the OVR bypass skips the FALSE base-column check, and
+    // the shared point-1 top check (correct for every triple top) refuses
+    // on the true target. (T2's bottom-column check exists too but is
+    // unreachable in play: a stored cell there notch-rests the piece
+    // first — belt and braces.)
+    g = makeGame();
+    g.operatorWrite(4, 0b0001); // the tower at (4,0): left-target top col 0
+    g.pressBtn(TETRIS_IO.right);
+    for (let k = 0; k < 11; k++) up(); // -> T2 at pos 1 (bottom col 2, top 1-3)
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the tower
+    expect(g.tokenAt()).toEqual([5]);
+    g.pressBtn(TETRIS_IO.left); // target pos 0: the triple top would hit (4,0)
+    expect(g.posAt(), 'T2 left under the tower: refused').toBe(1);
+    g.tick(); // token 6
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'a row later the step goes').toBe(0);
+    g.tick(); // floor lock at 7 (bottom col 1)
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'T2 bottom at p+1').toBe(0b0010);
+    expect(g.row(6), 'T2 triple top').toBe(0b0111);
     expect(g.row(4), 'the tower kept').toBe(0b0001);
     expect(g.m.getState().alerts).toEqual([]);
   });
