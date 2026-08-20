@@ -344,6 +344,29 @@ the dense batch on the emitter tip is running; its green gates the
 deploy. the fence (cols !== 4) STAYS until the fan + transition
 emitters land — those are the next work units.
 
+## the fan emitters, spec (16:45Z — next surgery)
+
+the hand's B fan IS an offset-rail factorization already: per offset d,
+a rail = union of states whose bottom span covers d, and per column j a
+series tap (pos p=j-d AND rail-d) into PIECE(j).E:
+- d0 = base (bOff=0 states; BCUT suppresses it for L2/T2 — i.e. the d0
+  rail is really the union WITHOUT offset-bottom states),
+- d1 = the WIDM net (2wide|O|S|Z|T2 + the slide splice — EXACTLY the
+  step trees' B1 union),
+- d2 = the WID3 net (TRP=L,J,T + L2).
+the T fan factorizes identically with tOff/tW: rails T-1 {S}, T0, T1,
+T2 over the pos taps into PIECET(j).E.
+EMITTER: reuse the union machinery — offset rails (slide legacy pairs
+included via the existing WIDM/VMODE compatibility nets), a per-
+position mirror bank (replacing the hand POSM2/POSM3/POSM5/POSM6 class
+maps), and a loop emitting (posMirror AND railMirror) series pairs per
+column, chained at output jacks into each coil net's one free hole.
+sites to replace: the base/WIDM/WID3 taps (~1454, 1488-90, 2190-91),
+the S/Z T fan (2005-2017), the triples' T fan (2192-2202), the TT/
+overhang fans (3b-4c section), + their pos-mirror class maps.
+the UP-TRANSITION emitter (the other fence-holder) comes after; its
+delta-check structure reuses the same pos banks.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
