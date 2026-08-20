@@ -203,6 +203,7 @@ function dropPiece(
   g.tick(); // spawn tick: token appears at row 0
   expect(g.tokenAt(), `${label}: spawned`).toEqual([0]);
   expect(g.field(), `${label}: spawn does not touch the field`).toEqual(model);
+  let cleared = -1;
   for (let r = 1; r <= rest; r++) {
     g.tick();
     expect(g.tokenAt(), `${label}: token at ${r}`).toEqual([r]);
@@ -211,13 +212,35 @@ function dropPiece(
       // a completed line flashes only within the press: CLEARP holds the
       // row's breakers up from the release on, so the cells are gone by the
       // time the tick is back low
-      if (model[r] === 15) model[r] = 0;
+      if (model[r] === 15) {
+        model[r] = 0;
+        cleared = r;
+      }
     }
     expect(g.field(), `${label}: field after tick to ${r}`).toEqual(model);
   }
   g.tick(); // reset tick: token dies, SPAWN re-arms, CLEARP un-latches
   expect(g.tokenAt(), `${label}: token gone`).toEqual([]);
   expect(g.field(), `${label}: field after reset`).toEqual(model);
+  collapseTicks(g, cleared, model, label);
+}
+
+// rung 10: a clearing lock is followed by 2*row collapse ticks — the
+// elevator walks the hole to the top, two ticks (move, clear+step) per
+// stage, while the tick lane defers the next spawn. A clear at row 0 has
+// nothing above it: the chain never seeds and play resumes immediately.
+function collapseTicks(
+  g: ReturnType<typeof makeGame>,
+  clearedRow: number,
+  model: number[],
+  label: string
+) {
+  if (clearedRow < 0) return;
+  for (let k = 1; k <= 2 * clearedRow; k++) {
+    g.tick();
+    expect(g.tokenAt(), `${label}: collapse tick ${k} defers the spawn`).toEqual([]);
+    expect(g.field(), `${label}: field during collapse tick ${k}`).toEqual(model);
+  }
 }
 
 // vertical drop (VMODE up): the bottom cell is the token, so the fall and
@@ -246,12 +269,16 @@ function dropVertical(
   g.tick();
   expect(g.tokenAt(), `${label}: spawned`).toEqual([0]);
   expect(g.field(), `${label}: spawn does not touch the field`).toEqual(model);
+  let cleared = -1;
   for (let r = 1; r <= rest; r++) {
     g.tick();
     expect(g.tokenAt(), `${label}: token at ${r}`).toEqual([r]);
     if (r === rest) {
       model[r] |= mask;
-      if (model[r] === 15) model[r] = 0; // bottom-write clear, as ever
+      if (model[r] === 15) {
+        model[r] = 0; // bottom-write clear, as ever
+        cleared = r;
+      }
     }
     expect(g.field(), `${label}: field after tick to ${r}`).toEqual(model);
   }
@@ -262,6 +289,7 @@ function dropVertical(
   g.tick(); // reset, one tick late
   expect(g.tokenAt(), `${label}: token gone`).toEqual([]);
   expect(g.field(), `${label}: field after reset`).toEqual(model);
+  collapseTicks(g, cleared, model, label);
 }
 
 describe('Multivac: mini-tetris (28 machines)', () => {
@@ -370,11 +398,14 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     let clears = 0;
     let ticks = 0;
 
+    let clearedRow = -1; // a clearing lock queues 2*row collapse ticks
+    let collapseLeft = 0;
     const lockAt = (r: number) => {
       model[r] |= mask;
       if (model[r] === 15) {
         model[r] = 0; // CLEARP zeroes the row as the press releases
         clears++;
+        clearedRow = r;
       }
       locks++;
       if (vertical) {
@@ -403,7 +434,11 @@ describe('Multivac: mini-tetris (28 machines)', () => {
       // lock tick only exists when steering put a block under an already
       // falling piece between ticks (collide pre-armed).
       const resting = () => token === 7 || (model[token + 1] & mask) !== 0;
-      if (phase2Pending) {
+      if (collapseLeft > 0) {
+        // the elevator owns the tick: the spawn stays deferred and (until
+        // the routing increment) the field is frozen
+        collapseLeft--;
+      } else if (phase2Pending) {
         // the top write: current mask, one row above the still-alive token;
         // clipped at row 0; NEVER clears (top-full stays — the pinned limit)
         if (token >= 1) model[token - 1] |= mask;
@@ -413,6 +448,8 @@ describe('Multivac: mini-tetris (28 machines)', () => {
         token = -1;
         resetPending = false;
         spawnArmed = true;
+        if (clearedRow > 0) collapseLeft = 2 * clearedRow; // row-0 clears never seed
+        clearedRow = -1;
       } else if (token >= 0) {
         if (resting()) lockAt(token); // pre-armed collide: no movement
         else {
@@ -718,17 +755,14 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     }
   });
 
-  // rung 10 groundwork: the elevator chain (the collapse cursor). Stage t
-  // hot = "the hole is at row t". In this increment the chain is PASSIVE —
-  // no routing, no tick lane — so it must (a) stay dark through ordinary
-  // play, (b) seed at the token's row when a clearing lock's reset fires
-  // (the reset doubles as the seed-transfer clock), (c) with its clock on
-  // the reset rail, visibly walk one stage UP per subsequent reset until it
-  // drains off stage 1, and (d) never disturb the game. The walk moves to
-  // collapse-lane ticks in the next increment; the cheap reset generator
-  // here is a spawn-lock: row 1 pre-filled at col 0 makes every col-0 spawn
-  // a merged spawn+press at row 0, so each tick PAIR is one full lock cycle.
-  it('collapse prep: the elevator seeds at the cleared row and walks per reset (sparse)', { timeout: 900000 }, () => {
+  // rung 10 sequencing: the elevator chain + the tick lane + the toggle,
+  // BEFORE any data routing exists. After a clearing lock's reset seeds the
+  // chain at the cleared row, the lane owns the ticks: alpha ticks do
+  // nothing yet, beta ticks step the one-hot up one stage, the armed spawn
+  // WAITS, and when the chain drains off stage 1 the lane releases and the
+  // deferred piece finally enters. Ordinary play must never engage any of
+  // it. (The moves land on the alpha ticks in the next increment.)
+  it('collapse prep: the lane owns the ticks, the chain walks, spawns wait (sparse)', { timeout: 900000 }, () => {
     setSolverEngine('sparse');
     const g = makeGame();
     const relayOn = (n: number) =>
@@ -739,37 +773,42 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     const model = Array(8).fill(0);
     g.pressStart();
 
-    dropPiece(g, 0b0001, model, 'c1 drop 1');
-    dropPiece(g, 0b0010, model, 'c1 drop 2');
-    dropPiece(g, 0b0100, model, 'c1 drop 3');
+    dropPiece(g, 0b0001, model, 'c2 drop 1');
+    dropPiece(g, 0b0010, model, 'c2 drop 2');
+    dropPiece(g, 0b0100, model, 'c2 drop 3');
     expect(elev(), 'chain dark through non-clearing locks').toEqual(oneHotAt(0));
-    dropPiece(g, 0b1000, model, 'c1 drop 4 clears row 7');
-    expect(g.row(7)).toBe(0);
-    // dropPiece's final tick IS the reset: the seed has transferred
-    expect(elev(), 'the clear seeded stage 7').toEqual(oneHotAt(7));
 
-    // walk: pre-fill row 1 col 0, then every col-0 tick pair is a
-    // spawn+lock followed by a reset — one chain step per pair
-    g.operatorWrite(1, 0b0001);
-    model[1] = 0b0001;
-    g.setColumn(0);
-    for (let step = 6; step >= 1; step--) {
-      g.tick(); // spawn straight into the press at row 0
-      model[0] = 0b0001; // idempotent after the first pair
-      expect(g.tokenAt()).toEqual([0]);
-      g.tick(); // reset — clocks the chain
-      expect(g.tokenAt()).toEqual([]);
-      expect(g.field()).toEqual(model);
-      expect(elev(), `walked up to stage ${step}`).toEqual(oneHotAt(step));
+    // the clearing drop, run by hand so the stages stay observable
+    g.setMask(0b1000);
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick(); // fall; the floor press completes row 7
+    model[7] = 0;
+    expect(g.field(), 'line cleared').toEqual(model);
+    g.tick(); // reset: the token dies and its row seeds the chain
+    expect(g.tokenAt()).toEqual([]);
+    expect(elev(), 'seeded at stage 7').toEqual(oneHotAt(7));
+
+    // 7 alpha/beta pairs: the hole walks to the top while spawns wait
+    for (let step = 7; step >= 1; step--) {
+      expect(elev(), `stage ${step} holds before its pair`).toEqual(oneHotAt(step));
+      g.tick(); // alpha — the move tick (a no-op until the routing lands)
+      expect(g.tokenAt(), 'alpha defers the spawn').toEqual([]);
+      expect(elev(), 'alpha does not step the chain').toEqual(oneHotAt(step));
+      g.tick(); // beta — clear + step
+      expect(g.tokenAt(), 'beta defers the spawn').toEqual([]);
+      expect(g.field(), 'field frozen through the walk (no routing yet)').toEqual(model);
     }
-    g.tick();
-    g.tick(); // one more pair: the one-hot walks off stage 1 and drains
     expect(elev(), 'chain drained off the top').toEqual(oneHotAt(0));
 
-    // the machine still plays a full ordinary drop afterwards (the floor
-    // reopened when the line cleared)
-    dropPiece(g, 0b0100, model, 'c1 game goes on');
-    expect(g.row(7)).toBe(0b0100);
+    // the lane released: the spawn that waited fires on the very next tick
+    g.tick();
+    expect(g.tokenAt(), 'the deferred piece finally spawns').toEqual([0]);
+    for (let r = 1; r <= 7; r++) g.tick(); // and plays out normally
+    model[7] = 0b1000;
+    expect(g.field(), 'the waiting piece locks as ever').toEqual(model);
+    g.tick(); // its (ordinary, non-clearing) reset
+    expect(g.tokenAt()).toEqual([]);
+    expect(elev(), 'ordinary resets leave the drained chain dark').toEqual(oneHotAt(0));
   });
 
   const heavy = MASS ? it : it.skip;

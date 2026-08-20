@@ -274,8 +274,13 @@ export function tetrisCircuit(): {
   w.push(`${R(TICKM, 'F')}/${minusOf(TICKM)}`);
   // LKS.G runs through P2S's branch contact (vertical section below): NC ->
   // the reset rail as always, NO -> the phase-2 rail. Pre-closed when P2S is
-  // idle, so the normal reset path is unchanged.
-  w.push(`${R(LKS, 'G')}/${R(P2S, 'H')}`, `${R(LKS, 'J')}/${R(COLLIDE, 'H')}`);
+  // idle, so the normal reset path is unchanged. LKS.J likewise runs through
+  // LANE's branch (collapse section below): NC -> the collision relay as
+  // always, NO -> the collapse tick lane — the lane must intercept BEFORE
+  // the collision branch or a collapse tick would clock the ring and spawn
+  // the next piece mid-collapse.
+  w.push(`${R(LKS, 'G')}/${R(P2S, 'H')}`, `${R(LKS, 'J')}/${R(LANE, 'H')}`);
+  w.push(`${R(LANE, 'J')}/${R(COLLIDE, 'H')}`);
   w.push(`${R(COLLIDE, 'G')}/${tap(railA, aUse)}`, `${R(COLLIDE, 'J')}/${ringClkCom(0)}`);
   // LKS: copy from LKM while the tick is low, hold while it is high
   w.push(`${plusOf(TICKM)}/${R(TICKM, 'H')}`, `${R(TICKM, 'J')}/${R(LKM, 'H')}`, `${R(LKM, 'G')}/${comOf(LKS)}`);
@@ -550,6 +555,53 @@ export function tetrisCircuit(): {
     w.push(`${R(RING(t, 2), 'E')}/${R(SEEDM(t), 'E')}`, `${R(SEEDM(t), 'F')}/${minusOf(SEEDM(t))}`);
     w.push(`${tap(seedFan, sfUse)}/${R(SEEDM(t), 'H')}`, `${R(SEEDM(t), 'G')}/${comOf(ELEVA(t))}`);
   }
+
+  // ---------- row collapse C2: the tick lane + the alpha/beta toggle ----
+  // While any elevator stage is hot, ticks belong to the collapse: LANE (a
+  // two-phase branch slave like LKS and P2S, clocked by TICKM3) re-routes
+  // them off the collision branch. Ticks alternate alpha (the move — data
+  // routing lands in the next increment) and beta (the chain steps): TGM
+  // samples "not TGS" during an alpha tick and TGS copies it between ticks,
+  // so the routing never flips under a live line. TGM's sample rides the
+  // depth-2 CGB rail — a contact-path feed would die in the same wave as
+  // the tick mirrors and the master would drop before its self-hold
+  // (TICKM.N) could catch it. The chain's beta clock enters at stage 7's
+  // com: the com chain ties it to the reset-rail feed, which is safe
+  // because each side dead-ends through open contacts while the other is
+  // live (resets and collapse ticks cannot coincide — LKS picks one lane).
+  w.push(`${R(TICKM2, 'E')}/${R(TICKM3, 'E')}`, `${R(TICKM3, 'F')}/${minusOf(TICKM3)}`);
+  // the "collapse active" OR: ELEVW1 mirrors (parallel coils on the stage
+  // slaves' spare com holes) fan + into laneNode — legal one-contact-per-
+  // consumer wired-OR: many sources, ONE consumer (LANE's copy gate)
+  const laneNode = takeGroups(2);
+  w.push(`${laneNode[0]}/${laneNode[1]}`);
+  const lnUse = { n: 0 };
+  for (let t = 1; t <= 7; t++) {
+    w.push(`${comOf(ELEVSL(t))}/${R(ELEVW1(t), 'E')}`, `${R(ELEVW1(t), 'F')}/${minusOf(ELEVW1(t))}`);
+    w.push(`${plusOf(ELEVW1(t))}/${R(ELEVW1(t), 'L')}`, `${R(ELEVW1(t), 'K')}/${tap(laneNode, lnUse)}`);
+  }
+  // LANE: copies the OR while the tick is low, holds while high
+  w.push(`${tap(laneNode, lnUse)}/${R(TICKM3, 'H')}`, `${R(TICKM3, 'J')}/${comOf(LANE)}`);
+  w.push(`${plusOf(TICKM3)}/${R(TICKM3, 'L')}`, `${R(TICKM3, 'K')}/${R(LANE, 'L')}`, `${R(LANE, 'K')}/${comOf(LANE)}`);
+  w.push(`${comOf(LANE)}/${R(LANE, 'E')}`, `${R(LANE, 'F')}/${minusOf(LANE)}`);
+  // the collapse tick node and the both-phase depth-2 rail
+  const clpNode = takeGroups(1)[0];
+  const cgbRail = takeGroups(1)[0];
+  w.push(`${R(LANE, 'G')}/${clpNode}`);
+  w.push(`${clpNode}/${R(CGB, 'E')}`, `${R(CGB, 'F')}/${minusOf(CGB)}`);
+  w.push(`${plusOf(CGB)}/${R(CGB, 'L')}`, `${R(CGB, 'K')}/${cgbRail}`);
+  // the toggle: TGM := (collapse tick) AND (not TGS), via TGS's own set 1 —
+  // its NO output doubles as the beta trigger (chain clock)
+  w.push(`${cgbRail}/${R(TGS, 'H')}`, `${R(TGS, 'J')}/${comOf(TGM)}`, `${R(TGS, 'G')}/${elevClkCom(7)}`);
+  w.push(`${comOf(TGM)}/${R(TGM, 'E')}`, `${R(TGM, 'F')}/${minusOf(TGM)}`);
+  // TGM survives the low period on TICKM.N (a tick-low + source), then the
+  // next rise finds TGS flipped and the sample path open — master consumed
+  w.push(`${R(TICKM, 'N')}/${R(TGM, 'L')}`, `${R(TGM, 'K')}/${comOf(TGM)}`);
+  // TGS := TGM between ticks (TICKM3.N), holds through the tick on the
+  // lane-scoped tick-high source (TICKM3.G carries laneNode while high)
+  w.push(`${R(TICKM3, 'N')}/${R(TGM, 'H')}`, `${R(TGM, 'G')}/${comOf(TGS)}`);
+  w.push(`${R(TICKM3, 'G')}/${R(TGS, 'L')}`, `${R(TGS, 'K')}/${comOf(TGS)}`);
+  w.push(`${comOf(TGS)}/${R(TGS, 'E')}`, `${R(TGS, 'F')}/${minusOf(TGS)}`);
 
   return { wires: w, rails: dataRails };
 }
