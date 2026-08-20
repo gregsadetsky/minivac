@@ -246,6 +246,53 @@ claim registry (it guards overlaps on the derived values). consumers
 — safe. gates: netlist byte-identity + tsc + fast file. bounded
 (~250 lines of mechanical rewiring), do it as its own commit.
 
+## the step-tree emitter: design settled, extraction inventory (15:45Z)
+
+DESIGN DECISION — the uniform union-gated tree: no mode forks. every
+check in a tree is a union-gated rail read in series; a dead union's NC
+passes the sample through (the LTS pattern generalized to everything).
+per tree (target c, direction d), from stepEntering():
+- group the 12 states by their checked-column OFFSET per row: e.g.
+  RIGHT bottom: d0 {1x1, 2tall, J2}, d1 {2wide, O, S, Z, T2},
+  d2 {L, J, T, L2}; RIGHT top: d0 {2tall, S, L1}, d1 {O, T1},
+  d2 {Z, J1, L2, J2, T2}. LEFT bottom: d0 {all but T2 (d1), L2 (d2)};
+  LEFT top: d-1 {S}, d0 {2tall, O, L1, L2, J2, T2}, d1 {Z, T1}, d2 {J1}.
+- one UNION RAIL per group (wired-OR of state-mirror contacts, the
+  ZJT/SLJ/TT pattern), one GatedReadPool read per (tree, group) at
+  rail column c+d, all in series, then the step. d0-bottom reuses the
+  existing LEGINV(c) changeover (both sets: right tree set1, left set2).
+- bounds are width-invariant: RIGHT tree at c = cols-2 refuses the
+  max==cols-3 group {Z, triples, overhangs} (three group contacts);
+  the wall tree (c = cols-1) refuses the WIDM-class {2wide, O, S}
+  (max==cols-2; Z/triples/overhangs can't SIT at cols-2, one-hot);
+  LEFT tree at c=0 refuses S (min 1). nothing else, at any width.
+- relay cost at 6: ~55 reads + ~6 unions + member mirror sets; the
+  hand's fork optimization is dropped for uniformity (more armatures
+  for the wall, mechanical derivation, behavioral gate).
+
+EXTRACTION INVENTORY (what the surgery touches — five sites):
+1. the D-tap section (the trees proper, ~1563-1755).
+2. 3b-3b coils: SG/ZG mirrors + LTS/LTZ gated coils (~2079-2092) —
+   tree-only, dies with the trees (ZG(0,1)/SG(0) NOT-gates die too:
+   the uniform tree has no shared-check gates).
+3. 3b-4b: ZJT/SLJ unions + LTJ/LTT/LTB3 gated coils — ZJT/SLJ die
+   (their gates die); LTJ/LTT/LTB3 die (reads re-minted from the pool).
+4. 3b-4c: LTOT/LTOB/T2B gated coils die; BCUT/BCUTM (the OVR bypasses)
+   DIE ENTIRELY — the uniform tree has no false-refusing shared bottom
+   check to bypass (d0 reads are gated on the d0 union, which excludes
+   L2/T2 on the right). TT/TTM survive (transition network + rails).
+5. SHARED SEAMS that must survive unchanged: SM/ZM mirror sets feeding
+   the T fan + WIDB rail; TRPM(0) rail feeds; TTM rail/transition sets;
+   the LEGB occupancy-term feeds — today they chain off LEGINV(0)/(1)
+   and LEGINV2(2)/(3) COIL jacks; LEGINV2 dies with the trees (the
+   wide-fork copies), so the LEGB feeds for columns 2..3 must re-home
+   to emitter-minted d1-read coils or their own rail taps. AUDIT THIS
+   ONE FIRST when wiring.
+new layout tail: union bank + state-mirror growth + GatedReadPool +
+bound mirrors + ret groups (counted, generous caps, assert spent<=cap).
+freed banks stay claimed-but-unwired (dead index space, zero netlist
+cost; compaction later).
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
