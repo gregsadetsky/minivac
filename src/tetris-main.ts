@@ -45,6 +45,7 @@ const IO = {
   right: { button: 4, machine: btnMachine },
   up: { button: 2, machine: btnMachine },
   auto: { slide: (L.TOSC % 6) + 1, machine: Math.floor(L.TOSC / 6) },
+  oscRelay: loc(L.TDRV), // up = the oscillator is holding the tick line high
   shapeRelay: (i: number) => loc(i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : L.SHR3(i, 2)),
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
@@ -67,6 +68,8 @@ root.innerHTML = `
     <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},44px);gap:8px;justify-content:center;margin-bottom:6px"></div>
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},44px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
+    <div style="margin-top:14px;color:#5c646e;font-size:11px">the machine wall — every armature, live</div>
+    <canvas id="wall" style="margin-top:4px;image-rendering:pixelated"></canvas>
     <div style="margin-top:10px;color:#5c646e">
       &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = shape &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; a = auto-gravity &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
     </div>
@@ -238,8 +241,40 @@ function rowCells(r: number): number {
 // Enter key's double-spawn interlock (a 1961 operator's discipline,
 // documented at the handler).
 
+// THE MACHINE WALL: all the minivacs as tiles on one canvas, six
+// armature dots each, redrawn directly per paint (no per-frame state —
+// the UI invariant). This is the whole multivac at a glance: the game
+// above is what those armatures are doing.
+const wall = document.getElementById('wall') as HTMLCanvasElement;
+const WALL_COLS = 17;
+const WALL_TILE_W = 26;
+const WALL_TILE_H = 16;
+const wallRows = Math.ceil(L.machines / WALL_COLS);
+wall.width = WALL_COLS * WALL_TILE_W;
+wall.height = wallRows * WALL_TILE_H;
+wall.style.width = `${wall.width}px`;
+const wctx = wall.getContext('2d')!;
+function drawWall() {
+  wctx.fillStyle = '#0a0c0f';
+  wctx.fillRect(0, 0, wall.width, wall.height);
+  for (let m = 0; m < L.machines; m++) {
+    const x = (m % WALL_COLS) * WALL_TILE_W;
+    const y = Math.floor(m / WALL_COLS) * WALL_TILE_H;
+    wctx.fillStyle = '#161a20';
+    wctx.fillRect(x + 1, y + 1, WALL_TILE_W - 2, WALL_TILE_H - 2);
+    const rel = sim.getMachineState(m).relays;
+    for (let i = 0; i < 6; i++) {
+      const rx = x + 3 + (i % 3) * 7;
+      const ry = y + 3 + Math.floor(i / 3) * 6;
+      wctx.fillStyle = rel[i] ? '#ffb000' : '#2a2f38';
+      wctx.fillRect(rx, ry, 5, 4);
+    }
+  }
+}
+
 function render(note?: string) {
   clatter();
+  drawWall();
   if (relay(IO.gameOverRelay)) {
     // the latch is relay-held: only a power cycle clears it
     for (let r = 0; r < ROWS; r++)
@@ -312,30 +347,50 @@ function resyncPiece() {
 // bookkeeping runs included. The interval skips beats while a manual
 // interaction settles or after game over freezes the keyboard.
 let autoOn = false;
+let spawnWait = false;
 let autoTimer: ReturnType<typeof setInterval> | undefined;
 let lastStep = 0;
 function setAuto(on: boolean) {
-  autoOn = on;
   const a = IO.auto;
-  sim.setSlide(a.slide, on ? 'right' : 'left', a.machine);
-  if (on && autoTimer === undefined) {
-    lastStep = performance.now();
-    autoTimer = setInterval(() => {
-      if (busy) {
-        lastStep = performance.now();
-        return;
-      }
-      const now = performance.now();
-      const dt = Math.min(250, Math.max(80, now - lastStep));
-      lastStep = now;
-      sim.stepTime(dt);
-      ticks++;
-      render();
-    }, 130);
-  } else if (!on && autoTimer !== undefined) {
+  if (on) {
+    autoOn = true;
+    sim.setSlide(a.slide, 'right', a.machine);
+    if (autoTimer === undefined) {
+      lastStep = performance.now();
+      autoTimer = setInterval(() => {
+        if (busy) {
+          lastStep = performance.now();
+          return;
+        }
+        const now = performance.now();
+        const dt = Math.min(250, Math.max(80, now - lastStep));
+        lastStep = now;
+        sim.stepTime(dt);
+        ticks++;
+        render();
+      }, 130);
+    }
+    return;
+  }
+  // taking the slide back is NOT instant: through most of each cycle the
+  // cap holds the relay pair up (slow release) with the tick line HIGH,
+  // and freezing time there wedges the line — manual ticks and STARTs
+  // are all dead against it (see the 'oscillator gaps' machine test).
+  // Cut the feed first, then keep time flowing until the driver relay
+  // has genuinely dropped (the cap drains through the coil in a couple
+  // of beats), and only then stop the clock.
+  sim.setSlide(a.slide, 'left', a.machine);
+  let low = 0;
+  for (let i = 0; i < 20 && low < 2; i++) {
+    sim.stepTime(65);
+    ticks++;
+    low = relay(IO.oscRelay) ? 0 : low + 1;
+  }
+  if (autoTimer !== undefined) {
     clearInterval(autoTimer);
     autoTimer = undefined;
   }
+  autoOn = false;
 }
 
 document.addEventListener('keydown', e => {
@@ -346,7 +401,9 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'a' || e.key === 'A') {
-    if (busy) return;
+    // game over pins busy to freeze the game keys — but the tick slide
+    // must stay reachable, or gravity could never be stopped again
+    if (busy && !relay(IO.gameOverRelay)) return;
     setAuto(!autoOn);
     render(autoOn ? 'auto-gravity: the capacitor oscillator ticks the machine' : 'auto-gravity off');
     return;
@@ -452,6 +509,47 @@ document.addEventListener('keydown', e => {
     // the key instead of spending 8 relay contacts on an interlock.
     if (tokenRow() >= 0) {
       render('a piece is already falling');
+      return;
+    }
+    if (autoOn) {
+      // under auto the oscillator holds the tick line high through most
+      // of every cycle, and a START pressed into the high line dissipates
+      // — the arm needs a low line to survive to the next rising edge
+      // (same physics as pressing START while holding the tick slide;
+      // see the 'oscillator gaps' machine test). Wait for a beat that
+      // settled with the driver relay down, press there, and press again
+      // if the machine still swallowed it.
+      if (spawnWait) return;
+      spawnWait = true;
+      let tries = 0;
+      const tryStart = () => {
+        if (!autoOn || tokenRow() >= 0) {
+          spawnWait = false;
+          return;
+        }
+        if (busy || relay(IO.oscRelay)) {
+          setTimeout(tryStart, 45);
+          return;
+        }
+        const b = IO.start;
+        sim.pressButton(b.button, b.machine);
+        sim.releaseButton(b.button, b.machine);
+        tries++;
+        let waited = 0;
+        const check = () => {
+          if (!autoOn || tokenRow() >= 0 || tries >= 4) {
+            spawnWait = false;
+            return;
+          }
+          if (waited++ < 8) {
+            setTimeout(check, 130);
+            return;
+          }
+          setTimeout(tryStart, 45);
+        };
+        setTimeout(check, 130);
+      };
+      tryStart();
       return;
     }
     act('start', () => {

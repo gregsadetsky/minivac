@@ -567,8 +567,37 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    file + check + playwright hands-off scenario green. the scratch
    experiment that gated the design: the first stepTime run ever to
    drive the game (nothing in the browser had called it before).
-   NEXT: deploy the two pending arcs as receipts land; then the canvas
-   multivac viewer or column scaling (a wider well).
+   THE MACHINE WALL + THE OSCILLATOR GAPS (3b-6) LANDED 2026-08-20, same
+   session: the canvas viewer rung — a strip under the well drawing ALL
+   104 minivacs (12-row build) as tiles, six armature dots each, amber
+   when energized, redrawn straight from getMachineState on every render
+   (no react, no per-frame state). the wall's FIRST driver run caught a
+   real bug, which unspooled into the arc's two operating hazards, both
+   machine-verified and now pinned by a contract test: (1) a START
+   pressed while TDRV holds the tick line high DISSIPATES — the arm
+   needs a low line to survive to the next rising edge; under stepTime
+   the cycle settles tick-low only on the buzz solve (~1 beat in 5), so
+   Enter under auto lost ~4 of 5 spawns, silently. (2) taking the AUTO
+   slide back mid-release FREEZES the line high (time stops, the cap
+   never drains) — every manual tick and START is dead against it: the
+   page's old 'a'-off wedged the whole machine, which is exactly what
+   the wall receipt tripped on (tick with zero relay change = frozen
+   bitmap). fixes are operator guards, same philosophy as the enter
+   interlock: Enter under auto waits for a beat that settled tick-low
+   and re-presses if the machine still swallowed it; 'a'-off cuts the
+   feed FIRST, keeps time flowing until the driver relay stays down
+   (the cap drains through the coil in a couple of beats), and only
+   then stops the clock; 'a' is allowed through the game-over freeze
+   (gravity must always be stoppable). steering needed nothing —
+   level-read, not edge-consumed (verified). also observed, still
+   unexplained: transient 5.3A short prints during buzz-adjacent event
+   solves (console only, never in settled alerts). receipts: the
+   five-part oscillator-gaps machine test, guarded spawn + hands-off
+   fall + breathing wall + post-drain manual play all asserted by the
+   driver, file/check green. no circuit changes (page + tests only).
+   NEXT: deploy the pending arcs as receipts land (4a0aa1e = the
+   overhang trio, DEPLOYED this session; 3b-5/3b-6 ride the next
+   batch); then column scaling (a wider well).
 
 ## display/input notes
 

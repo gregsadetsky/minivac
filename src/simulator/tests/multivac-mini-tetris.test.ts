@@ -355,7 +355,7 @@ function dropVertical(
   collapseTicks(g, cleared, model, label);
 }
 
-describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
+describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
   it('gravity, stacking, and a line clear (fast)', { timeout: 1500000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
@@ -2136,6 +2136,84 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     for (let t = 0; t < 15; t++) g.m.stepTime(100);
     expect(g.tokenAt(), 'no oscillator, no gravity').toEqual(frozen);
     expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // the oscillator's operating rules, machine-level (the page encodes them
+  // as operator guards). Under stepTime the cycle is: one buzz solve
+  // (chatter-pinned, TDRV reads low, cap recharged to ~12V) then a few
+  // beats of slow release with TDRV holding the tick line HIGH until the
+  // cap falls below dropout. Two consequences, both verified on the sim:
+  // a START pressed into the held-high line dissipates (the arm needs a
+  // low line to survive to the next rising edge — same physics as
+  // pressing START while holding the tick slide), and taking the AUTO
+  // slide back mid-release freezes the line high forever (time stops, the
+  // cap never drains) — manual ticks and STARTs are all dead against it.
+  it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const auto = (g: ReturnType<typeof makeGame>, on: boolean) =>
+      g.m.setSlide(TETRIS_IO.auto.slide, on ? 'right' : 'left', TETRIS_IO.auto.machine);
+    const drv = (g: ReturnType<typeof makeGame>) =>
+      g.m.getMachineState(TETRIS_IO.oscRelay.machine).relays[TETRIS_IO.oscRelay.index] ? 1 : 0;
+    const stepTo = (g: ReturnType<typeof makeGame>, want: number) => {
+      let n = 0;
+      while (drv(g) !== want && n++ < 30) g.m.stepTime(65);
+      expect(drv(g), `found a beat settled tick-${want ? 'high' : 'low'}`).toBe(want);
+    };
+    const g = makeGame();
+    auto(g, true);
+    // (1) a START pressed into the held-high line dissipates — and leaves
+    // NO latent arm behind (no surprise spawn beats later)
+    stepTo(g, 1);
+    g.pressStart();
+    for (let t = 0; t < 30; t++) g.m.stepTime(100);
+    expect(g.tokenAt(), 'the arm dissipated, nothing latent').toEqual([]);
+    // (2) the same machine spawns from a beat that settled tick-low
+    stepTo(g, 0);
+    g.pressStart();
+    let spawned = false;
+    for (let t = 0; t < 10 && !spawned; t++) {
+      g.m.stepTime(100);
+      spawned = g.tokenAt().length === 1;
+    }
+    expect(spawned, 'a tick-low START spawns').toBe(true);
+    // (3) steering is level-read, not edge-consumed: a press into the
+    // high line still lands, and nothing corrupts
+    stepTo(g, 1);
+    const p = g.posAt();
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'the tick-high step landed').toBe(p + 1);
+    expect(g.tokenAt().length, 'the token survived the tick-high press').toBe(1);
+    // (4) the WRONG way to stop: cutting the feed at a tick-high beat and
+    // freezing time right there wedges the line high — no manual tick can
+    // make an edge against it, so the mid-fall token hangs forever
+    stepTo(g, 1);
+    auto(g, false);
+    const hung = g.tokenAt();
+    for (let i = 0; i < 3; i++) {
+      g.m.setSlide(5, 'right', 1); // raw slide cycles: tick()'s clean-run
+      g.m.setSlide(5, 'left', 1); // asserts are not the contract here
+    }
+    expect(g.tokenAt(), 'tick line frozen high: manual ticks are dead').toEqual(hung);
+    expect(drv(g), 'the driver relay is stuck up').toBe(1);
+    // (5) AUTO off the right way, on a fresh machine: cut the feed FIRST,
+    // keep time flowing until the driver relay stays down (the cap drains
+    // through the coil in a couple of beats), and only then stop the
+    // clock — manual play works from there
+    const h = makeGame();
+    auto(h, true);
+    stepTo(h, 1);
+    auto(h, false);
+    let low = 0;
+    for (let i = 0; i < 20 && low < 2; i++) {
+      h.m.stepTime(65);
+      low = drv(h) ? 0 : low + 1;
+    }
+    expect(low, 'the cap drained; the driver relay stays down').toBe(2);
+    h.pressStart();
+    h.tick();
+    expect(h.tokenAt(), 'the drained machine spawns manually').toEqual([0]);
+    h.tick();
+    expect(h.tokenAt(), 'and ticks manually').toEqual([1]);
   });
 
   // ...and the oscillator itself is engine-exact: the standalone pair
