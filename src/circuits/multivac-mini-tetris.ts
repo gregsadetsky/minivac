@@ -149,6 +149,23 @@ export const CUTBD = 340; // one-hop delay for ALL the stagger cuts: they must o
 // the top collision term (shapes 3b-2): a staggered notch rests on stored content
 export const LEGB = (j: number) => 341 + j; // second reads of "col j occupied at the token row" (the legality rails)
 export const STAGM2 = 345; // second STAG mirror: the top collision term applies only in staggered mode
+// the shape ring (3b-3a): a 6-state one-hot ring stepped by the UP button,
+// state order = the page's cycle (0=1x1, 1=2wide, 2=2tall, 3=O, 4=S, 5=Z).
+// the ring DERIVES the mode rails the operator slides drive, wiring into
+// the SAME coil nets (compatibility-OR: every branch dead-ends at an open
+// contact when its state is inactive, so slide+ring coexist tie-point-
+// legally; a disagreement UNIONS, which is what real hardware would do).
+// slide-driven tests/procedures stay valid; state 0 = all rails off =
+// the slide defaults.
+export const SHR = (i: number, part: number) => 346 + 3 * i + part; // clk, master, slave per state (346..363)
+export const UPM = 364; // UP-button mirror: set1 clocks the ring, set2 K pulses SHBOOT (the CLEARPM pattern)
+export const SHBOOT = 365; // latches on the first UP; its NC seeds state 0 (the BOOTL idiom, private relay)
+export const SM = (k: number) => 366 + k; // S-state mirrors (366..369): 4 T-fan branches + WIDB/VMODE/STAGM rails
+export const ZM = (k: number) => 370 + k; // Z-state mirrors (370..373): same ledger as S
+export const OM = 374; // O-state mirror: WIDB + VMODE rails
+export const I2TM = 375; // 2-tall mirror: VMODE rail
+export const I2WM = 376; // 2-wide mirror: WIDB rail
+export const POSM3 = (k: number) => 377 + k; // T-fan pos mirrors: k=0 pos0, k=1,2 pos1, k=3 pos2 (377..380)
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
@@ -157,10 +174,11 @@ export const STAGM2 = 345; // second STAG mirror: the top collision term applies
 // free. (They lived on m40 through the piece rung, sharing sections with
 // relays whose + jacks HAPPENED to be unused; the 12-row layout landed
 // TWIN's + on the shared section and the capacity auditor caught it.)
-export const LEFTBTN = { button: 3, machine: 58 };
-export const RIGHTBTN = { button: 4, machine: 58 };
-export const WIDSLIDE = { slide: 5, machine: 58 };
-export const MACHINES = 59; // relays through m57.5 + the dedicated button machine m58; m36's coms serve as the junctions
+export const LEFTBTN = { button: 3, machine: 64 };
+export const RIGHTBTN = { button: 4, machine: 64 };
+export const UPBTN = { button: 2, machine: 64 }; // steps the shape ring (press+release = one step)
+export const WIDSLIDE = { slide: 5, machine: 64 };
+export const MACHINES = 65; // relays through m63.2 + the dedicated button machine m64; m36's coms serve as the junctions
 
 // ---- the ROWS-parameterized layout (rung 11 groundwork) ----
 // The same allocation map as the exported constants, laid out sequentially
@@ -221,6 +239,10 @@ export interface TetrisLayout {
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
+  SHR: (i: number, part: number) => number; UPM: number; SHBOOT: number;
+  SM: (k: number) => number; ZM: (k: number) => number;
+  OM: number; I2TM: number; I2WM: number;
+  POSM3: (k: number) => number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -281,6 +303,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const gomBase = take(3); // GOM, GAMEOVER, LKM2 — appended after the tall-well layout shipped
   const scBase = take(31); // the score ring: 10 digits x (clk, master, slave) + SCBOOT
   const stagBase = take(17); // PIECET x4, CUTC5/6, STAGM, CUTB1..4, CUTBD, LEGB x4, STAGM2
+  const shrBase = take(20); // the shape ring: 6 states x (clk, master, slave) + UPM + SHBOOT
+  const smBase = take(15); // state mirrors SM x4, ZM x4, OM, I2TM, I2WM + POSM3 x4
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -332,6 +356,10 @@ export function tetrisLayout(rows: number): TetrisLayout {
     SCR: (i, part) => scBase + 3 * i + part, SCBOOT: scBase + 30,
     PIECET: j => stagBase + j, CUTC5: stagBase + 4, CUTC6: stagBase + 5, STAGM: stagBase + 6, CUTB1: stagBase + 7, CUTB2: stagBase + 8, CUTB3: stagBase + 9, CUTB4: stagBase + 10, CUTBD: stagBase + 11,
     LEGB: j => stagBase + 12 + j, STAGM2: stagBase + 16,
+    SHR: (i, part) => shrBase + 3 * i + part, UPM: shrBase + 18, SHBOOT: shrBase + 19,
+    SM: k => smBase + k, ZM: k => smBase + 4 + k,
+    OM: smBase + 8, I2TM: smBase + 9, I2WM: smBase + 10,
+    POSM3: k => smBase + 11 + k,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -399,6 +427,12 @@ export function tetrisLayout(rows: number): TetrisLayout {
   claim('CUTC5/6/STAGM/CUTB', CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD);
   for (let j = 0; j < 4; j++) claim('LEGB', LEGB(j));
   claim('STAGM2', STAGM2);
+  for (let i = 0; i < 6; i++) claim('SHR', SHR(i, 0), SHR(i, 1), SHR(i, 2));
+  claim('UPM/SHBOOT', UPM, SHBOOT);
+  for (let k = 0; k < 4; k++) claim('SM', SM(k));
+  for (let k = 0; k < 4; k++) claim('ZM', ZM(k));
+  claim('OM/I2TM/I2WM', OM, I2TM, I2WM);
+  for (let k = 0; k < 4; k++) claim('POSM3', POSM3(k));
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -446,6 +480,11 @@ export function tetrisLayout(rows: number): TetrisLayout {
   eq('CUTC5', L.CUTC5, CUTC5); eq('CUTC6', L.CUTC6, CUTC6); eq('STAGM', L.STAGM, STAGM); eq('CUTB1', L.CUTB1, CUTB1); eq('CUTB2', L.CUTB2, CUTB2); eq('CUTB3', L.CUTB3, CUTB3); eq('CUTB4', L.CUTB4, CUTB4); eq('CUTBD', L.CUTBD, CUTBD);
   for (let j = 0; j < 4; j++) eq('LEGB', L.LEGB(j), LEGB(j));
   eq('STAGM2', L.STAGM2, STAGM2);
+  for (let i = 0; i < 6; i++)
+    for (let pt = 0; pt < 3; pt++) eq('SHR', L.SHR(i, pt), SHR(i, pt));
+  eq('UPM', L.UPM, UPM); eq('SHBOOT', L.SHBOOT, SHBOOT);
+  for (let k = 0; k < 4; k++) { eq('SM', L.SM(k), SM(k)); eq('ZM', L.ZM(k), ZM(k)); eq('POSM3', L.POSM3(k), POSM3(k)); }
+  eq('OM', L.OM, OM); eq('I2TM', L.I2TM, I2TM); eq('I2WM', L.I2WM, I2WM);
   eq('machines', L.machines, MACHINES);
   eq('btnMachine', L.btnMachine, LEFTBTN.machine);
   eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
@@ -473,6 +512,7 @@ export function tetrisCircuit(rows = 8): {
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, LEGINV2, WIDM3, WIDM4,
     MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
   // every anchor that shared a machine with relays eventually collided
@@ -1528,6 +1568,99 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${R(STAGM, 'E')}/${R(STAGM2, 'E')}`, `${R(STAGM2, 'F')}/${minusOf(STAGM2)}`);
   w.push(`${R(LEGB(2), 'G')}/${R(LEGB(3), 'G')}`, `${R(LEGB(3), 'G')}/${R(STAGM2, 'H')}`);
   w.push(`${R(STAGM2, 'G')}/${comOf(COLLIDE)}`);
+
+  // ---------- the shape ring (3b-3a): the shape becomes machine state ----
+  // A 6-state one-hot ring stepped by the UP button — the score-ring
+  // pattern verbatim with UPM (the button's mirror) in CLEARPM's role:
+  // masters sample the previous state's slave while the clock is low,
+  // slaves copy on the press. State order matches the page's cycle:
+  // 1x1, 2wide, 2tall, O, S, Z. SHBOOT seeds state 0 at power-on (the
+  // BOOTL idiom, private relay; its pulse feed rides UPM's spare K — a
+  // latch fed from the clock chain would hold every ring clock high
+  // forever, the SCBOOT lesson). The ring SURVIVES resets: the selected
+  // shape persists across locks, exactly like the slides it derives.
+  const shrClkCom = (i: number) => comOf(SHR(i, 0));
+  w.push(`${bmS}.2+/${bmS}.2Y`, `${bmS}.2X/${R(UPM, 'E')}`, `${R(UPM, 'F')}/${minusOf(UPM)}`);
+  w.push(`${plusOf(UPM)}/${R(UPM, 'H')}`, `${R(UPM, 'G')}/${shrClkCom(0)}`);
+  for (let i = 2; i < 6; i += 2) w.push(`${shrClkCom(i - 2)}/${shrClkCom(i)}`);
+  for (let i = 0; i < 6; i++) {
+    const c = SHR(i, 0), a = SHR(i, 1), sl = SHR(i, 2);
+    w.push(`${shrClkCom(i - (i % 2))}/${R(c, 'E')}`, `${R(c, 'F')}/${minusOf(c)}`);
+    w.push(`${comOf(a)}/${R(a, 'E')}`, `${R(a, 'F')}/${minusOf(a)}`);
+    w.push(`${comOf(sl)}/${R(sl, 'E')}`, `${R(sl, 'F')}/${minusOf(sl)}`);
+    w.push(`${plusOf(c)}/${R(c, 'H')}`, `${plusOf(c)}/${R(c, 'L')}`);
+    const prev = SHR((i + 5) % 6, 2);
+    w.push(`${R(c, 'J')}/${R(prev, 'L')}`, `${R(prev, 'K')}/${comOf(a)}`);
+    w.push(`${R(c, 'G')}/${R(a, 'H')}`, `${R(a, 'G')}/${comOf(a)}`); // master holds, clock high
+    w.push(`${R(c, 'K')}/${R(a, 'L')}`, `${R(a, 'K')}/${comOf(sl)}`); // slave := master
+    w.push(`${R(c, 'N')}/${R(sl, 'H')}`, `${R(sl, 'G')}/${comOf(sl)}`); // slave holds, clock low
+  }
+  w.push(`${R(SHBOOT, 'F')}/${minusOf(SHBOOT)}`);
+  w.push(`${plusOf(UPM)}/${R(UPM, 'L')}`, `${R(UPM, 'K')}/${R(SHBOOT, 'E')}`);
+  w.push(`${plusOf(SHBOOT)}/${R(SHBOOT, 'H')}`, `${R(SHBOOT, 'G')}/${R(SHBOOT, 'E')}`);
+  w.push(`${plusOf(SHBOOT)}/${R(SHBOOT, 'L')}`, `${R(SHBOOT, 'N')}/${comOf(SHR(0, 2))}`);
+
+  // state mirrors (the ring slaves' own sets are spent stepping the ring)
+  // and POSM3 pos mirrors for the T fan — all coil-jack chained; POSM2's
+  // second sets cover one pos branch per column, POSM3 covers the rest
+  w.push(`${R(SHR(4, 2), 'E')}/${R(SM(0), 'E')}`);
+  for (let k = 1; k < 4; k++) w.push(`${R(SM(k - 1), 'E')}/${R(SM(k), 'E')}`);
+  w.push(`${R(SHR(5, 2), 'E')}/${R(ZM(0), 'E')}`);
+  for (let k = 1; k < 4; k++) w.push(`${R(ZM(k - 1), 'E')}/${R(ZM(k), 'E')}`);
+  w.push(`${R(SHR(3, 2), 'E')}/${R(OM, 'E')}`);
+  w.push(`${R(SHR(2, 2), 'E')}/${R(I2TM, 'E')}`);
+  w.push(`${R(SHR(1, 2), 'E')}/${R(I2WM, 'E')}`);
+  w.push(`${R(POSM2(0), 'E')}/${R(POSM3(0), 'E')}`);
+  w.push(`${R(POSM2(1), 'E')}/${R(POSM3(1), 'E')}`, `${R(POSM3(1), 'E')}/${R(POSM3(2), 'E')}`);
+  w.push(`${R(POSM2(2), 'E')}/${R(POSM3(3), 'E')}`);
+  for (const m of [SM(0), SM(1), SM(2), SM(3), ZM(0), ZM(1), ZM(2), ZM(3), OM, I2TM, I2WM, POSM3(0), POSM3(1), POSM3(2), POSM3(3)])
+    w.push(`${R(m, 'F')}/${minusOf(m)}`);
+
+  // the derived rails, entering the slide-fed coil nets at their FREE
+  // holes (audited: WIDM.E/WIDM2.E and VMODE.E are full; WIDM3.E,
+  // VMODEM(3).E and STAGM.E each have exactly one): WIDB = 2wide|O|S|Z,
+  // VMODE = 2tall|O|S|Z, STAG = S|Z. Branch outputs chain jack-to-jack
+  // (the LEGB trick) so each coil net takes ONE wire; the one-hot ring
+  // means every inactive branch dead-ends at its open state contact, and
+  // a raised slide's + walking the chain backward dead-ends the same way.
+  w.push(`${plusOf(I2WM)}/${R(I2WM, 'H')}`, `${plusOf(OM)}/${R(OM, 'H')}`);
+  w.push(`${plusOf(SM(2))}/${R(SM(2), 'H')}`, `${plusOf(ZM(2))}/${R(ZM(2), 'H')}`);
+  w.push(`${R(I2WM, 'G')}/${R(OM, 'G')}`, `${R(OM, 'G')}/${R(SM(2), 'G')}`, `${R(SM(2), 'G')}/${R(ZM(2), 'G')}`);
+  w.push(`${R(ZM(2), 'G')}/${R(WIDM3, 'E')}`);
+  w.push(`${plusOf(I2TM)}/${R(I2TM, 'H')}`, `${plusOf(OM)}/${R(OM, 'L')}`);
+  w.push(`${plusOf(SM(2))}/${R(SM(2), 'L')}`, `${plusOf(ZM(2))}/${R(ZM(2), 'L')}`);
+  w.push(`${R(I2TM, 'G')}/${R(OM, 'K')}`, `${R(OM, 'K')}/${R(SM(2), 'K')}`, `${R(SM(2), 'K')}/${R(ZM(2), 'K')}`);
+  w.push(`${R(ZM(2), 'K')}/${R(VMODEM(3), 'E')}`);
+  // (STAGM.E itself is full — slide feed + the STAGM2 chain; the net's
+  // free hole is on STAGM2.E, same coil net)
+  w.push(`${plusOf(SM(3))}/${R(SM(3), 'H')}`, `${plusOf(ZM(3))}/${R(ZM(3), 'H')}`);
+  w.push(`${R(SM(3), 'G')}/${R(ZM(3), 'G')}`, `${R(ZM(3), 'G')}/${R(STAGM2, 'E')}`);
+
+  // the T fan from the ring: T(j) = S&(pos j | pos j+1) | Z&(pos j-1 |
+  // pos j-2) — S's top pair is the bottom shifted LEFT, Z's RIGHT;
+  // invalid-pos terms are omitted (an S forced to pos 0 simply has an
+  // empty top mask and locks its bottom pair; the operator keeps it in
+  // bounds until 3b-3c refuses the UP in contacts). Every branch is a
+  // PRIVATE state-contact x pos-contact series pair into the PIECET coil
+  // net: a shared state rail feeding several coils through per-branch pos
+  // contacts would backfeed through the DEAD rail into sibling coils (the
+  // first multivac counter's trap). Multi-branch columns chain their
+  // outputs; each PIECET(j).E takes one wire at its free hole.
+  // T(0) = S & pos1
+  w.push(`${plusOf(SM(0))}/${R(SM(0), 'H')}`, `${R(SM(0), 'G')}/${R(POSM2(1), 'L')}`, `${R(POSM2(1), 'K')}/${R(PIECET(0), 'E')}`);
+  // T(1) = S & pos1  |  S & pos2  |  Z & pos0
+  w.push(`${plusOf(SM(0))}/${R(SM(0), 'L')}`, `${R(SM(0), 'K')}/${R(POSM3(1), 'H')}`);
+  w.push(`${plusOf(SM(1))}/${R(SM(1), 'H')}`, `${R(SM(1), 'G')}/${R(POSM2(2), 'L')}`);
+  w.push(`${plusOf(ZM(0))}/${R(ZM(0), 'H')}`, `${R(ZM(0), 'G')}/${R(POSM2(0), 'L')}`);
+  w.push(`${R(POSM3(1), 'G')}/${R(POSM2(2), 'K')}`, `${R(POSM2(2), 'K')}/${R(POSM2(0), 'K')}`, `${R(POSM2(0), 'K')}/${R(PIECET(1), 'E')}`);
+  // T(2) = S & pos2  |  Z & pos0  |  Z & pos1
+  w.push(`${plusOf(SM(1))}/${R(SM(1), 'L')}`, `${R(SM(1), 'K')}/${R(POSM3(3), 'H')}`);
+  w.push(`${plusOf(ZM(0))}/${R(ZM(0), 'L')}`, `${R(ZM(0), 'K')}/${R(POSM3(0), 'H')}`);
+  w.push(`${plusOf(ZM(1))}/${R(ZM(1), 'H')}`, `${R(ZM(1), 'G')}/${R(POSM3(1), 'L')}`);
+  w.push(`${R(POSM3(3), 'G')}/${R(POSM3(0), 'G')}`, `${R(POSM3(0), 'G')}/${R(POSM3(1), 'K')}`, `${R(POSM3(1), 'K')}/${R(PIECET(2), 'E')}`);
+  // T(3) = Z & pos1
+  w.push(`${plusOf(ZM(1))}/${R(ZM(1), 'L')}`, `${R(ZM(1), 'K')}/${R(POSM3(2), 'H')}`, `${R(POSM3(2), 'G')}/${R(PIECET(3), 'E')}`);
+
   return { wires: w, rails: dataRails, layout: L, btnMachine };
 }
 
@@ -1540,6 +1673,12 @@ export const TETRIS_IO = {
   wid: WIDSLIDE, // right = piece is 2 wide
   left: LEFTBTN, // momentary: step the position register left
   right: RIGHTBTN, // momentary: step it right (edge presses no-op)
+  up: UPBTN, // momentary: step the shape ring (1x1 -> 2wide -> 2tall -> O -> S -> Z -> wrap)
+  // the shape ring's one-hot slaves (state 0 = 1x1 seeds at power-on)
+  shapeRelay: (i: number) => {
+    const s = SHR(i, 2);
+    return { machine: Math.floor(s / 6), index: s % 6 };
+  },
   // LKS up = the machine owes itself bookkeeping ticks (phase 2 / reset)
   lockedRelay: { machine: Math.floor(LKS / 6), index: LKS % 6 },
   // LANE up = a collapse is in progress: ticks walk the stack down

@@ -66,9 +66,68 @@ scaling.
 
 - 3b-1: PIECE-T bank + phase-2 rerouting, driven by a TOPMASK slide trio
   (operator hardware, like WID) — S/Z/L/J/T lockable by hand, tests for
-  staggered writes; collision unchanged (documented overhang gap).
-- 3b-2: top-only collision term (the machine stops burying overhangs).
-- 3b-3: the shape ring replaces the slides; UP button; rotation = ring
-  steps; legality trees re-gated; the page guard deleted.
+  staggered writes; collision unchanged (documented overhang gap). LANDED.
+- 3b-2: top-only collision term (the machine stops burying overhangs). LANDED.
+- 3b-3: the shape ring replaces the slides. split further (the full rung
+  with transition legality is too big for one landing):
+  - 3b-3a: a 6-STATE one-hot ring (1x1, 2wide, 2tall, O, S, Z — today's
+    page set) stepped by the UP button, score-ring pattern. the ring
+    DERIVES the rails the slides drove: WIDM3/WIDM4 coils re-fed from a
+    wide-states wired-OR (one-hot source, far sides dead-end at open
+    contacts — tie-point-law-clean by construction), VMODEM from the
+    tall-states OR, STAGM/STAGM2/CUT gating from S-or-Z, and the PIECET
+    coils re-fed from ring-state x pos-mirror branches instead of the
+    TOPMASK slides (the T fan becomes computed: T(j) = 2tall*pos(j) or
+    O*(pos j | j-1) or S*(pos j | j+1) or Z*(pos j-1 | j-2)). the WID /
+    VMODE / STAG / TOPMASK slides all retire. the page's UP presses a
+    machine button; applyShape dies. page guards remaining: reshape
+    overlap + stag lateral (both narrowed, both documented).
+  - 3b-3b: legality trees re-gated per T-mask column (LEGINVT column
+    selection from the T fan instead of the bottom mask) — the stag
+    lateral seam dies, false refusals die with it.
+  - 3b-3c: UP-transition legality: entering state s+1 is contact-refused
+    when its footprint at the current pos hits stored cells or the walls
+    (LEGINV-style refusal returns on the ring's sample path; bounds =
+    refuse, not auto-step — operator steps first). the reshape guard
+    dies; the page is a pure operator.
+  - 3b-4: grow the ring to the full 2-row-box family (12 states: +L/J/T
+    x 2 orientations each) — the fans gain 3-wide and offset-single
+    patterns via per-pattern group rails (states sharing a mask pattern
+    share a rail, so branches stay 2 contacts deep).
 
-each increment lands with the usual receipts; MASS at the rung close.
+each increment lands with the usual receipts; MASS at 3b-3c and 3b-4.
+
+## 3b-3a worked plan (paper pass, 2026-08-20)
+
+- COMPATIBILITY-OR, not replacement: the ring's rails wire INTO the same
+  coil jacks the slides feed (WIDM.E, VMODE.E, STAGM.E, PIECET(j).E).
+  each branch dead-ends at an open contact when inactive, so slide+ring
+  coexist tie-point-legally; if an operator raises a slide AND the ring
+  disagrees the masks UNION (real-hardware semantics, documented). the
+  existing slide-driven tests stay green untouched; the page switches to
+  UP presses; the ring seeds at 1x1 = all rails off = today's defaults.
+- the T fan needs ONLY S/Z branches: symmetric tall shapes route phase 2
+  through colFan (STAGM NC side) and never consult PIECET; the 3b-2 term
+  is STAGM2-scoped. dropping the symmetric branches killed SYMT + PIECE
+  mirrors from the budget.
+- S/Z states IMPLY wide bottoms, so the fan gates on POS directly:
+  T(j) = S*(pos j | pos j+1) | Z*(pos j-1 | pos j-2), invalid-pos terms
+  omitted (8 branches, each state-mirror contact x pos-mirror contact,
+  PRIVATE series pairs — a shared state rail feeding multiple coil jacks
+  through per-branch pos contacts backfeeds through dead rails, the
+  counter trap again).
+- PIECE(j).E jacks are FULL (narrow + wide feeds) — that killed the
+  PIECE-mirror factorization; POSM2 set2 (L/K/N) is free for j=0..2 and
+  POSM3 mirrors chain off POSM2.E's spare hole.
+- contact-use ledger: S 7 (4 fan + WIDB + VMODE + STAGM) -> SM x4;
+  Z 7 -> ZM x4; O 2 (WIDB+VMODE) -> OM x1; I2t 1 (VMODE) -> I2TM x1;
+  I2w 1 (WIDB) -> I2WM x1; pos0 x2 / pos1 x4 / pos2 x2 -> POSM3 x4 after
+  POSM2 set2. ring 6x3 + UPM (button mirror: set1 clock chain, set2 K
+  = SHBOOT pulse, the CLEARPM pattern) + SHBOOT (BOOTL idiom, private).
+  TOTAL 35 relays (~6 machines). allocation tail: SHR(i,part)=346+3i+part,
+  UPM=364, SHBOOT=365, SM 366-369, ZM 370-373, OM 374, I2TM 375,
+  I2WM 376, POSM3 377-380 -> MACHINES 65.
+- UP = button 2 on the button machine (buttons 3/4 = LEFT/RIGHT). press+
+  release = one ring step (masters sample low, slaves copy high).
+- the ring survives resets (a latch bank, unlike POS): the selected shape
+  persists across locks, matching today's page.

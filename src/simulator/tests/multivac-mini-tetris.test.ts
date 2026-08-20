@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, SHR, WIDM, STAGM, PIECET } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -1498,6 +1498,118 @@ describe('Multivac: mini-tetris (50 machines)', () => {
     g.m.setSlide(6, 'left', bm);
     setTop(0);
     vmode(false);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // 3b-3a: the SHAPE RING. The shape itself becomes machine state — a
+  // 6-state one-hot ring (1x1, 2wide, 2tall, O, S, Z) stepped by the UP
+  // button (the score-ring pattern; SHBOOT seeds 1x1 at power-on). The
+  // ring DERIVES the mode rails the operator slides drive, wiring into
+  // the SAME coil nets (compatibility-OR), so these tests never touch a
+  // slide: WID/VMODE/STAG and the whole TOPMASK bank follow the ring and
+  // the live position register.
+  it('the shape ring: UP walks six states and derives every mode rail (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const rel = (idx: number) => (g.m.getMachineState(Math.floor(idx / 6)).relays[idx % 6] ? 1 : 0);
+    const shapeAt = () => {
+      const hot: number[] = [];
+      for (let i = 0; i < 6; i++) if (rel(SHR(i, 2))) hot.push(i);
+      expect(hot.length, 'the ring is one-hot').toBe(1);
+      return hot[0];
+    };
+    const rails = () => [rel(WIDM), rel(VMODE), rel(STAGM)];
+    const topBank = () =>
+      rel(PIECET(0)) + 2 * rel(PIECET(1)) + 4 * rel(PIECET(2)) + 8 * rel(PIECET(3));
+    const up = () => g.pressBtn(TETRIS_IO.up);
+
+    // power-on: state 0 (1x1), every rail down, the T bank dark
+    expect(shapeAt()).toBe(0);
+    expect(rails()).toEqual([0, 0, 0]);
+    expect(topBank()).toBe(0);
+
+    up(); // 2 wide
+    expect(shapeAt()).toBe(1);
+    expect(rails(), '2wide: WIDM only').toEqual([1, 0, 0]);
+    up(); // 2 tall
+    expect(shapeAt()).toBe(2);
+    expect(rails(), '2tall: VMODE only').toEqual([0, 1, 0]);
+    expect(topBank(), 'symmetric shapes never feed the T bank').toBe(0);
+    up(); // O
+    expect(shapeAt()).toBe(3);
+    expect(rails(), 'O: wide and tall').toEqual([1, 1, 0]);
+    expect(topBank()).toBe(0);
+
+    up(); // S: the top pair = the bottom pair shifted LEFT, from the LIVE register
+    expect(shapeAt()).toBe(4);
+    expect(rails(), 'S: wide, tall, staggered').toEqual([1, 1, 1]);
+    expect(topBank(), 'S at pos 0 (out of bounds): empty top, omitted term').toBe(0);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt()).toBe(1);
+    expect(topBank(), 'S at pos 1: top pair 0-1').toBe(0b0011);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt()).toBe(2);
+    expect(topBank(), 'S at pos 2: top pair 1-2').toBe(0b0110);
+
+    up(); // Z: shifted RIGHT
+    expect(shapeAt()).toBe(5);
+    expect(rails(), 'Z: wide, tall, staggered').toEqual([1, 1, 1]);
+    expect(topBank(), 'Z at pos 2 (out of bounds): empty top, omitted term').toBe(0);
+    g.pressBtn(TETRIS_IO.left);
+    expect(topBank(), 'Z at pos 1: top pair 2-3').toBe(0b1100);
+    g.pressBtn(TETRIS_IO.left);
+    expect(topBank(), 'Z at pos 0: top pair 1-2').toBe(0b0110);
+
+    up(); // wraps home
+    expect(shapeAt()).toBe(0);
+    expect(rails()).toEqual([0, 0, 0]);
+    expect(topBank()).toBe(0);
+
+    // compatibility: the operator slides still work (union semantics) —
+    // hardware and ring feed the same coil nets
+    g.m.setSlide(TETRIS_IO.wid.slide, 'right', TETRIS_IO.wid.machine);
+    expect(rel(WIDM), 'a raised WID slide ORs with the ring').toBe(1);
+    g.m.setSlide(TETRIS_IO.wid.slide, 'left', TETRIS_IO.wid.machine);
+    expect(rel(WIDM)).toBe(0);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // ...and the ring PLAYS: a Z then an S lock their staggered rows with
+  // NO slide touched — shape = UP presses, column = LEFT/RIGHT, the T
+  // bank re-computes from the register on every step.
+  it('the ring plays: a Z and an S lock with no slides touched (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const up = () => g.pressBtn(TETRIS_IO.up);
+    const model = Array(8).fill(0);
+    for (let k = 0; k < 5; k++) up(); // 1x1 -> ... -> Z
+    g.pressStart();
+    // Z at the home column: bottom 0-1, top 1-2
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick(); // merged landing + lock at the floor
+    model[7] = 0b0011;
+    expect(g.field(), 'Z: the bottom pair').toEqual(model);
+    g.tick(); // phase 2
+    model[6] = 0b0110;
+    expect(g.field(), 'Z: the top pair staggered right').toEqual(model);
+    g.tick(); // reset (re-homes the register)
+    expect(g.tokenAt()).toEqual([]);
+
+    // the S next: wrap the ring around (5 more UPs), walk to pos 2 —
+    // bottom 2-3, top 1-2; the bottom pair senses the Z's top at (6,2)
+    for (let k = 0; k < 5; k++) up();
+    let guard = 4;
+    while (g.posAt() < 2 && guard-- > 0) g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt()).toBe(2);
+    g.tick(); // spawn
+    for (let r = 1; r <= 5; r++) g.tick(); // rests at 5 on the stored (6,2)
+    model[5] = 0b1100;
+    expect(g.field(), 'S: the bottom pair rested on the Z').toEqual(model);
+    g.tick(); // phase 2
+    model[4] = 0b0110;
+    expect(g.field(), 'S: the top pair staggered left').toEqual(model);
+    g.tick(); // reset
+    expect(g.tokenAt()).toEqual([]);
     expect(g.m.getState().alerts).toEqual([]);
   });
 
