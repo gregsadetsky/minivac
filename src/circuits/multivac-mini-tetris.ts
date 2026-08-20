@@ -476,6 +476,7 @@ export interface TetrisLayout {
   UPPOS: number; UPPOS_CAP: number;
   UPREAD: number; UPREAD_CAP: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
+  btnMachine2: number; // topmask overflow slides (cols > 4; == btnMachine at 4)
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
 }
@@ -666,7 +667,10 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     UPPOS: upPosBase, UPPOS_CAP: upC.posTotal,
     UPREAD: upReadBase, UPREAD_CAP: upC.readTotal,
     btnMachine: Math.ceil(n / 6),
-    machines: Math.ceil(n / 6) + 1,
+    // cols > 4: the topmask slides overflow the button machine's sections
+    // (5 = WID, 6 = STAG are spoken for) onto a second slide machine
+    btnMachine2: cols > 4 ? Math.ceil(n / 6) + 1 : Math.ceil(n / 6),
+    machines: Math.ceil(n / 6) + (cols > 4 ? 2 : 1),
     relays: n - (rows - 3),
   };
 }
@@ -2240,7 +2244,12 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(CUTB1, 'F')}/${minusOf(CUTB1)}`, `${R(CUTB2, 'F')}/${minusOf(CUTB2)}`);
   for (let j = 0; j < cols; j++) {
     const pt = PIECET(j);
-    w.push(`${bmS}.${j + 1}+/${bmS}.${j + 1}S`, `${bmS}.${j + 1}T/${R(pt, 'E')}`, `${R(pt, 'F')}/${minusOf(pt)}`);
+    // topmask slides: sections 1-4 on the button machine; columns 4+ on
+    // the overflow machine (sections 5/6 carry WID and STAG — a slide T
+    // is a permanent tie, and the 6-col bring-up found column 4's mask
+    // tied INTO the WIDM coils through exactly this)
+    const [sm2, sec] = j < 4 ? [bmS, j + 1] : [`m${L.btnMachine2}`, j - 3];
+    w.push(`${sm2}.${sec}+/${sm2}.${sec}S`, `${sm2}.${sec}T/${R(pt, 'E')}`, `${R(pt, 'F')}/${minusOf(pt)}`);
     const cutc = j < 4 ? [CUTC5, CUTC6][Math.floor(j / 2)] : CUTX(4, Math.floor((j - 4) / 2));
     const [cArm, cNo] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
     w.push(`${colFanT}/${R(cutc, cArm)}`, `${R(cutc, cNo)}/${R(pt, 'H')}`);
