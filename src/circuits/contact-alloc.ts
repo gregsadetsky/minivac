@@ -40,7 +40,10 @@ export class MirrorBank {
   private minted = 0; // mirrors whose coil wires exist
   private setsSpent = 0;
   private readonly kinds: SetKind[] = [];
-  constructor(private readonly o: MirrorBankOpts) {}
+  private readonly o: MirrorBankOpts;
+  constructor(o: MirrorBankOpts) {
+    this.o = o;
+  }
 
   /** next unspent contact set, minting a new mirror when both sets of
    *  every minted mirror are gone. records the kind for the ledger. */
