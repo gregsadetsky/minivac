@@ -54,6 +54,41 @@ increment decision: parameterize fully, bump the page 4 -> 6 (5 feels
 cramped for the staggered family; 10 is the endpoint once perf at 6 is
 measured).
 
+## phase C framework (from reading the D-tap trees, 14:30Z)
+
+step legality for a piece at pos p stepping to q = p+-1, token row r,
+geometry (bOff, bW, tOff, tW):
+- B(x) = {x+bOff .. x+bOff+bW-1} clipped to [0, cols); T(x) likewise
+  with tOff/tW at row r-1.
+- stored content can never coexist at the piece's OWN cells (gravity +
+  entry checks), so checking T(q) whole equals checking the delta —
+  the hand-laid trees mix both styles and carry some provably-redundant
+  hops ("belt and braces", wired historically).
+- bounds: q in [minPos, maxPos] from the geometry formulas; the trees
+  refuse via state-mirror contacts where q is out of range.
+- the current 4-col instantiation: shared bottom check LEGINV(entering
+  col), VMODEM tall fork -> LEGINVT, WIDM3/4 wide fork -> LEGINV2(c+1),
+  then per-state gated hops in series (LTS/LTZ/LTJ/LTT/LTB3/LTOT/LTOB/
+  T2B), each dead-mode NC passing through. refusals return via retNode
+  taps into the current master's coil.
+
+IMPORTANT GATE CHANGE for C: a geometry-driven tree emitter emits the
+MINIMAL correct checks, so the 4-col netlist will legitimately differ
+from the hand-laid one (redundant hops dropped, tap orders shift).
+phase C's gate is therefore NOT byte identity — it is the full
+behavioral bar: whole fast file + check + playwright at 4, the dense
+8-row scenario + sweep batch, all green BEFORE the width ever changes;
+then the same bar again at 6. (A+B keep their byte-identity receipt.)
+
+## per-state entering sets (derive the emitter from these)
+
+with SHAPES geometry (label, bOff, bW, tOff, tW), stepping RIGHT p->q=p+1
+enters bottom {q+bOff+bW-1} and top {q+tOff+tW-1} (tW>0); LEFT p->q=p-1
+enters bottom {q+bOff} and top {q+tOff}. checks clip out of range.
+reshape (ring step s1->s2 at pos p): check B2(p)\B1(p) and T2(p)\T1(p)
+plus the bound clamp — exactly what the UP transition network wires
+today as one-hot pos fans + series delta hops.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
