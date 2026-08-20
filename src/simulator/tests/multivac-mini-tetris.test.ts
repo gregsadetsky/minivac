@@ -2104,6 +2104,46 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
   // transition solve BUZZES (a real relay oscillator buzzes; chatter
   // pins de-energized and the game machinery rides through it, the
   // device-verified class), leaving one clean tick-LOW step per cycle.
+  // the DOUBLE clear (live-game bug, 2026-08-20): a vertical lock writes
+  // TWO rows; when both complete, the machine must clear both and score
+  // twice. the sensing is rail-borne and the clear is token-selected, so
+  // the top row needs its own latch (sensed in the phase-2 waves) and
+  // its clear must run FIRST (clearing bottom-first compacts the still-
+  // full top row down one and the second clear would miss it). without
+  // this, the leftover full row is PERMANENT: nothing can ever lock
+  // inside a full row, so it never becomes the token row again.
+  // marked it.fails until the CLEARP2 rung lands: the failure IS the bug
+  // (this flips to a plain it() with the fix — vitest then rejects the
+  // .fails marker the moment the machine starts passing)
+  it.fails('the double clear: one lock completes both its rows (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const relayOn = (n: number) => (g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0);
+    const scoreAt = () => {
+      for (let i = 0; i < 10; i++) if (relayOn(SCR(i, 2))) return i;
+      return -1;
+    };
+    // rows 6 and 7 hold cols 2-3: a 2x2 square at cols 0-1 completes BOTH
+    g.operatorWrite(7, 0b1100);
+    g.operatorWrite(6, 0b1100);
+    for (let k = 0; k < 3; k++) g.pressBtn(TETRIS_IO.up); // 1x1 -> ... -> 2x2
+    g.pressStart();
+    for (let t = 0; t < 10 && g.tokenAt().length === 0; t++) g.tick();
+    // fall to the merged land+lock at rows 6+7, then the owed bookkeeping
+    for (let t = 0; t < 40; t++) {
+      g.tick();
+      if (
+        g.tokenAt().length === 0 &&
+        !g.m.getMachineState(TETRIS_IO.lockedRelay.machine).relays[TETRIS_IO.lockedRelay.index] &&
+        !g.m.getMachineState(TETRIS_IO.collapseRelay.machine).relays[TETRIS_IO.collapseRelay.index]
+      )
+        break;
+    }
+    expect(g.row(7), 'the bottom row cleared').toBe(0);
+    expect(g.row(6), 'the top row cleared too — no permanent junk').toBe(0);
+    expect(scoreAt(), 'both clears scored').toBe(2);
+  });
+
   it('the machine ticks itself: capacitor gravity (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();

@@ -473,11 +473,11 @@ export interface TetrisLayout {
 export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   if (rows < 4 || rows % 2 !== 0) throw new Error('rows must be even and >= 4');
   // the second parameterization axis (see _notes/wider-well.md). the
-  // mechanical loops below already flow from this value; the column-CLASS
-  // sites (POSM4/5/6 maps, per-state bound contacts, the D-tap tree
-  // shapes, mirror/cut/rail COUNTS) are still hand-laid for 4 — the fence
-  // comes down subsystem by subsystem as each class map is derived.
-  if (cols !== 4) throw new Error('cols !== 4 needs the class derivations (wider-well phase C)');
+  // mechanical loops flow from this value and the three emitters (step
+  // trees, fans, UP transitions) derive every column-class site from
+  // the SHAPES geometry — the fence lifted 2026-08-20 after all three
+  // certified behaviorally at 4 (full file green each).
+  if (cols < 4) throw new Error('cols must be >= 4');
   let n = 0;
   const take = (k: number) => {
     const a = n;
@@ -774,11 +774,10 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
-    MMIR, POSM4, LEGB2, UTR,
-    SHR2, MMIR2, POSM5, UTR2, TRP, TRPM, L1M, J1M, T1M, WID3M,
+    MMIR,
+    SHR2, MMIR2, TRP, TRPM, L1M, J1M, T1M, WID3M,
     ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2,
     SHR3, MMIR3, TT, TTM, BCUT, BCUTM, L2M, J2M, T2M,
-    UTR3, LEGB3, POSM6,
     TOSC, TDRV,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
