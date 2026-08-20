@@ -367,6 +367,27 @@ overhang fans (3b-4c section), + their pos-mirror class maps.
 the UP-TRANSITION emitter (the other fence-holder) comes after; its
 delta-check structure reuses the same pos banks.
 
+## the UP-transition emitter, spec (16:55Z — surveyed 2038-2110+)
+
+structure per transition into-i: MMIR(i) contact (root chain off UPM)
+-> a one-hot POS fan (pos mirrors chained) -> per-pos branch = SERIES
+delta reads on the occupancy rails -> join -> the clock com. a missing
+branch IS the bound refusal (nothing conducts; the ring holds). the
+reads are PLAIN rail copies (LEGB/UTR-class, coil parallel to the
+rail) — NO union gates needed: the one-hot pos fan already scopes each
+branch to exactly one (state-pair, pos).
+EMITTER: reshapeEntering(s1, s2, p) = B(s2,p)\B(s1,p) and T(s2,p)\
+T(s1,p) from the geometry (clip at the well edges); emit a branch for
+every p where both footprints fit; resources = a per-pos mirror bank
+(SHARED with the fan emitter) + plain-read pools per rail column +
+the join chain into the clock com. the wrap (11 -> 0) is just another
+pair. replaces: MMIR/POSM4/POSM5/POSM6 class maps, LEGB2/UTR/UTR2/
+UTR3 read banks, and the three per-era transition blocks.
+
+ORDER for the next stretches: fan emitter first (its offset rails are
+the step-tree unions' siblings), then the UP emitter (reuses the pos
+banks), then the fence lifts: cols=6 tests + page bump + receipts.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
