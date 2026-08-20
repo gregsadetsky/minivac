@@ -5,7 +5,7 @@
  * falling piece reads the token ring's slaves. Everything the game decides
  * (falling, landing, stacking, line clears, the two-row vertical write,
  * the row collapse that walks the stack down after a clear)
- * happens inside the 218-relay circuit; this page only flips the tick
+ * happens inside the 220-relay circuit; this page only flips the tick
  * slide, the column and shape slides, and the START button — exactly what
  * a human at 38 real Minivacs would do. After a lock the machine owes
  * itself bookkeeping ticks (the vertical phase-2 write, then the reset);
@@ -37,7 +37,7 @@ root.innerHTML = `
   <div style="text-align:center;padding:24px">
     <h1 style="font-size:16px;font-weight:600;letter-spacing:.06em;color:#e8e2d0;margin:0 0 4px">
       multivac tetris</h1>
-    <div style="color:#7a828c;margin-bottom:18px">218 relays / ${MACHINES} minivacs — pure wiring</div>
+    <div style="color:#7a828c;margin-bottom:18px">220 relays / ${MACHINES} minivacs — pure wiring</div>
     <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center;margin-bottom:6px"></div>
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>

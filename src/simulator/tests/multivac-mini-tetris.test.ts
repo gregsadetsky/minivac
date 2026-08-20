@@ -1,7 +1,7 @@
 /**
  * Multivac roadmap rungs 7+9+9b+10: MINI-TETRIS. 4-wide x 8-tall field,
  * gravity + stacking + line clear WITH row collapse. Pure wiring — every
- * game decision is made by relay contacts. 218 relays across 38 machines
+ * game decision is made by relay contacts. 220 relays across 38 machines
  * (the width is the
  * price of tie-point-safe private contacts — see the notes below). The
  * piece is whatever COLUMN MASK the slides raise — singles, dominoes,
@@ -75,19 +75,28 @@
  * REVERSE; stage t = "the hole is at row t"). From then until the chain
  * drains off stage 1, LANE (a branch slave between LKS and COLLIDE — any
  * deeper and collapse ticks would clock the ring and spawn mid-collapse)
- * owns the ticks, and the TGM/TGS toggle alternates them: ALPHA fires the
- * source row's gates+breakers (a self-press: its content rides the rails
- * and relatches itself) plus the hole row's GATES ONLY — an exact copy into
- * emptiness, with collapseA (CGA) and the second-hop breaker rail (CGB2)
- * landing in the SAME wave (a depth-2 hold-break would kill the source one
- * wave before its gates close). colFan never fires, so the mask cannot
- * inject. BETA fires the source's breakers alone (the clear shape — the row
- * just copied down drops out) while TGS.G steps the chain. Two ticks per
- * row; the armed SPAWN waits (the ring clock stays dark, so SPAWNCLR never
+ * owns the ticks, and a two-bit phase ring (TGM/TGS, TG2M/TG2S) deals them
+ * out in THREES: ALPHA fires the source row's and the hole row's GATES
+ * ONLY — the source's content leaks onto the rails backward through its
+ * own closed gates (contacts are bidirectional) and the hole latches an
+ * exact copy; no holds break, nothing can strand. BETA fires the source's
+ * breakers alone (the clear shape — the row just copied down drops out).
+ * GAMMA steps the chain with every rail dark: stepping during a hot-rail
+ * tick fired the freshly hot stage's routing mid-tick and killed the row
+ * above before its copy (a per-tick trace caught it). Three ticks per row;
+ * the armed SPAWN waits (the ring clock stays dark, so SPAWNCLR never
  * consumes it) and fires on the first tick after the lane releases. Rows
  * 1-6 are both sources and destinations and their gate-trigger nodes ran
  * out of holes: they extend through JUNCTION COMS (spare sections' com
- * jacks as 4-hole junction boxes).
+ * jacks as 4-hole junction boxes). The phase masters' between-tick
+ * self-holds keep the decode nodes (and the held gates) alive through the
+ * inter-tick gaps — idempotent re-latches — which is why the CUTC bank
+ * cuts BOTH rail-to-rail bridges (the piece gates' colFan tie and the
+ * collision taps' collideNode tie) for the WHOLE collapse: the mask is
+ * just slides, may change mid-collapse, and two raised columns would
+ * otherwise cross-write the moving rows (both bridges were caught live —
+ * one by the acceptance probe's own setup, one by the instrumented random
+ * run).
  *
  * THE LINE SENSOR'S FALSE WINDOW (found by the vertical rung's tests): for
  * a press's first waves — before PRESSCUT's cut lands — the collision
@@ -111,7 +120,7 @@
  * reset tick, then the next piece enters — a full-height drop is spawn +
  * 7 falls + reset = 9 ticks.
  *
- * Sparse-pinned: at 28 machines a cktsim tick costs tens of seconds, so the
+ * Sparse-pinned: at 38 machines a cktsim tick costs tens of seconds, so the
  * dense-oracle equivalence rides on the per-rung tests below this one (all
  * dense-validated) plus the 5000-random-circuit sweep. Set MINIVAC_MASS=1
  * to run the short scenario under cktsim too.
@@ -499,6 +508,11 @@ describe('Multivac: mini-tetris (38 machines)', () => {
       }
       g.tick();
       ticks++;
+      if (env.MINIVAC_TETRIS_DEBUG === '1') {
+        console.log(
+          `tick ${ticks} mask=${mask.toString(2)} tok=${token} clp=${collapseLeft} p2=${phase2Pending} rst=${resetPending} model=${model.join(',')} field=${g.field().join(',')}`
+        );
+      }
       expect(g.field(), `tick ${ticks} field (mask ${mask.toString(2)})`).toEqual(model);
       expect(g.tokenAt(), `tick ${ticks} token`).toEqual(token >= 0 ? [token] : []);
     }
@@ -759,6 +773,12 @@ describe('Multivac: mini-tetris (38 machines)', () => {
     // col-0 bit would leak into col 3 (row 7 = 1001 instead of 0001);
     // the CUTC cut opens the piece arms off the colFan while the lane owns
     // the ticks.
+    // park the mask first: operator writes with 2+ mask columns raised
+    // would bridge the driven rails through the colFan node (the same tie
+    // CUTC cuts during a collapse — but CUTC is rightly idle here). This
+    // test's first draft left the split mask up and corrupted its own
+    // setup — the documented operator discipline, demonstrated by accident.
+    g.setMask(0);
     g.operatorWrite(7, 0b0101);
     model[7] |= 0b0101; // -> 0111, col 3 open
     g.operatorWrite(6, 0b0001);

@@ -1,6 +1,6 @@
 /**
  * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b + 10): 4x8 field,
- * gravity + stacking + line clear + row collapse in pure relay wiring — 218 relays across
+ * gravity + stacking + line clear + row collapse in pure relay wiring — 220 relays across
  * 38 machines. A piece is any COLUMN MASK the slides raise (1 or 2 wide),
  * and with the VMODE slide up it is two cells TALL: the lock press writes
  * the token row as ever, then a phase-2 tick writes the row above through
@@ -90,11 +90,15 @@ export const ELEVW1 = (t: number) => 196 + 2 * t; // trigger-routing mirrors (19
 export const ELEVW2 = (t: number) => 197 + 2 * t; // (199..211 odd)
 export const CGA = 212, CGB = 213; // collapse rail feeds (alpha rail / both-phase rail)
 export const CGB2 = 214; // second-hop breaker rail: aligns the source hold-break with the gate wave
-export const CUTC1 = 215, CUTC2 = 216; // cut the piece arms off colFan during collapse ticks
+export const CUTC1 = 215, CUTC2 = 216; // cut the piece arms off colFan during a collapse
+export const CUTC3 = 224, CUTC4 = 225; // and the piece taps off collideNode: with 2+ mask
+// columns the collision fan is a SECOND rail-to-rail bridge (rail -> K ->
+// collideNode -> K' -> rail'), and the phase decode's gap-held gates would
+// latch a bridged bit (caught by the instrumented random run at tick 31)
 export const JUNC = (k: number) => 216 + k; // spare-section 4-hole coms as junction boxes
 // (JUNC(0) shares m36.1 with CUTC2 — a section's com jack is electrically
 // separate from its relay, so the junction coexists with the coil)
-export const MACHINES = 38; // relays through m37.2; m36's coms serve as the junctions
+export const MACHINES = 38; // relays through m37.4; m36's coms serve as the junctions
 
 export function tetrisCircuit(): {
   wires: string[];
@@ -370,10 +374,12 @@ export function tetrisCircuit(): {
     const sec = `m${Math.floor(p / 6)}.${(p % 6) + 1}`;
     const cutc = j < 2 ? CUTC1 : CUTC2;
     const [cArm, cNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
+    const cutk = j < 2 ? CUTC3 : CUTC4;
     w.push(`${sec}+/${sec}S`, `${sec}T/${R(p, 'E')}`, `${R(p, 'F')}/${minusOf(p)}`);
     w.push(`${colFan}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
     w.push(`${R(p, 'G')}/${tapRail(j)}`);
-    w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${collideNode}`);
+    w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${R(cutk, cArm)}`);
+    w.push(`${R(cutk, cNc)}/${collideNode}`);
   }
 
   // LINE relays on the rails; their series chain latches CLEARP when a lock
@@ -673,6 +679,8 @@ export function tetrisCircuit(): {
   // same content), so the bridge must stay cut through the gaps too.
   w.push(`${tap(laneNode, lnUse)}/${R(CUTC1, 'E')}`, `${R(CUTC1, 'F')}/${minusOf(CUTC1)}`);
   w.push(`${tap(laneNode, lnUse)}/${R(CUTC2, 'E')}`, `${R(CUTC2, 'F')}/${minusOf(CUTC2)}`);
+  w.push(`${tap(laneNode, lnUse)}/${R(CUTC3, 'E')}`, `${R(CUTC3, 'F')}/${minusOf(CUTC3)}`);
+  w.push(`${tap(laneNode, lnUse)}/${R(CUTC4, 'E')}`, `${R(CUTC4, 'F')}/${minusOf(CUTC4)}`);
   for (let t = 1; t <= 7; t++) {
     w.push(`${R(ELEVW1(t), 'E')}/${R(ELEVW2(t), 'E')}`, `${R(ELEVW2(t), 'F')}/${minusOf(ELEVW2(t))}`);
     // source gates: comA of row t-1 (row 0 has a direct spare hole; rows
