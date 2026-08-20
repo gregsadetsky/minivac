@@ -1,8 +1,11 @@
 /**
- * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b + 10): 4x8 field,
- * gravity + stacking + line clear + row collapse in pure relay wiring — 220 relays across
- * 38 machines. A piece is any COLUMN MASK the slides raise (1 or 2 wide),
- * and with the VMODE slide up it is two cells TALL: the lock press writes
+ * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b + 10 + the
+ * piece register): 4x8 field, gravity + stacking + line clear + row
+ * collapse in pure relay wiring — 245 relays across 42 machines. The
+ * piece's COLUMN is machine state: a one-hot relay ring stepped by
+ * momentary LEFT/RIGHT buttons (sample-on-press, commit-on-release; edges
+ * self-loop; every reset re-homes it), 1 or 2 wide via the WID slide, and
+ * with the VMODE slide up it is two cells TALL: the lock press writes
  * the token row as ever, then a phase-2 tick writes the row above through
  * the TOPW mirror bank before the (now one-tick-late) reset. This module is
  * the single source of truth for the netlist: the test
@@ -98,7 +101,33 @@ export const CUTC3 = 224, CUTC4 = 225; // and the piece taps off collideNode: wi
 export const JUNC = (k: number) => 216 + k; // spare-section 4-hole coms as junction boxes
 // (JUNC(0) shares m36.1 with CUTC2 — a section's com jack is electrically
 // separate from its relay, so the junction coexists with the coil)
-export const MACHINES = 38; // relays through m37.4; m36's coms serve as the junctions
+// ---- the piece register, increment 1 (roadmap piece rung) ----
+// piece position is MACHINE state: a bidirectional one-hot POS ring stepped
+// by momentary LEFT/RIGHT buttons — sample-on-press (the masters latch the
+// direction-gated neighbor), commit-on-release (the slaves copy, LKS-style
+// against ANYBM). Edge presses self-loop (the master samples its own slave)
+// so the one-hot can never walk off the ring. Every spawn resets POS to the
+// home column (slave 0) via POSRST + SPAWNCLR's spare set — correct tetris
+// AND the seeding story. The PIECE column relays re-feed from the register:
+// slave j's tap, or WIDM AND slave j-1 (the wide edge). Width itself is the
+// WID slide; legality gating (lateral collision) is the next increment.
+export const POSA = (j: number) => 226 + j; // step masters (226..229)
+export const POSS = (j: number) => 230 + j; // position slaves, one-hot (230..233)
+export const POSM = (j: number) => 234 + j; // slave mirrors: left/right D taps (234..237)
+export const LEFTM = 238, RIGHTM = 239; // button-line mirrors (direction gates)
+export const ANYBM = 240; // either button, depth 1: feeds the delay stage
+export const ANYBM2 = 241; // depth 2 echo: master hold, + TWIN's window detector
+export const WIDM = 242, WIDM2 = 243; // wide-mode mirrors (WID slide) for the edge feeds
+export const POSRST = (x: number) => 244 + x; // 2 relays: the RESET tick re-homes POS
+export const TWIN = 246; // the release window (ANYBM down AND ANYBM2 still up): transfer NOW
+export const BOOTL = 247; // latches on the first press; its NC is the power-on home seed
+export const POSM2 = (j: number) => 248 + j; // 3 more slave mirrors: the wide taps' pos gates
+// (re-homing on the spawn tick would flip the register mid-tick under a
+// merged spawn+lock; the reset tick is stable long before any spawn)
+export const LEFTBTN = { button: 3, machine: 40 }; // m40.3 button
+export const RIGHTBTN = { button: 4, machine: 40 }; // m40.4 button
+export const WIDSLIDE = { slide: 5, machine: 40 }; // m40.5 slide -> WIDM coils
+export const MACHINES = 42; // relays through m41.5; m36's coms serve as the junctions
 
 export function tetrisCircuit(): {
   wires: string[];
@@ -371,11 +400,12 @@ export function tetrisCircuit(): {
   // between the lock and the collapse, so this is reachable in play).
   for (let j = 0; j < 4; j++) {
     const p = PIECE(j);
-    const sec = `m${Math.floor(p / 6)}.${(p % 6) + 1}`;
     const cutc = j < 2 ? CUTC1 : CUTC2;
     const [cArm, cNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
     const cutk = j < 2 ? CUTC3 : CUTC4;
-    w.push(`${sec}+/${sec}S`, `${sec}T/${R(p, 'E')}`, `${R(p, 'F')}/${minusOf(p)}`);
+    // coils fed from the POS register (see the piece-register section) —
+    // the per-column slides are gone; position is machine state now
+    w.push(`${R(p, 'F')}/${minusOf(p)}`);
     w.push(`${colFan}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
     w.push(`${R(p, 'G')}/${tapRail(j)}`);
     w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${R(cutk, cArm)}`);
@@ -697,6 +727,134 @@ export function tetrisCircuit(): {
     w.push(`${R(W(x, 1), 'E')}/${comOf(JUNC(x - 1))}`);
   }
 
+  // ---------- the piece register, increment 1: the POS ring ----------
+  // Sample-on-press, commit-on-RELEASE. During the press only the target
+  // MASTER latches (direction chain -> the one live POSM tap -> master com;
+  // the hold chain rides ANYBM2.G); the slaves are UNTOUCHED. The transfer
+  // (break the idle holds, conduct master -> new slave) runs inside a
+  // one-wave RELEASE WINDOW owned by TWIN, whose coil reads "ANYBM already
+  // dropped AND ANYBM2 still up" through ANYBM's NC hung off the hold
+  // chain's tail. The first draft transferred DURING the press (ANYBM2
+  // owned both jobs) and the trace test caught the ring going [1,1,1,1] on
+  // one held press: the moment a second slave rose, a second POSM's tap
+  // contacts closed, and the master coms BRIDGED each other through the
+  // idle direction chain (a dead chain still ties — the tie-point law), so
+  // every master latched and every slave got transfer-fed. Slaves frozen
+  // mid-press = at most one POSM up while the taps are armed = nothing to
+  // bridge. In the window itself the direction chains are already dark
+  // (buttons dropped two waves earlier), so the new POSM rising commits
+  // nothing. All the fan chains are arm-daisy-chains with at most ONE live
+  // consumer (the register is one-hot), the legal fan shape.
+  // one coil per button X-line, NOTHING shared: the first draft wired both
+  // X-lines into ANYBM's coil jack and the trace caught LEFTM firing on a
+  // RIGHT press — the coil jack is a tie, so one button's + walked through
+  // it into the other button's mirror (the far side of the "wired-OR" was
+  // never an open button, it was the other coil). ANYBM's either-button OR
+  // is a CONTACT or instead: each mirror's spare K from its own +, the two
+  // K outputs tied at ANYBM.E, each far side dead-ending at an open
+  // contact when its button is up. Costs one wave (ANYBM is depth 2 now).
+  w.push('m40.3+/m40.3Y', `m40.3X/${R(LEFTM, 'E')}`);
+  w.push('m40.4+/m40.4Y', `m40.4X/${R(RIGHTM, 'E')}`);
+  w.push(`${R(LEFTM, 'F')}/${minusOf(LEFTM)}`, `${R(RIGHTM, 'F')}/${minusOf(RIGHTM)}`, `${R(ANYBM, 'F')}/${minusOf(ANYBM)}`);
+  w.push(`${plusOf(LEFTM)}/${R(LEFTM, 'L')}`, `${R(LEFTM, 'K')}/${R(ANYBM, 'E')}`);
+  w.push(`${plusOf(RIGHTM)}/${R(RIGHTM, 'L')}`, `${R(RIGHTM, 'K')}/${R(ANYBM, 'E')}`);
+  w.push(`${R(ANYBM, 'L')}/${plusOf(ANYBM)}`, `${R(ANYBM, 'K')}/${R(ANYBM2, 'E')}`, `${R(ANYBM2, 'F')}/${minusOf(ANYBM2)}`);
+  // direction chains: one gate contact, POSM arms daisy-chained behind it
+  w.push(`${plusOf(LEFTM)}/${R(LEFTM, 'H')}`, `${R(LEFTM, 'G')}/${R(POSM(0), 'H')}`);
+  w.push(`${plusOf(RIGHTM)}/${R(RIGHTM, 'H')}`, `${R(RIGHTM, 'G')}/${R(POSM(0), 'L')}`);
+  for (let j = 1; j < 4; j++) {
+    w.push(`${R(POSM(j - 1), 'H')}/${R(POSM(j), 'H')}`);
+    w.push(`${R(POSM(j - 1), 'L')}/${R(POSM(j), 'L')}`);
+  }
+  // D routing: left steps down, right steps up; the edges self-loop so an
+  // edge press is a no-op instead of walking the one-hot off the ring
+  w.push(`${R(POSM(0), 'G')}/${comOf(POSA(0))}`); // left self-loop at 0
+  for (let j = 1; j < 4; j++) w.push(`${R(POSM(j), 'G')}/${comOf(POSA(j - 1))}`);
+  for (let j = 0; j < 3; j++) w.push(`${R(POSM(j), 'K')}/${comOf(POSA(j + 1))}`);
+  w.push(`${R(POSM(3), 'K')}/${comOf(POSA(3))}`); // right self-loop at 3
+  // masters: hold from mid-press through the release window (ANYBM2.G
+  // chain — ANYBM2 outlives the buttons by one wave), transfer out through
+  // TWIN.G's chain into the new slave's com, in the window only
+  w.push(`${plusOf(ANYBM2)}/${R(ANYBM2, 'H')}`, `${R(ANYBM2, 'G')}/${R(POSA(0), 'L')}`);
+  w.push(`${plusOf(TWIN)}/${R(TWIN, 'H')}`, `${R(TWIN, 'G')}/${R(POSA(0), 'H')}`);
+  for (let j = 1; j < 4; j++) {
+    w.push(`${R(POSA(j - 1), 'L')}/${R(POSA(j), 'L')}`);
+    w.push(`${R(POSA(j - 1), 'H')}/${R(POSA(j), 'H')}`);
+  }
+  for (let j = 0; j < 4; j++) {
+    w.push(`${comOf(POSA(j))}/${R(POSA(j), 'E')}`, `${R(POSA(j), 'F')}/${minusOf(POSA(j))}`);
+    w.push(`${R(POSA(j), 'K')}/${comOf(POSA(j))}`); // hold: L(chain) -> K -> own com
+    w.push(`${R(POSA(j), 'G')}/${comOf(POSS(j))}`); // transfer: H(chain) -> G -> slave com
+  }
+  // TWIN's coil hangs off the hold chain's tail through ANYBM's NC: hot
+  // exactly when the chain is up (ANYBM2) but the button wave is already
+  // down (ANYBM) — the one-wave release window. It drops WITH the masters
+  // (both coils die the wave ANYBM2's contacts open), so the idle holds
+  // re-close on the same wave the transfer feed dies: the new slave is
+  // caught without a gap.
+  w.push(`${R(POSA(3), 'L')}/${R(ANYBM, 'H')}`, `${R(ANYBM, 'J')}/${R(TWIN, 'E')}`, `${R(TWIN, 'F')}/${minusOf(TWIN)}`);
+  // slaves: idle hold through TWIN's NC (closed except in the window) and
+  // the POSRST spawn-reset breaks; set2 feeds the PIECE column coils (the
+  // slides are gone)
+  w.push(`${plusOf(TWIN)}/${R(TWIN, 'L')}`, `${R(TWIN, 'N')}/${R(POSRST(0), 'H')}`);
+  w.push(`${R(POSRST(0), 'H')}/${R(POSRST(0), 'L')}`, `${R(POSRST(0), 'L')}/${R(POSRST(1), 'H')}`, `${R(POSRST(1), 'H')}/${R(POSRST(1), 'L')}`);
+  const rstNc: Array<[number, string]> = [
+    [POSRST(0), 'J'], [POSRST(0), 'N'], [POSRST(1), 'J'], [POSRST(1), 'N'],
+  ];
+  for (let j = 0; j < 4; j++) {
+    const [rr, nc] = rstNc[j];
+    w.push(`${R(rr, nc)}/${R(POSS(j), 'H')}`, `${R(POSS(j), 'G')}/${comOf(POSS(j))}`);
+    w.push(`${comOf(POSS(j))}/${R(POSS(j), 'E')}`, `${R(POSS(j), 'F')}/${minusOf(POSS(j))}`);
+    w.push(`${comOf(POSS(j))}/${R(POSM(j), 'E')}`, `${R(POSM(j), 'F')}/${minusOf(POSM(j))}`);
+    w.push(`${plusOf(POSS(j))}/${R(POSS(j), 'L')}`, `${R(POSS(j), 'K')}/${R(PIECE(j), 'E')}`);
+  }
+  // re-home on the RESET tick (piece death), NOT the spawn tick: a
+  // spawn-tick reset would flip the register mid-tick under a merged
+  // spawn+lock. The reset rail gains a third group for the POSRST coils;
+  // the home set rides POSRST's own spare NO (its arm is the idle-hold
+  // chain — + always, except inside a button-release window, which can't
+  // coincide with a tick). The very FIRST seed is POWER-ON: BOOTL is down
+  // at boot, so its NC feeds + into slave 0's com and the ring wakes at
+  // the home column; the first button activity latches BOOTL forever
+  // (through ANYBM2's spare K, waves before any release window could need
+  // slave 0's hold broken) and the seed line goes dead. A first draft
+  // seeded through the START button's X line instead — and that jack is
+  // TIED to the SPAWN latch's com (the tie-point law, again): the armed
+  // latch fed slave 0 through the tie so it could never step off home,
+  // and a held slave 0 would have back-fed the latch into respawning
+  // forever. Ticks never latch BOOTL and don't need to: a no-steering
+  // game just keeps the boot seed feeding the home column it sits at,
+  // and every reset's POSRST re-set agrees with it.
+  const resetRail3 = takeGroups(1)[0];
+  w.push(`${resetRail[1]}/${resetRail3}`);
+  w.push(`${resetRail3}/${R(POSRST(0), 'E')}`, `${R(POSRST(0), 'F')}/${minusOf(POSRST(0))}`);
+  w.push(`${resetRail3}/${R(POSRST(1), 'E')}`, `${R(POSRST(1), 'F')}/${minusOf(POSRST(1))}`);
+  w.push(`${R(POSRST(0), 'G')}/${R(POSS(0), 'E')}`); // home set, reset-scoped
+  w.push(`${comOf(BOOTL)}/${R(BOOTL, 'E')}`, `${R(BOOTL, 'F')}/${minusOf(BOOTL)}`);
+  w.push(`${plusOf(BOOTL)}/${R(BOOTL, 'H')}`, `${R(BOOTL, 'G')}/${comOf(BOOTL)}`); // hold forever
+  w.push(`${plusOf(ANYBM2)}/${R(ANYBM2, 'L')}`, `${R(ANYBM2, 'K')}/${R(BOOTL, 'E')}`); // set on the first press
+  w.push(`${plusOf(BOOTL)}/${R(BOOTL, 'L')}`, `${R(BOOTL, 'N')}/${R(POSS(0), 'G')}`); // the power-on seed
+  // wide mode: PIECE(j+1) also fires when (wide AND pos == j). Each tap is
+  // + through TWO series contacts — POSM2(j) (pos == j) then a WIDM/WIDM2
+  // set (wide) — into PIECE(j+1)'s coil jack. The first draft armed the
+  // WIDM contact straight from the slave-com node and the trace caught the
+  // register re-lighting [1,1,1,0] at "wide, pos 2": PIECE(2)'s coil jack
+  // is + via the ring whenever pos == 2, and with the wide contact CLOSED
+  // that + walked BACKWARD through it into slave 1's com. A wired-OR into
+  // a coil jack is legal only while every far side dead-ends at an OPEN
+  // contact; the pos gate makes the backward path always hit one (one-hot:
+  // pos can't be j and j+1 at once). POSM2 coils chain off the POSM coil
+  // jacks (the slave coms themselves are at capacity 4).
+  w.push('m40.5+/m40.5S', `m40.5T/${R(WIDM, 'E')}`, `m40.5T/${R(WIDM2, 'E')}`);
+  w.push(`${R(WIDM, 'F')}/${minusOf(WIDM)}`, `${R(WIDM2, 'F')}/${minusOf(WIDM2)}`);
+  for (let j = 0; j < 3; j++) {
+    w.push(`${R(POSM(j), 'E')}/${R(POSM2(j), 'E')}`, `${R(POSM2(j), 'F')}/${minusOf(POSM2(j))}`);
+    w.push(`${plusOf(POSM2(j))}/${R(POSM2(j), 'H')}`);
+  }
+  w.push(`${R(POSM2(0), 'G')}/${R(WIDM, 'H')}`, `${R(WIDM, 'G')}/${R(PIECE(1), 'E')}`);
+  w.push(`${R(POSM2(1), 'G')}/${R(WIDM, 'L')}`, `${R(WIDM, 'K')}/${R(PIECE(2), 'E')}`);
+  w.push(`${R(POSM2(2), 'G')}/${R(WIDM2, 'H')}`, `${R(WIDM2, 'G')}/${R(PIECE(3), 'E')}`);
+
   return { wires: w, rails: dataRails };
 }
 
@@ -706,11 +864,15 @@ export const TETRIS_IO = {
   tick: { slide: 5, machine: 1 }, // right = tick high, left = tick low
   start: { button: 6, machine: 1 }, // press+release arms SPAWN
   vmode: { slide: (VMODE % 6) + 1, machine: Math.floor(VMODE / 6) }, // right = piece is 2 tall
+  wid: WIDSLIDE, // right = piece is 2 wide
+  left: LEFTBTN, // momentary: step the position register left
+  right: RIGHTBTN, // momentary: step it right (edge presses no-op)
   // LKS up = the machine owes itself bookkeeping ticks (phase 2 / reset)
   lockedRelay: { machine: Math.floor(LKS / 6), index: LKS % 6 },
   // LANE up = a collapse is in progress: ticks walk the stack down
   collapseRelay: { machine: Math.floor(LANE / 6), index: LANE % 6 },
-  pieceSlide: (j: number) => ({ slide: (PIECE(j) % 6) + 1, machine: Math.floor(PIECE(j) / 6) }),
+  // the position register's one-hot slaves (dark until the first spawn)
+  posRelay: (j: number) => ({ machine: Math.floor(POSS(j) / 6), index: POSS(j) % 6 }),
   cellRelay: (r: number, j: number) => ({ machine: Math.floor(CELL(r, j) / 6), index: CELL(r, j) % 6 }),
   tokenRelay: (i: number) => {
     const s = RING(i, 2);

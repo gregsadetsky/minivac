@@ -1,8 +1,9 @@
 /**
- * Multivac roadmap rungs 7+9+9b+10: MINI-TETRIS. 4-wide x 8-tall field,
- * gravity + stacking + line clear WITH row collapse. Pure wiring — every
- * game decision is made by relay contacts. 220 relays across 38 machines
- * (the width is the
+ * Multivac roadmap rungs 7+9+9b+10 + the piece register: MINI-TETRIS.
+ * 4-wide x 8-tall field, gravity + stacking + line clear WITH row
+ * collapse, and the piece's column held IN THE MACHINE (a one-hot ring
+ * stepped by LEFT/RIGHT buttons). Pure wiring — every game decision is
+ * made by relay contacts. 245 relays across 42 machines (the width is the
  * price of tie-point-safe private contacts — see the notes below). The
  * piece is whatever COLUMN MASK the slides raise — singles, dominoes,
  * wider, with zero circuit changes (rung 9) — and with the VMODE slide up
@@ -128,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, TETRIS_IO } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -169,14 +170,31 @@ function makeGame() {
     }
     return hot;
   };
-  // the "piece" is whatever set of column slides is raised: the lock feed
-  // and the collision taps fan per-column through private contacts, so any
-  // mask — single, domino, a full row — works with zero circuit changes
-  const setMask = (mask: number) => {
-    for (let k = 0; k < 4; k++) {
-      const p = PIECE(k);
-      m.setSlide((p % 6) + 1, (mask >> k) & 1 ? 'right' : 'left', Math.floor(p / 6));
+  // the piece register: position is MACHINE state (a one-hot ring stepped
+  // by the LEFT/RIGHT buttons; seeded at the home column from power-on),
+  // width is the WID slide. setMask survives as sugar for the legal
+  // shapes only — a register piece is 1-2 ADJACENT columns.
+  const posAt = () => {
+    for (let j = 0; j < 4; j++) {
+      const r = TETRIS_IO.posRelay(j);
+      if (m.getMachineState(r.machine).relays[r.index]) return j;
     }
+    return -1;
+  };
+  const pressBtn = (b: { button: number; machine: number }) => {
+    m.pressButton(b.button, b.machine);
+    m.releaseButton(b.button, b.machine);
+  };
+  const setMask = (mask: number) => {
+    const wide = mask === 0b0011 || mask === 0b0110 || mask === 0b1100;
+    const single = mask === 1 || mask === 2 || mask === 4 || mask === 8;
+    expect(wide || single, `mask ${mask.toString(2)} is not a register piece`).toBe(true);
+    const p = Math.log2(mask & -mask); // lowest set bit = the position
+    m.setSlide(TETRIS_IO.wid.slide, wide ? 'right' : 'left', TETRIS_IO.wid.machine);
+    let guard = 8;
+    while (posAt() < p && guard-- > 0) pressBtn(TETRIS_IO.right);
+    while (posAt() > p && guard-- > 0) pressBtn(TETRIS_IO.left);
+    expect(posAt(), `walked the register to ${p}`).toBe(p);
   };
   const setColumn = (j: number) => setMask(1 << j);
   const tick = () => {
@@ -191,6 +209,10 @@ function makeGame() {
     m.releaseButton(6, 1);
   };
   const operatorWrite = (r: number, v: number) => {
+    // narrow the piece first: a wide pair's two closed gates would bridge
+    // the driven rails through the colFan node (CUTC is rightly idle
+    // outside collapses; a single closed gate bridges nothing)
+    m.setSlide(TETRIS_IO.wid.slide, 'left', TETRIS_IO.wid.machine);
     m.setSlide(1, r & 1 ? 'right' : 'left', 0);
     m.setSlide(2, r & 2 ? 'right' : 'left', 0);
     m.setSlide(3, r & 4 ? 'right' : 'left', 0);
@@ -201,7 +223,7 @@ function makeGame() {
     // which the collision network would read as a phantom piece
     for (let j = 0; j < 4; j++) m.setSlide(j + 1, 'left', 1);
   };
-  return { m, field, row, tokenAt, setMask, setColumn, tick, pressStart, operatorWrite };
+  return { m, field, row, tokenAt, setMask, setColumn, tick, pressStart, operatorWrite, posAt, pressBtn };
 }
 
 // drop one piece (any column MASK — a single, a domino, wider) from spawn
@@ -333,7 +355,7 @@ function dropVertical(
   collapseTicks(g, cleared, model, label);
 }
 
-describe('Multivac: mini-tetris (38 machines)', () => {
+describe('Multivac: mini-tetris (42 machines)', () => {
   it('gravity, stacking, and a line clear (fast)', { timeout: 1500000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
@@ -495,6 +517,9 @@ describe('Multivac: mini-tetris (38 machines)', () => {
         spawnArmed = true;
         if (clearedRow > 0) collapseLeft = 3 * clearedRow; // row-0 clears never seed
         clearedRow = -1;
+        // the reset tick re-homes the position register to column 0 (the
+        // WID slide is untouched): the machine's piece mask snaps home
+        mask = (mask & (mask - 1)) !== 0 ? 0b0011 : 0b0001;
       } else if (token >= 0) {
         if (resting()) lockAt(token); // pre-armed collide: no movement
         else {
@@ -760,37 +785,38 @@ describe('Multivac: mini-tetris (38 machines)', () => {
     expect(g.row(7), 'row 6 fell to the floor').toBe(0b0110);
     expect(g.row(6), 'row 5 fell one down').toBe(0b0010);
     expect(g.row(5)).toBe(0);
-    // second clear: a split mask completes the fallen floor row
-    dropPiece(g, 0b1001, model, 'split mask completes the fallen row');
+    // second clear: register pieces are 1-2 ADJACENT columns, so 0110
+    // completes via two singles (cols 0 then 3)
+    dropPiece(g, 0b0001, model, 'first corner');
+    dropPiece(g, 0b1000, model, 'second corner completes the fallen row');
     expect(g.row(7), 'the second collapse landed the next row').toBe(0b0010);
     expect(g.row(6)).toBe(0);
-    // third: the colFan-bridge probe. A multi-column mask cannot FALL past
-    // a source bit in its own column (collision blocks it), but the mask is
-    // just slides and can change right after the lock — the random test
-    // does it constantly. If the mask straddles an asymmetric source row
-    // during the collapse, the two closed piece-column contacts would tie
-    // their rails together through the colFan node and the moving row's
-    // col-0 bit would leak into col 3 (row 7 = 1001 instead of 0001);
-    // the CUTC cut opens the piece arms off the colFan while the lane owns
-    // the ticks.
-    // park the mask first: operator writes with 2+ mask columns raised
-    // would bridge the driven rails through the colFan node (the same tie
-    // CUTC cuts during a collapse — but CUTC is rightly idle here). This
-    // test's first draft left the split mask up and corrupted its own
-    // setup — the documented operator discipline, demonstrated by accident.
-    g.setMask(0);
-    g.operatorWrite(7, 0b0101);
-    model[7] |= 0b0101; // -> 0111, col 3 open
-    g.operatorWrite(6, 0b0001);
+  });
+
+  // the rail-bridge probe. A pair cannot FALL past a source bit in its own
+  // columns (collision blocks it), but the register can be walked right
+  // after the lock — so the pair straddles an asymmetric source row DURING
+  // the collapse. Without the CUTC cuts the two closed piece relays tie
+  // rail 0 to rail 1 through BOTH fan nodes (colFan on the gate side,
+  // collideNode on the tap side) and the moving row's col-0 bit would leak
+  // into col 1 (row 7 = 0011 instead of 0001).
+  it('row collapse: a mid-collapse pair swap cannot bridge the rails (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const model = Array(8).fill(0);
+    g.operatorWrite(7, 0b0111);
+    model[7] = 0b0111;
+    g.operatorWrite(6, 0b0001); // col 0 on, col 1 OFF: the asymmetry
     model[6] = 0b0001;
-    g.setMask(0b1000);
+    g.pressStart();
+    g.setMask(0b1000); // a single at col 3 completes the floor
     g.tick(); // spawn
-    for (let r = 1; r <= 7; r++) g.tick(); // col 3 falls clear to the floor
-    model[7] = 0; // 0111 | 1000 completes and clears
+    for (let r = 1; r <= 7; r++) g.tick();
+    model[7] = 0;
     expect(g.field(), 'probe: line cleared').toEqual(model);
     g.tick(); // reset; the chain seeds
     expect(g.tokenAt()).toEqual([]);
-    g.setMask(0b1001); // the mask swap: cols 0+3 raised DURING the collapse
+    g.setMask(0b0011); // the swap: the wide pair walks home mid-collapse
     for (let t = 7; t >= 1; t--) {
       g.tick(); // alpha
       model[t] |= model[t - 1];
@@ -801,8 +827,105 @@ describe('Multivac: mini-tetris (38 machines)', () => {
       g.tick(); // gamma
       expect(g.field(), `probe: stage ${t} stepped`).toEqual(model);
     }
-    expect(g.row(7), 'the masked pair did not bridge the rails').toBe(0b0001);
+    expect(g.row(7), 'the pair did not bridge the rails').toBe(0b0001);
     expect(g.row(6)).toBe(0);
+  });
+
+  // the piece register (increment 1): the column is MACHINE state. A
+  // one-hot slave ring steps once per LEFT/RIGHT press — sample-on-press
+  // (the target master latches; the slaves hold, so the piece never
+  // flickers and the still-armed direction taps can't re-sample a moved
+  // ring), commit-on-release (a one-wave transfer window). Edge presses
+  // self-loop; the reset tick re-homes to column 0; the very first START
+  // seeds the dark ring. The PIECE column coils re-feed from the ring
+  // (single = pos; wide adds pos+1 via the WIDM taps).
+  it('the position register: one step per press, edges self-loop, reset re-homes (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const relayOn = (n: number) => (g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0);
+    const ring = () => Array.from({ length: 4 }, (_, j) => relayOn(POSS(j)));
+    const pieces = () => Array.from({ length: 4 }, (_, j) => relayOn(PIECE(j)));
+    const quiet = () => expect(g.m.getState().alerts).toEqual([]);
+
+    // power-on: the ring wakes already seeded at the home column (BOOTL's
+    // NC feeds slave 0 until the first press latches the seed line dead)
+    expect(g.posAt(), 'power-on: the home column').toBe(0);
+    expect(ring()).toEqual([1, 0, 0, 0]);
+    expect(pieces(), 'PIECE follows the ring').toEqual([1, 0, 0, 0]);
+    quiet();
+
+    // START arms the spawn latch; the register must not care
+    g.pressStart();
+    expect(ring(), 'START leaves the register alone').toEqual([1, 0, 0, 0]);
+    quiet();
+
+    // one full press, held: the ring must NOT move during the press (the
+    // master samples; a mid-press step would let the still-closed direction
+    // taps re-sample the moved ring and cascade to the edge)
+    g.m.pressButton(TETRIS_IO.right.button, TETRIS_IO.right.machine);
+    expect(ring(), 'held press: the slaves hold').toEqual([1, 0, 0, 0]);
+    expect(relayOn(POSA(1)), 'held press: the target master latched').toBe(1);
+    expect(relayOn(POSA(2)), 'held press: no cascade into master 2').toBe(0);
+    g.m.releaseButton(TETRIS_IO.right.button, TETRIS_IO.right.machine);
+    expect(ring(), 'release commits exactly one step').toEqual([0, 1, 0, 0]);
+    expect(relayOn(POSA(1)), 'the master unwound').toBe(0);
+    quiet();
+
+    // walk to the right edge and lean on it
+    g.pressBtn(TETRIS_IO.right);
+    expect(ring()).toEqual([0, 0, 1, 0]);
+    g.pressBtn(TETRIS_IO.right);
+    expect(ring()).toEqual([0, 0, 0, 1]);
+    g.pressBtn(TETRIS_IO.right);
+    expect(ring(), 'right edge self-loops').toEqual([0, 0, 0, 1]);
+    quiet();
+
+    // and back to the left edge
+    for (const want of [
+      [0, 0, 1, 0],
+      [0, 1, 0, 0],
+      [1, 0, 0, 0],
+      [1, 0, 0, 0], // the edge self-loop again
+    ]) {
+      g.pressBtn(TETRIS_IO.left);
+      expect(ring()).toEqual(want);
+    }
+    quiet();
+
+    // wide mode: PIECE(pos+1) joins through the WIDM taps
+    g.m.setSlide(TETRIS_IO.wid.slide, 'right', TETRIS_IO.wid.machine);
+    expect(pieces(), 'wide at 0').toEqual([1, 1, 0, 0]);
+    g.pressBtn(TETRIS_IO.right);
+    g.pressBtn(TETRIS_IO.right);
+    expect(pieces(), 'wide at 2').toEqual([0, 0, 1, 1]);
+    g.pressBtn(TETRIS_IO.right);
+    // pos 3 wide has no column 4: the machine feeds PIECE(3) alone (the
+    // page clamps this away; the legality increment folds width in)
+    expect(pieces(), 'wide at the edge degrades to the edge column').toEqual([0, 0, 0, 1]);
+    g.pressBtn(TETRIS_IO.left);
+    g.pressBtn(TETRIS_IO.left);
+    g.m.setSlide(TETRIS_IO.wid.slide, 'left', TETRIS_IO.wid.machine);
+    expect(ring()).toEqual([0, 1, 0, 0]);
+    expect(pieces(), 'narrow again at 1').toEqual([0, 1, 0, 0]);
+
+    // steer mid-fall, then the lock's reset tick re-homes the ring
+    const model = Array(8).fill(0);
+    g.tick(); // spawn (START above also armed the SPAWN latch)
+    expect(g.tokenAt()).toEqual([0]);
+    g.tick();
+    expect(g.tokenAt()).toEqual([1]);
+    g.pressBtn(TETRIS_IO.right); // steer mid-fall: the register moves, the game doesn't
+    expect(g.posAt()).toBe(2);
+    expect(g.tokenAt(), 'steering does not tick the game').toEqual([1]);
+    for (let r = 2; r <= 7; r++) g.tick(); // to the floor; the last is the lock
+    model[7] = 0b0100;
+    expect(g.field(), 'locked at the steered column').toEqual(model);
+    expect(g.posAt(), 'the register holds through the lock tick').toBe(2);
+    g.tick(); // the reset tick: the token dies AND the ring re-homes
+    expect(g.tokenAt()).toEqual([]);
+    expect(g.field()).toEqual(model);
+    expect(ring(), 'reset re-homes the register').toEqual([1, 0, 0, 0]);
+    quiet();
   });
 
   // the /tetris/ page runs the 'fast' engine; until this rung no tetris
@@ -924,6 +1047,10 @@ describe('Multivac: mini-tetris (38 machines)', () => {
     }
     expect(elev(), 'chain drained off the top').toEqual(oneHotAt(0));
 
+    // the clearing lock's reset re-homed the register to column 0 — walk
+    // it back out so the deferred piece falls where the scenario wants it
+    g.setMask(0b1000);
+
     // the lane released: the spawn that waited fires on the very next tick
     g.tick();
     expect(g.tokenAt(), 'the deferred piece finally spawns').toEqual([0]);
@@ -960,10 +1087,12 @@ describe('Multivac: mini-tetris (38 machines)', () => {
     // rows above it down. Same machinery end to end — seed, lane, all
     // three phases, drain — at a fraction of the cost.
     g.m.setSlide((VMODE % 6) + 1, 'left', Math.floor(VMODE / 6));
-    g.operatorWrite(3, 0b0001);
-    model[3] = 0b0001;
-    dropPiece(g, 0b1101, model, 'dense clear + collapse at row 2');
-    expect(g.row(3), 'the block below is untouched').toBe(0b0001);
+    g.operatorWrite(3, 0b1000); // the col-3 rest block
+    model[3] = 0b1000;
+    g.operatorWrite(2, 0b0101); // fill row 2 to one hole (with its 0b0010)
+    model[2] |= 0b0101;
+    dropPiece(g, 0b1000, model, 'dense clear + collapse at row 2');
+    expect(g.row(3), 'the block below is untouched').toBe(0b1000);
     expect(g.row(2), 'row 1 fell into the cleared row').toBe(0b0010);
     expect(g.row(1), 'row 0 fell one down').toBe(0b0010);
     expect(g.row(0)).toBe(0);

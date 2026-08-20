@@ -2,16 +2,20 @@
  * multivac mini-tetris — the minimal viewer. No minivac drawings: just the
  * playfield as big pixels and a keyboard wired to the machine's inputs.
  * The pixels ARE relay armatures: each cell reads a field-cell relay, the
- * falling piece reads the token ring's slaves. Everything the game decides
- * (falling, landing, stacking, line clears, the two-row vertical write,
- * the row collapse that walks the stack down after a clear)
- * happens inside the 220-relay circuit; this page only flips the tick
- * slide, the column and shape slides, and the START button — exactly what
- * a human at 38 real Minivacs would do. After a lock the machine owes
- * itself bookkeeping ticks (the vertical phase-2 write, then the reset);
- * the page runs those automatically while the LOCKED slave is up, which
- * also keeps the keyboard from re-steering the piece between the bottom
- * and top writes.
+ * falling piece reads the token ring's slaves, and the piece's COLUMN
+ * reads the position register's slaves — steering is machine state now:
+ * the arrow keys press momentary LEFT/RIGHT buttons and a one-hot relay
+ * ring steps (edge presses self-loop); this page no longer knows where
+ * the piece is, it asks. Everything the game decides (falling, landing,
+ * stacking, line clears, the two-row vertical write, the row collapse
+ * that walks the stack down after a clear) happens inside the 245-relay
+ * circuit; the page only works the tick/shape slides, the LEFT/RIGHT
+ * buttons and START — exactly what a human at 42 real Minivacs would do.
+ * After a lock the machine owes itself bookkeeping ticks (the vertical
+ * phase-2 write, then the reset, which also re-homes the register); the
+ * page runs those automatically while the LOCKED slave is up, which also
+ * keeps the keyboard from re-steering the piece between the bottom and
+ * top writes.
  *
  * Per the UI performance invariants: no react, no per-frame state — plain
  * DOM, redrawn only after an interaction settles.
@@ -37,7 +41,7 @@ root.innerHTML = `
   <div style="text-align:center;padding:24px">
     <h1 style="font-size:16px;font-weight:600;letter-spacing:.06em;color:#e8e2d0;margin:0 0 4px">
       multivac tetris</h1>
-    <div style="color:#7a828c;margin-bottom:18px">220 relays / ${MACHINES} minivacs — pure wiring</div>
+    <div style="color:#7a828c;margin-bottom:18px">245 relays / ${MACHINES} minivacs — pure wiring</div>
     <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center;margin-bottom:6px"></div>
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
@@ -77,18 +81,33 @@ const { wires } = tetrisCircuit();
 document.getElementById('dump')!.textContent =
   `${wires.length} wires, ${MACHINES} machines\n\n` + wires.join('\n');
 
-let pos = 0; // left edge of the piece
-let width = 1; // 1 or 2 columns (any mask works in the circuit)
+let width = 1; // 1 or 2 columns (the WID slide)
 let tall = false; // VMODE: the piece is 2 cells tall (the vertical rung)
 let busy = true;
 let ticks = 0;
 let sim: MinivacSimulator;
-const mask = () => (width === 2 ? 0b11 : 0b1) << pos;
 const shapeLabel = () =>
   tall ? (width === 2 ? '2x2 square' : '2 tall') : width === 2 ? '2 wide' : '1x1';
 
 function relay(loc: { machine: number; index: number }): boolean {
   return sim.getMachineState(loc.machine).relays[loc.index];
+}
+
+// the piece's column lives in the machine: the position register's
+// one-hot slaves (dark until the first START seeds them)
+function posAt(): number {
+  for (let j = 0; j < COLS; j++) if (relay(TETRIS_IO.posRelay(j))) return j;
+  return -1;
+}
+
+function mask(): number {
+  const p = posAt();
+  return p < 0 ? 0 : (width === 2 ? 0b11 : 0b1) << p;
+}
+
+function press(b: { button: number; machine: number }) {
+  sim.pressButton(b.button, b.machine);
+  sim.releaseButton(b.button, b.machine);
 }
 
 function tokenRow(): number {
@@ -102,10 +121,11 @@ function rowCells(r: number): number {
   return n;
 }
 
-// the circuit has NO sideways collision — the token only senses the row
-// below it, and a slide cannot be electrically refused — so moving or
-// reshaping into stored cells would overlap them (benign for the data:
-// the lock is an OR-write; wrong as tetris). Like the Enter guard below,
+// the register steps on any button press — lateral LEGALITY isn't in the
+// contacts yet (that's the next increment: the step's D-path gated by
+// "target column free at the token row"), so moving or reshaping into
+// stored cells would overlap them (benign for the data: the lock is an
+// OR-write; wrong as tetris). Until then, like the Enter guard below,
 // the page plays the disciplined 1961 operator and refuses the keypress.
 function wouldOverlap(nPos: number, nWidth: number, nTall: boolean): boolean {
   const tok = tokenRow();
@@ -154,11 +174,8 @@ function act(label: string, fn: () => void) {
 }
 
 function applyShape() {
-  const m = mask();
-  for (let k = 0; k < COLS; k++) {
-    const s = TETRIS_IO.pieceSlide(k);
-    sim.setSlide(s.slide, ((m >> k) & 1) === 1 ? 'right' : 'left', s.machine);
-  }
+  const w = TETRIS_IO.wid;
+  sim.setSlide(w.slide, width === 2 ? 'right' : 'left', w.machine);
   const v = TETRIS_IO.vmode;
   sim.setSlide(v.slide, tall ? 'right' : 'left', v.machine);
 }
@@ -166,19 +183,27 @@ function applyShape() {
 document.addEventListener('keydown', e => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    const next = Math.min(COLS - width, Math.max(0, pos + (e.key === 'ArrowRight' ? 1 : -1)));
-    if (next === pos) return;
-    if (!busy && wouldOverlap(next, width, tall)) {
+    if (busy) return;
+    const p = posAt();
+    if (p < 0) return; // the register is dark until the first START
+    // the ring self-loops at columns 0 and 3; the wide piece's right edge
+    // is a page clamp for now (the register doesn't know the width — the
+    // legality increment folds it in via WIDM)
+    const next = Math.min(COLS - width, Math.max(0, p + (e.key === 'ArrowRight' ? 1 : -1)));
+    if (next === p) return;
+    if (wouldOverlap(next, width, tall)) {
       render('blocked — the stack is in the way');
       return;
     }
     act(`column ${next}`, () => {
-      pos = next;
-      applyShape();
+      press(e.key === 'ArrowRight' ? TETRIS_IO.right : TETRIS_IO.left);
     });
   } else if (e.key === 'ArrowUp') {
     // cycle 1x1 -> 2 wide -> 2 tall -> 2x2 (tall = the VMODE slide: the
     // machine writes the row above the token on the phase-2 tick)
+    if (busy) return;
+    const p = posAt();
+    if (p < 0) return;
     let nWidth = width;
     let nTall = tall;
     if (!tall && width === 1) nWidth = 2;
@@ -190,15 +215,15 @@ document.addEventListener('keydown', e => {
       nTall = false;
       nWidth = 1;
     }
-    const nPos = Math.min(pos, COLS - nWidth);
-    if (!busy && wouldOverlap(nPos, nWidth, nTall)) {
+    const nPos = Math.min(p, COLS - nWidth);
+    if (wouldOverlap(nPos, nWidth, nTall)) {
       render('blocked — no room for that shape here');
       return;
     }
     act('shape', () => {
+      if (nPos < p) press(TETRIS_IO.left); // widening at the wall: step in first
       width = nWidth;
       tall = nTall;
-      pos = nPos;
       applyShape();
     });
   } else if (e.key === 'ArrowDown' || e.key === ' ') {

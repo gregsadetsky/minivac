@@ -191,6 +191,39 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    same piece-becomes-machine-state refactor that L/S/T shapes and true
    rotation need, so all three land together in the piece-register rung.
 
+10.5 THE PIECE REGISTER — increment 1 LANDED 2026-08-20: the column is
+   machine state. a one-hot slave ring (POSS 0-3) stepped by momentary
+   LEFT/RIGHT buttons on m40: sample-on-press (the target master latches
+   through the one live POSM tap; the slaves hold, so the piece never
+   flickers), commit-on-release (a one-wave transfer window owned by the
+   TWIN relay = "ANYBM already down, ANYBM2 still up"); edge presses
+   self-loop; every reset re-homes to column 0; the ring wakes seeded at
+   power-on via the BOOTL latch's NC and the first press latches the seed
+   line dead. width = the WID slide, feeding PIECE(pos+1) through series
+   pos+wide contact gates (POSM2 bank). the per-column mask slides are
+   GONE; the page reads position from the machine and presses buttons.
+   245 relays / 42 machines.
+   the trace test caught FOUR wiring bugs before any game test ran, all
+   the tie-point law in new costumes (full stories in
+   _notes/piece-register-design.md): the button "wired-OR" through a coil
+   jack pressed both directions at once; transferring during the press
+   cascaded the ring to [1,1,1,1] through the DEAD direction chain (dead
+   chains still tie); seeding via the START button's X line tied the SPAWN
+   latch's com to slave 0 (would have held the piece home and re-armed
+   spawns forever); the wide taps armed from slave-com nodes back-fed the
+   ring through their closed contacts (a wired-OR into a coil jack is
+   legal only while every far side dead-ends at an OPEN contact).
+   receipts: the register trace test (power-on seed, mid-press holds,
+   exactly-one-step commits, both edges, wide feeds at every pos incl. the
+   edge degradation, mid-fall steering, lock-tick hold, reset re-home);
+   the full tetris file green under fast with the re-home folded into the
+   random model; playwright page flow on the button-driven page.
+   NEXT, increment 2: lateral LEGALITY in contacts — the step's D-path
+   gated by "target column free at the token row" (MIRC mirror bank +
+   LEGINV NCs), shrinking the page's JS guard to the tall-top case.
+   increment 3: the full piece register (per-column row offsets, L/S/T,
+   rotation as register rewiring).
+
 11. FIELD SCALING: wider/taller grid = stamping proven patterns; the
    solver budget is the real constraint (lever (b) pivot-order reuse
    before 10x20). also queued: game-over latch (spawn collision), score
