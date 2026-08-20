@@ -1508,7 +1508,7 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
   // the SAME coil nets (compatibility-OR), so these tests never touch a
   // slide: WID/VMODE/STAG and the whole TOPMASK bank follow the ring and
   // the live position register.
-  it('the shape ring: UP walks six states and derives every mode rail (fast)', { timeout: 1500000 }, () => {
+  it('the shape ring: UP walks the full cycle and derives every mode rail (fast)', { timeout: 1500000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
     const rel = (idx: number) => (g.m.getMachineState(Math.floor(idx / 6)).relays[idx % 6] ? 1 : 0);
@@ -1576,10 +1576,15 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     expect(rails(), 'L1: wide, tall, T-fan phase 2').toEqual([1, 1, 1]);
     expect(botBank(), 'L1 bottom: the triple at pos 0').toBe(0b0111);
     expect(topBank(), 'L1 top: the stem on the left').toBe(0b0001);
-    // the NS-CUT: while a triple is up, LEFT/RIGHT are fully inert (the
-    // legality trees cannot see 3-wide yet — 4b lifts this)
+    // 3b-4b: triples STEER — the trees read their true footprint now
     g.pressBtn(TETRIS_IO.right);
-    expect(g.posAt(), 'steering a triple: refused outright').toBe(0);
+    expect(g.posAt(), 'a triple steps right').toBe(1);
+    expect(botBank(), 'the triple followed').toBe(0b1110);
+    expect(topBank()).toBe(0b0010);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'the triple bound: pos 2 refused in contacts').toBe(1);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt()).toBe(0);
     up(); // L1 -> J1: the stem moves to the right end
     expect(shapeAt()).toBe(7);
     expect(botBank()).toBe(0b0111);
@@ -1589,17 +1594,12 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     expect(botBank()).toBe(0b0111);
     expect(topBank(), 'T1 top: the stem centered').toBe(0b0010);
     g.pressBtn(TETRIS_IO.left);
-    expect(g.posAt(), 'still cut').toBe(0);
+    expect(g.posAt(), 'the left edge self-loops as ever').toBe(0);
     up(); // T1 -> 1x1: the footprint shrinks, always legal; wraps home
     expect(shapeAt()).toBe(0);
     expect(rails()).toEqual([0, 0, 0]);
     expect(topBank()).toBe(0);
     expect(botBank(), 'back to the single').toBe(0b0001);
-    // steering is live again the moment the triple leaves
-    g.pressBtn(TETRIS_IO.right);
-    expect(g.posAt(), 'the cut lifted with the shape').toBe(1);
-    g.pressBtn(TETRIS_IO.left);
-    expect(g.posAt()).toBe(0);
 
     // compatibility: the operator slides still work (union semantics) —
     // hardware and ring feed the same coil nets
@@ -1761,8 +1761,8 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     let g = makeGame();
     const up = () => g.pressBtn(TETRIS_IO.up);
     const model = Array(8).fill(0);
-    // the cycle transits S/Z, so walk to pos 1 first; the NS-cut then
-    // pins the triples there (position BEFORE the shape — the doctrine)
+    // the cycle transits S/Z, so walk to pos 1 first (the triples steer
+    // freely since 4b, but these drops stay put)
     g.pressBtn(TETRIS_IO.right);
     for (let k = 0; k < 6; k++) up(); // -> L1 at pos 1
     g.pressStart();
@@ -1776,8 +1776,7 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     g.tick(); // reset re-homes the register; the next drops walk back
     up(); // -> J1 (at pos 0 for a moment; entry checks are dark)
     expect(g.posAt()).toBe(0);
-    // J1 is a triple: steering is cut, so its drop happens at pos 0
-    g.tick(); // spawn
+    g.tick(); // spawn (J1 drops at the home column)
     for (let r = 1; r <= 5; r++) g.tick(); // rests at 5 on the L's stem
     model[5] = 0b0111;
     expect(g.field(), 'J: the triple bottom on the stack').toEqual(model);
@@ -1822,6 +1821,80 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     expect(g.row(6)).toBe(0b0111);
     expect(g.row(5), 'Z top 1-2 above the rest row').toBe(0b0110);
     expect(g.row(7), 'the floor stayed empty').toBe(0);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // 3b-4b: TRIPLE STEERING — the trees read the true 3-wide footprint:
+  // the entering bottom column 3 (LTB3), J1's shifted stem (LTJ), L1's
+  // stem through the re-gated point-1 check, and the pos-2 bound. (T1's
+  // stems and several J1 legs are unreachable in play — the piece's own
+  // body just vacated those cells — but the checks stand, belt and
+  // braces.)
+  it('triple steering: the trees read the stems and the third column (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const walkTo = (g: ReturnType<typeof makeGame>, ups: number) => {
+      g.pressBtn(TETRIS_IO.right); // the cycle transits S at pos 1
+      for (let k = 0; k < ups; k++) g.pressBtn(TETRIS_IO.up);
+    };
+
+    // L1 right: the triple's ENTERING bottom column is col 3
+    let g = makeGame();
+    g.operatorWrite(5, 0b1000); // the tower at (5,3)
+    walkTo(g, 6); // L1 at pos 1
+    g.pressBtn(TETRIS_IO.left); // home to 0 (free pre-spawn)
+    expect(g.posAt()).toBe(0);
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the tower
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'the third column senses the tower: refused').toBe(0);
+    g.tick(); // token 6: the row beside is clear
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'a row later the same step goes').toBe(1);
+    g.tick(); // floor lock at 7
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'L bottom followed the steer').toBe(0b1110);
+    expect(g.row(6), 'L stem at its column').toBe(0b0010);
+    expect(g.row(5), 'the tower kept').toBe(0b1000);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // J1 right: the stem lands one row up at col 3
+    g = makeGame();
+    g.operatorWrite(4, 0b1000); // the floater at (4,3)
+    walkTo(g, 7); // J1 at pos 1
+    g.pressBtn(TETRIS_IO.left);
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5: stem target (4,3)
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'J1 stem onto the floater: refused').toBe(0);
+    g.tick(); // token 6
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'clear of it the step goes').toBe(1);
+    g.tick(); // floor lock
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'J bottom').toBe(0b1110);
+    expect(g.row(6), 'J stem at the right end').toBe(0b1000);
+    expect(g.row(4), 'the floater kept').toBe(0b1000);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // L1 left: the stem target reads through the re-gated point-1 check
+    g = makeGame();
+    g.operatorWrite(4, 0b0001); // the tower at (4,0)
+    walkTo(g, 6); // L1 at pos 1 (falls in cols 1-3, clear of the tower)
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5: stem target (4,0)
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'L1 stem under the tower: refused').toBe(1);
+    g.tick(); // token 6
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'clear of it the step goes').toBe(0);
+    g.tick(); // floor lock
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'L bottom at home').toBe(0b0111);
+    expect(g.row(6), 'L stem at col 0').toBe(0b0001);
+    expect(g.row(4), 'the tower kept').toBe(0b0001);
     expect(g.m.getState().alerts).toEqual([]);
   });
 

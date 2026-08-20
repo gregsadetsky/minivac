@@ -212,7 +212,24 @@ export const L1M = (k: number) => 441 + k; // L1 state mirrors (441..442)
 export const J1M = (k: number) => 443 + k; // J1 state mirrors (443..444)
 export const T1M = (k: number) => 445 + k; // T1 state mirrors (445..446)
 export const WID3M = 447; // "the bottom grows a third column": the offset-2 taps' gate
-export const NSC = 448; // the steering cut: LEFT/RIGHT sample buses die while a triple is up
+// 3b-4b — TRIPLE STEERING: the legality trees re-class per top geometry
+// and the NS cut dies. the gate generalization: LEGINVT's checks are
+// correct for {sym, S, L1} (their target top CONTAINS the checked
+// column) -> its coil gate becomes NOT-(Z|J1|T1); LEGINVT2's are correct
+// for {sym-wide, Z, T1} -> NOT-(S|L1|J1). T1's RIGHT step is fully
+// covered by the existing point-2 check for free; the rest ride as
+// state-gated series hops (LTJ/LTT top reads, LTB3 the triple bottom's
+// entering col 3), plus TRPBND (a triple cannot right-step into pos 2).
+// left-into-2 keeps no triple legs: a triple is never at pos 3.
+export const ZJT = 448; // gate coil: Z|J1|T1 (feeds ZG(0,1), the NOT gates on LEGINVT)
+export const SLJ = 449; // gate coil: S|L1|J1 (feeds SG(0), the NOT gate on LEGINVT2)
+export const ZM2 = 450; // one more Z mirror (ZJT's Z contact)
+export const SM2 = 451; // one more S mirror (SLJ's S contact)
+export const J1M2 = 452, J1M3 = 453; // more J1 mirrors: gate feeds + the LTJ coil gates
+export const T1M2 = 454; // more T1 contacts: the LTT coil gates
+export const LTJ = (k: number) => 455 + k; // J1-only top reads: k=0 col2, k=1 col3
+export const LTT = (k: number) => 457 + k; // T1-only top reads: k=0 col1, k=1 col2
+export const LTB3 = 459; // triple-only bottom read of col 3 (the right step's entering column)
 export const MMIR = (i: number) => 393 + i; // master mirrors: gate the into-state-i branch (393..398)
 export const POSM4 = (k: number) => 399 + k; // pos mirrors for the branches: k=0 pos0, k=1,2 pos1, k=3,4 pos2, k=5 pos3 (399..404)
 // (POSM4(5) exists because NOTHING on POSM(3) was borrowable: its L arm
@@ -229,11 +246,11 @@ export const UTR = (k: number) => 408 + k; // top-rail reads: k=0 col0, k=1,2 co
 // free. (They lived on m40 through the piece rung, sharing sections with
 // relays whose + jacks HAPPENED to be unused; the 12-row layout landed
 // TWIN's + on the shared section and the capacity auditor caught it.)
-export const LEFTBTN = { button: 3, machine: 75 };
-export const RIGHTBTN = { button: 4, machine: 75 };
-export const UPBTN = { button: 2, machine: 75 }; // steps the shape ring (press+release = one step)
-export const WIDSLIDE = { slide: 5, machine: 75 };
-export const MACHINES = 76; // relays through m74.2 + the dedicated button machine m75; m36's coms serve as the junctions
+export const LEFTBTN = { button: 3, machine: 77 };
+export const RIGHTBTN = { button: 4, machine: 77 };
+export const UPBTN = { button: 2, machine: 77 }; // steps the shape ring (press+release = one step)
+export const WIDSLIDE = { slide: 5, machine: 77 };
+export const MACHINES = 78; // relays through m76.3 + the dedicated button machine m77; m36's coms serve as the junctions
 
 // ---- the ROWS-parameterized layout (rung 11 groundwork) ----
 // The same allocation map as the exported constants, laid out sequentially
@@ -306,7 +323,10 @@ export interface TetrisLayout {
   MMIR2: (i: number) => number; POSM5: (k: number) => number; UTR2: (k: number) => number;
   TRP: number; TRPM: (k: number) => number;
   L1M: (k: number) => number; J1M: (k: number) => number; T1M: (k: number) => number;
-  WID3M: number; NSC: number;
+  WID3M: number;
+  ZJT: number; SLJ: number; ZM2: number; SM2: number;
+  J1M2: number; J1M3: number; T1M2: number;
+  LTJ: (k: number) => number; LTT: (k: number) => number; LTB3: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -372,7 +392,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const ltBase = take(12); // 3b-3b: LTS x2, LTZ x4, SG x2, ZG x4
   const upcBase = take(22); // 3b-3c: MMIR x6, POSM4 x6, LEGB2 x3, UTR x7
   const shr2Base = take(9); // 3b-4a: states 6..8 (L1, J1, T1) x (clk, master, slave)
-  const g4Base = take(25); // MMIR2 x3, POSM5 x8, UTR2 x3, TRP + TRPM x2, L1M/J1M/T1M x6, WID3M, NSC
+  const g4Base = take(24); // MMIR2 x3, POSM5 x8, UTR2 x3, TRP + TRPM x2, L1M/J1M/T1M x6, WID3M
+  const g4bBase = take(12); // 3b-4b: ZJT, SLJ, ZM2, SM2, J1M2/3, T1M2, LTJ x2, LTT x2, LTB3
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -436,7 +457,10 @@ export function tetrisLayout(rows: number): TetrisLayout {
     MMIR2: i => g4Base + (i - 6), POSM5: k => g4Base + 3 + k, UTR2: k => g4Base + 11 + k,
     TRP: g4Base + 14, TRPM: k => g4Base + 15 + k,
     L1M: k => g4Base + 17 + k, J1M: k => g4Base + 19 + k, T1M: k => g4Base + 21 + k,
-    WID3M: g4Base + 23, NSC: g4Base + 24,
+    WID3M: g4Base + 23,
+    ZJT: g4bBase, SLJ: g4bBase + 1, ZM2: g4bBase + 2, SM2: g4bBase + 3,
+    J1M2: g4bBase + 4, J1M3: g4bBase + 5, T1M2: g4bBase + 6,
+    LTJ: k => g4bBase + 7 + k, LTT: k => g4bBase + 9 + k, LTB3: g4bBase + 11,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -523,7 +547,9 @@ export function tetrisLayout(rows: number): TetrisLayout {
   claim('UTR2', UTR2(0), UTR2(1), UTR2(2));
   claim('TRP/TRPM', TRP, TRPM(0), TRPM(1));
   claim('L1M/J1M/T1M', L1M(0), L1M(1), J1M(0), J1M(1), T1M(0), T1M(1));
-  claim('WID3M/NSC', WID3M, NSC);
+  claim('WID3M', WID3M);
+  claim('ZJT/SLJ/mirrors', ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2);
+  claim('LTJ/LTT/LTB3', LTJ(0), LTJ(1), LTT(0), LTT(1), LTB3);
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -590,7 +616,12 @@ export function tetrisLayout(rows: number): TetrisLayout {
   for (let k = 0; k < 3; k++) eq('UTR2', L.UTR2(k), UTR2(k));
   eq('TRP', L.TRP, TRP); eq('TRPM', L.TRPM(0), TRPM(0)); eq('TRPM', L.TRPM(1), TRPM(1));
   eq('L1M', L.L1M(0), L1M(0)); eq('J1M', L.J1M(0), J1M(0)); eq('T1M', L.T1M(0), T1M(0));
-  eq('WID3M', L.WID3M, WID3M); eq('NSC', L.NSC, NSC);
+  eq('WID3M', L.WID3M, WID3M);
+  eq('ZJT', L.ZJT, ZJT); eq('SLJ', L.SLJ, SLJ); eq('ZM2', L.ZM2, ZM2); eq('SM2', L.SM2, SM2);
+  eq('J1M2', L.J1M2, J1M2); eq('J1M3', L.J1M3, J1M3); eq('T1M2', L.T1M2, T1M2);
+  eq('LTJ', L.LTJ(0), LTJ(0)); eq('LTJ', L.LTJ(1), LTJ(1));
+  eq('LTT', L.LTT(0), LTT(0)); eq('LTT', L.LTT(1), LTT(1));
+  eq('LTB3', L.LTB3, LTB3);
   eq('machines', L.machines, MACHINES);
   eq('btnMachine', L.btnMachine, LEFTBTN.machine);
   eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
@@ -621,7 +652,8 @@ export function tetrisCircuit(rows = 8): {
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     LTS, LTZ, SG, ZG,
     MMIR, POSM4, LEGB2, UTR,
-    SHR2, MMIR2, POSM5, UTR2, TRP, TRPM, L1M, J1M, T1M, WID3M, NSC,
+    SHR2, MMIR2, POSM5, UTR2, TRP, TRPM, L1M, J1M, T1M, WID3M,
+    ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2, LTJ, LTT, LTB3,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
   // every anchor that shared a machine with relays eventually collided
@@ -1273,15 +1305,10 @@ export function tetrisCircuit(rows = 8): {
   // K outputs tied at ANYBM.E, each far side dead-ending at an open
   // contact when its button is up. Costs one wave (ANYBM is depth 2 now).
   const bm = `m${btnMachine}`;
-  // the 3b-4a NS-CUT sits between the button X-lines and their mirrors:
-  // while a 3-wide shape is selected the legality trees don't know its
-  // footprint yet (4b re-classes them), so LEFT/RIGHT presses are FULLY
-  // inert — no LEFTM means no ANYBM, no TWIN release window, no wipe.
-  // (cutting the SAMPLE BUS instead would repeat the increment-2 hazard:
-  // a press whose sample is swallowed still runs the release window and
-  // drops every slave.)
-  w.push(`${bm}.3+/${bm}.3Y`, `${bm}.3X/${R(NSC, 'H')}`, `${R(NSC, 'J')}/${R(LEFTM, 'E')}`);
-  w.push(`${bm}.4+/${bm}.4Y`, `${bm}.4X/${R(NSC, 'L')}`, `${R(NSC, 'N')}/${R(RIGHTM, 'E')}`);
+  // (3b-4a's NS-CUT lived here for one increment — 4b re-classed the
+  // legality trees per top geometry, so triples steer like everyone)
+  w.push(`${bm}.3+/${bm}.3Y`, `${bm}.3X/${R(LEFTM, 'E')}`);
+  w.push(`${bm}.4+/${bm}.4Y`, `${bm}.4X/${R(RIGHTM, 'E')}`);
   w.push(`${R(LEFTM, 'F')}/${minusOf(LEFTM)}`, `${R(RIGHTM, 'F')}/${minusOf(RIGHTM)}`, `${R(ANYBM, 'F')}/${minusOf(ANYBM)}`);
   w.push(`${plusOf(LEFTM)}/${R(LEFTM, 'L')}`, `${R(LEFTM, 'K')}/${R(ANYBM, 'E')}`);
   w.push(`${plusOf(RIGHTM)}/${R(RIGHTM, 'L')}`, `${R(RIGHTM, 'K')}/${R(ANYBM, 'E')}`);
@@ -1403,7 +1430,9 @@ export function tetrisCircuit(rows = 8): {
   // Backward audit: a rail is fed only through the one closed MIRC row
   // gate; an OFF cell's com behind an OPEN gate can never be energized
   // from the rail side.
-  const legRails = [takeGroups(grown(2, 1)), takeGroups(grown(2, 1)), takeGroups(grown(2, 1)), takeGroups(grown(2, 1))];
+  // grown to 3 base groups in 3b-4b: LTB3 taps the col-3 rail (and the
+  // uniform growth leaves room for the coming overhang forms)
+  const legRails = [takeGroups(grown(3, 1)), takeGroups(grown(3, 1)), takeGroups(grown(3, 1)), takeGroups(grown(3, 1))];
   for (const lg of legRails) for (let i = 1; i < lg.length; i++) w.push(`${lg[i - 1]}/${lg[i]}`);
   const legUse = [{ n: 0 }, { n: 0 }, { n: 0 }, { n: 0 }];
   const legTap = (j: number) => tap(legRails[j], legUse[j]);
@@ -1486,10 +1515,10 @@ export function tetrisCircuit(rows = 8): {
   // left needs no wide stage). Refusal returns collect on matrix groups
   // (two chained for the both-direction positions) and re-latch the
   // current master through its coil jack's spare hole.
-  // return groups grown in 3b-3b: the mode hops (LTS/LTZ/bounds) add up
-  // to five refusal throws per position — a uniform tap allocator now
-  // (the old hand-split 1/2/2 chains overflowed the moment they grew)
-  const retNode = [takeGroups(2), takeGroups(3), takeGroups(3)];
+  // return groups grown in 3b-3b (the mode hops add refusal throws; the
+  // old hand-split 1/2/2 chains overflowed the moment they grew) and
+  // again in 3b-4b (the triple legs): a uniform tap allocator
+  const retNode = [takeGroups(3), takeGroups(4), takeGroups(3)];
   for (const g of retNode) for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
   const retUse = [{ n: 0 }, { n: 0 }, { n: 0 }];
   const retTap = (p: number) => tap(retNode[p], retUse[p]);
@@ -1511,13 +1540,23 @@ export function tetrisCircuit(rows = 8): {
     if (c === 1) {
       w.push(`${R(LEGINVT(1), 'J')}/${R(LTS(0), 'H')}`);
       w.push(`${R(LTS(0), 'G')}/${retTap(0)}`); // S: top-0 occupied
-      w.push(`${R(LTS(0), 'J')}/${R(vm, 'J')}`); // free: join X
+      // 3b-4b: J1's stem target (top col 3) and the triple bottom's
+      // entering column (bottom col 3) ride behind the S hop; T1's
+      // target (top col 2) is the existing point-2 check, for free
+      w.push(`${R(LTS(0), 'J')}/${R(LTJ(1), 'H')}`);
+      w.push(`${R(LTJ(1), 'G')}/${retTap(0)}`); // J1: top-3 occupied
+      w.push(`${R(LTJ(1), 'J')}/${R(LTB3, 'H')}`);
+      w.push(`${R(LTB3, 'G')}/${retTap(0)}`); // triple: bottom-3 occupied
+      w.push(`${R(LTB3, 'J')}/${R(vm, 'J')}`); // free: join X
     } else {
       w.push(`${R(LEGINVT(2), 'J')}/${R(LTS(1), 'H')}`);
       w.push(`${R(LTS(1), 'G')}/${retTap(1)}`); // S: top-1 occupied
       w.push(`${R(LTS(1), 'J')}/${R(ZG(3), 'L')}`);
       w.push(`${R(ZG(3), 'K')}/${retTap(1)}`); // the Z bound: refuse
-      w.push(`${R(ZG(3), 'N')}/${R(vm, 'J')}`); // free: join X
+      // 3b-4b: the triple bound — a 3-wide bottom cannot enter pos 2
+      w.push(`${R(ZG(3), 'N')}/${R(TRPM(1), 'L')}`);
+      w.push(`${R(TRPM(1), 'K')}/${retTap(1)}`);
+      w.push(`${R(TRPM(1), 'N')}/${R(vm, 'J')}`); // free: join X
     }
     w.push(`${R(vm, 'J')}/${R(WIDM3, wArm)}`); // X: the wide fork
     w.push(`${R(WIDM3, wNc)}/${comOf(POSA(c))}`); // narrow: step
@@ -1570,7 +1609,12 @@ export function tetrisCircuit(rows = 8): {
       w.push(`${R(LTZ(0), 'G')}/${retTap(1)}`); // Z: top-1 occupied
       w.push(`${R(LTZ(0), 'J')}/${R(LTZ(1), 'H')}`);
       w.push(`${R(LTZ(1), 'G')}/${retTap(1)}`); // Z: top-2 occupied
-      w.push(`${R(LTZ(1), 'J')}/${R(vm, vNc)}`); // free: join the step wire
+      // 3b-4b: the triples' stem targets (T1 top-1, J1 top-2)
+      w.push(`${R(LTZ(1), 'J')}/${R(LTT(0), 'H')}`);
+      w.push(`${R(LTT(0), 'G')}/${retTap(1)}`); // T1: top-1 occupied
+      w.push(`${R(LTT(0), 'J')}/${R(LTJ(0), 'H')}`);
+      w.push(`${R(LTJ(0), 'G')}/${retTap(1)}`); // J1: top-2 occupied
+      w.push(`${R(LTJ(0), 'J')}/${R(vm, vNc)}`); // free: join the step wire
     } else if (c === 1) {
       w.push(`${R(LEGINVT(1), 'N')}/${R(LTS(0), 'L')}`);
       w.push(`${R(LTS(0), 'K')}/${retTap(2)}`); // S: top-0 occupied
@@ -1578,7 +1622,12 @@ export function tetrisCircuit(rows = 8): {
       w.push(`${R(LTZ(1), 'K')}/${retTap(2)}`); // Z: top-2 occupied
       w.push(`${R(LTZ(1), 'N')}/${R(LTZ(3), 'L')}`);
       w.push(`${R(LTZ(3), 'K')}/${retTap(2)}`); // Z: top-3 occupied
-      w.push(`${R(LTZ(3), 'N')}/${R(vm, vNc)}`); // free: join the step wire
+      // 3b-4b: the triples' stem targets (T1 top-2, J1 top-3)
+      w.push(`${R(LTZ(3), 'N')}/${R(LTT(1), 'L')}`);
+      w.push(`${R(LTT(1), 'K')}/${retTap(2)}`); // T1: top-2 occupied
+      w.push(`${R(LTT(1), 'N')}/${R(LTJ(1), 'L')}`);
+      w.push(`${R(LTJ(1), 'K')}/${retTap(2)}`); // J1: top-3 occupied
+      w.push(`${R(LTJ(1), 'N')}/${R(vm, vNc)}`); // free: join the step wire
     } else {
       w.push(`${R(LEGINVT(2), 'N')}/${R(LTS(1), 'L')}`);
       w.push(`${R(LTS(1), 'N')}/${R(LTZ(3), 'H')}`);
@@ -1848,9 +1897,14 @@ export function tetrisCircuit(rows = 8): {
   // into the legality section above). LTS/LTZ coils are top-rail reads
   // gated AT THE COIL by a state contact: dead in every other mode, so
   // their NC hops in the trees pass through.
-  w.push(`${R(SM(3), 'E')}/${R(SG(0), 'E')}`, `${R(SG(0), 'E')}/${R(SG(1), 'E')}`);
-  w.push(`${R(ZM(3), 'E')}/${R(ZG(0), 'E')}`, `${R(ZG(0), 'E')}/${R(ZG(1), 'E')}`);
-  w.push(`${R(ZG(1), 'E')}/${R(ZG(2), 'E')}`, `${R(ZG(2), 'E')}/${R(ZG(3), 'E')}`);
+  // 3b-4b re-classed the gates: SG(0) (the NOT gate on LEGINVT2) mirrors
+  // SLJ = S|L1|J1 now; ZG(0,1) (the NOT gates on LEGINVT) mirror ZJT =
+  // Z|J1|T1. SG(1) (the LTS coil gates) and ZG(2,3) (LTZ gates + the Z
+  // bound) stay pure S / Z mirrors on re-routed chains.
+  w.push(`${R(SM(3), 'E')}/${R(SG(1), 'E')}`, `${R(SG(1), 'E')}/${R(SM2, 'E')}`);
+  w.push(`${R(SLJ, 'E')}/${R(SG(0), 'E')}`);
+  w.push(`${R(ZM(3), 'E')}/${R(ZM2, 'E')}`, `${R(ZM2, 'E')}/${R(ZG(2), 'E')}`, `${R(ZG(2), 'E')}/${R(ZG(3), 'E')}`);
+  w.push(`${R(ZJT, 'E')}/${R(ZG(0), 'E')}`, `${R(ZG(0), 'E')}/${R(ZG(1), 'E')}`);
   for (const m of [SG(0), SG(1), ZG(0), ZG(1), ZG(2), ZG(3), LTS(0), LTS(1), LTZ(0), LTZ(1), LTZ(2), LTZ(3)])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
   // S-gated reads (coil = rail AND S): columns 0 and 1
@@ -1944,7 +1998,7 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${R(UTR(0), 'E')}/${R(UTR2(0), 'E')}`);
   w.push(`${R(UTR(2), 'E')}/${R(UTR2(1), 'E')}`);
   w.push(`${R(UTR(4), 'E')}/${R(UTR2(2), 'E')}`);
-  for (const m of [MMIR2(6), MMIR2(7), MMIR2(8), POSM5(0), POSM5(1), POSM5(2), POSM5(3), POSM5(4), POSM5(5), POSM5(6), POSM5(7), UTR2(0), UTR2(1), UTR2(2), TRP, TRPM(0), TRPM(1), L1M(0), L1M(1), J1M(0), J1M(1), T1M(0), T1M(1), WID3M, NSC])
+  for (const m of [MMIR2(6), MMIR2(7), MMIR2(8), POSM5(0), POSM5(1), POSM5(2), POSM5(3), POSM5(4), POSM5(5), POSM5(6), POSM5(7), UTR2(0), UTR2(1), UTR2(2), TRP, TRPM(0), TRPM(1), L1M(0), L1M(1), J1M(0), J1M(1), T1M(0), T1M(1), WID3M])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
   // the TRP coil: a wired-OR of one contact per new state
   w.push(`${plusOf(L1M(0))}/${R(L1M(0), 'H')}`, `${plusOf(J1M(0))}/${R(J1M(0), 'H')}`, `${plusOf(T1M(0))}/${R(T1M(0), 'H')}`);
@@ -1957,7 +2011,7 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${R(ZM(2), 'K')}/${R(TRPM(0), 'G')}`, `${R(TRPM(0), 'G')}/${R(VMODEM(3), 'E')}`);
   w.push(`${R(ZM(3), 'G')}/${R(TRPM(0), 'K')}`, `${R(TRPM(0), 'K')}/${R(STAGM2, 'E')}`);
   w.push(`${plusOf(TRPM(1))}/${R(TRPM(1), 'H')}`, `${R(TRPM(1), 'G')}/${R(WID3M, 'E')}`);
-  w.push(`${plusOf(TRPM(1))}/${R(TRPM(1), 'L')}`, `${R(TRPM(1), 'K')}/${R(NSC, 'E')}`);
+  // (TRPM(1)'s second set is the 3b-4b triple bound in the right-into-2 tree)
   // the B fan's third column: pos(j-2) AND WID3 -> the PIECE(j) coil
   // nets, entering at the WIDM-branch output jacks' free holes
   w.push(`${plusOf(WID3M)}/${R(WID3M, 'H')}`, `${R(WID3M, 'G')}/${R(POSM5(0), 'H')}`, `${R(POSM5(0), 'G')}/${R(WIDM, 'K')}`);
@@ -1992,6 +2046,26 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${R(UTR2(1), 'J')}/${R(UTR2(2), 'J')}`, `${R(UTR2(2), 'J')}/${R(UTR(6), 'N')}`);
   w.push(`${R(UTR(6), 'N')}/${R(UTR(2), 'N')}`, `${R(UTR(2), 'N')}/${R(UTR(4), 'N')}`);
   w.push(`${R(UTR(4), 'N')}/${shrClkCom(0)}`);
+
+  // ---------- 3b-4b coils: the re-classed gates and triple reads ------
+  // mirror chains for the extra contacts
+  w.push(`${R(J1M(1), 'E')}/${R(J1M2, 'E')}`, `${R(J1M2, 'E')}/${R(J1M3, 'E')}`);
+  w.push(`${R(T1M(1), 'E')}/${R(T1M2, 'E')}`);
+  // ZJT = Z|J1|T1 and SLJ = S|L1|J1, one contact per state, wired-OR
+  w.push(`${plusOf(ZM2)}/${R(ZM2, 'H')}`, `${plusOf(J1M(1))}/${R(J1M(1), 'L')}`, `${plusOf(T1M(1))}/${R(T1M(1), 'L')}`);
+  w.push(`${R(ZM2, 'G')}/${R(J1M(1), 'K')}`, `${R(J1M(1), 'K')}/${R(T1M(1), 'K')}`, `${R(T1M(1), 'K')}/${R(ZJT, 'E')}`);
+  w.push(`${plusOf(SM2)}/${R(SM2, 'H')}`, `${plusOf(L1M(1))}/${R(L1M(1), 'L')}`, `${plusOf(J1M2)}/${R(J1M2, 'H')}`);
+  w.push(`${R(SM2, 'G')}/${R(L1M(1), 'K')}`, `${R(L1M(1), 'K')}/${R(J1M2, 'G')}`, `${R(J1M2, 'G')}/${R(SLJ, 'E')}`);
+  // J1-only top reads (coil = rail AND J1): cols 2 and 3
+  w.push(`${legTTap(2)}/${R(J1M2, 'L')}`, `${R(J1M2, 'K')}/${R(LTJ(0), 'E')}`);
+  w.push(`${legTTap(3)}/${R(J1M3, 'H')}`, `${R(J1M3, 'G')}/${R(LTJ(1), 'E')}`);
+  // T1-only top reads: cols 1 and 2
+  w.push(`${legTTap(1)}/${R(T1M2, 'H')}`, `${R(T1M2, 'G')}/${R(LTT(0), 'E')}`);
+  w.push(`${legTTap(2)}/${R(T1M2, 'L')}`, `${R(T1M2, 'K')}/${R(LTT(1), 'E')}`);
+  // the triple-only bottom read of col 3 (TRP's spare set gates it)
+  w.push(`${legTap(3)}/${R(TRP, 'L')}`, `${R(TRP, 'K')}/${R(LTB3, 'E')}`);
+  for (const m of [ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2, LTJ(0), LTJ(1), LTT(0), LTT(1), LTB3])
+    w.push(`${R(m, 'F')}/${minusOf(m)}`);
 
   return { wires: w, rails: dataRails, layout: L, btnMachine };
 }
