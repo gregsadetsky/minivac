@@ -367,6 +367,25 @@ overhang fans (3b-4c section), + their pos-mirror class maps.
 the UP-TRANSITION emitter (the other fence-holder) comes after; its
 delta-check structure reuses the same pos banks.
 
+## the fan emitters LANDED (bring-up log, 16:56Z)
+
+B fan: base = BCUT.NC -> chained POSS arms -> K outputs into PIECE(j).E
+(cols-general); wide/third taps mint from banks fed THROUGH the retired
+fork relays' freed sets (WIDM4.set1 -> FANWIDM, WID3M.set1 -> FANWID3 —
+the WIDM/WID3M coil nets are hole-saturated by slide feeds + splices,
+so parallel-coiling could not enter). T fan: four offset rails with the
+STAGGER predicate (top != bottom footprint — symmetric states write
+phase 2 through the B fan; that predicate was bring-up bug #4), rail-
+mirror x pos-mirror private pairs per column, outputs chained into
+PIECET(j).E's one hole. FANPOS(0) feeds through POSM2(0)'s freed set2
+(pos 0's slave E carries the home set); FANPOS(1..) parallel POSS(p).E.
+bring-up bugs the asserts caught: a silent no-op python replace left
+old caps live (VERIFY REPLACES — assert the target exists); POSS(0).E
+home-set hole; WIDM net saturation; POSM2 chain saturation; the
+stagger predicate; the deleted base outputs (walk caught cols 1,2 lit
+and col 0 dark). walk + all lock (7) + staggered (3) green; full file
+running.
+
 ## the UP-transition emitter, spec (16:55Z — surveyed 2038-2110+)
 
 structure per transition into-i: MMIR(i) contact (root chain off UPM)

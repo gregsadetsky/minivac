@@ -427,6 +427,9 @@ export interface TetrisLayout {
   STPUNION: number; STPUNION_CAP: number;
   STPUGATE: number; STPUGATE_CAP: number;
   STPREAD: number; STPREAD_CAP: number;
+  FANPOS: number; FANPOS_CAP: number;
+  FANRAIL: number; FANRAIL_CAP: number;
+  FANMIR: number; FANMIR_CAP: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -511,6 +514,10 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const stpUnionBase = take(10); // the union rails (B0..WALLB)
   const stpUGateBase = take(12 * (cols - 1)); // union mirrors: per-tree gate contacts
   const stpReadBase = take(8 * (cols - 1)); // the gated read pool
+  // the fan emitter's banks (B/T fans as offset rails x pos taps)
+  const fanPosBase = take(4 * cols); // per-position mirror banks
+  const fanRailBase = take(4); // T-fan offset rails (T-1, T0, T1, T2)
+  const fanMirBase = take(6 * Math.ceil(cols / 2) + 8); // rail mirrors (private tap sets)
   return {
     rows,
     cols,
@@ -591,6 +598,9 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     STPUNION: stpUnionBase, STPUNION_CAP: 10,
     STPUGATE: stpUGateBase, STPUGATE_CAP: 12 * (cols - 1),
     STPREAD: stpReadBase, STPREAD_CAP: 8 * (cols - 1),
+    FANPOS: fanPosBase, FANPOS_CAP: 4 * cols,
+    FANRAIL: fanRailBase, FANRAIL_CAP: 4,
+    FANMIR: fanMirBase, FANMIR_CAP: 6 * Math.ceil(cols / 2) + 8,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -693,6 +703,9 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let k = 0; k < L8.STPUNION_CAP; k++) claim('STPUNION', L8.STPUNION + k);
   for (let k = 0; k < L8.STPUGATE_CAP; k++) claim('STPUGATE', L8.STPUGATE + k);
   for (let k = 0; k < L8.STPREAD_CAP; k++) claim('STPREAD', L8.STPREAD + k);
+  for (let k = 0; k < L8.FANPOS_CAP; k++) claim('FANPOS', L8.FANPOS + k);
+  for (let k = 0; k < L8.FANRAIL_CAP; k++) claim('FANRAIL', L8.FANRAIL + k);
+  for (let k = 0; k < L8.FANMIR_CAP; k++) claim('FANMIR', L8.FANMIR + k);
 
 }
 
@@ -1440,7 +1453,6 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${R(rr, nc)}/${R(POSS(j), 'H')}`, `${R(POSS(j), 'G')}/${comOf(POSS(j))}`);
     w.push(`${comOf(POSS(j))}/${R(POSS(j), 'E')}`, `${R(POSS(j), 'F')}/${minusOf(POSS(j))}`);
     w.push(`${comOf(POSS(j))}/${R(POSM(j), 'E')}`, `${R(POSM(j), 'F')}/${minusOf(POSM(j))}`);
-    w.push(`${R(POSS(j), 'K')}/${R(PIECE(j), 'E')}`);
   }
   // re-home on the RESET tick (piece death), NOT the spawn tick: a
   // spawn-tick reset would flip the register mid-tick under a merged
@@ -1485,9 +1497,6 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${R(POSM(j), 'E')}/${R(POSM2(j), 'E')}`, `${R(POSM2(j), 'F')}/${minusOf(POSM2(j))}`);
     w.push(`${plusOf(POSM2(j))}/${R(POSM2(j), 'H')}`);
   }
-  w.push(`${R(POSM2(0), 'G')}/${R(WIDM, 'H')}`, `${R(WIDM, 'G')}/${R(PIECE(1), 'E')}`);
-  w.push(`${R(POSM2(1), 'G')}/${R(WIDM, 'L')}`, `${R(WIDM, 'K')}/${R(PIECE(2), 'E')}`);
-  w.push(`${R(POSM2(2), 'G')}/${R(WIDM2, 'H')}`, `${R(WIDM2, 'G')}/${R(PIECE(3), 'E')}`);
 
   // ---------- the piece register, increment 2: lateral legality ----------
   // "Buttons request, contacts decide" — the same doctrine as the fall.
@@ -1606,7 +1615,11 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     // with cols: L2 = 4 members + (cols-1) bypasses + (cols-3) reads,
     // T2 = 4 + (cols-1) + (cols-1), S = 4 + (cols-2), J1 = 3 + (cols-2)
     // state 0 (1x1) also anchors the LEGACY pairs: five more sets
-    const caps = [3, 1, 2, 2, Math.ceil((cols + 2) / 2), 2, 2, Math.ceil((cols + 1) / 2), 2, cols + 1, 2, cols + 2];
+    // tree memberships + per-tree singles + the FAN rails' memberships
+    // + the legacy gates; growing states get a (cols-4) term; the bank
+    // asserts catch any drift
+    const capg = Math.max(0, cols - 4);
+    const caps = [4, 1, 2, 3, 4 + capg, 3, 3, 3 + capg, 3, 6 + capg, 4, 7 + capg];
     let off = 0;
     for (let i = 0; i < NSTATES; i++) {
       stBanks.push(
@@ -1765,6 +1778,108 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       }
       w.push(`${pending[0]}/${comOf(POSA(c))}`);
     }
+  }
+  // ---------- the fan emitters: B and T fans as offset rails ----------
+  // the hand's B fan was ALREADY this factorization (base + WIDM + WID3
+  // rails with BCUT as the offset-bottom suppression); the T fan becomes
+  // its mirror: per offset d, a rail = union of states whose top span
+  // covers d, and per column j a PRIVATE series pair (pos p=j-d AND a
+  // rail-mirror set) into PIECET(j).E — same backfeed safety as the
+  // hand's per-state pairs (every tap is two private contact sets; the
+  // one-hot register means a dead rail ties at most one coil net).
+  // the legacy slide modes ride as pairs on VMODEM(2)/WIDM4 free sets.
+  const fanPos: MirrorBank[] = [];
+  for (let p = 0; p < cols; p++) {
+    if (p === 0) {
+      // pos 0's slave E carries the home-set wire (full): feed the bank
+      // through POSM2(0)'s freed set2 instead (the old T fan spent it)
+      fanPos.push(new MirrorBank({ name: 'FANPOS0', source: null, base: L.FANPOS, capacity: 4, w, R, minusOf }));
+      w.push(`${plusOf(POSM2(0))}/${R(POSM2(0), 'L')}`, `${R(POSM2(0), 'K')}/${R(L.FANPOS, 'E')}`);
+    } else {
+      fanPos.push(new MirrorBank({ name: `FANPOS${p}`, source: POSS(p), base: L.FANPOS + 4 * p, capacity: 4, w, R, minusOf }));
+    }
+  }
+  // the B fan: base = the chained POSS arms behind BCUT's NC (offset
+  // bottoms suppress it); wide/third-column taps mint from mirror banks
+  // on the WIDM / WID3M compatibility nets (slide OR ring by the splices)
+  w.push(`${plusOf(BCUT)}/${R(BCUT, 'H')}`, `${R(BCUT, 'J')}/${R(POSS(0), 'L')}`);
+  for (let j = 1; j < cols; j++) w.push(`${R(POSS(j - 1), 'L')}/${R(POSS(j), 'L')}`);
+  for (let j = 0; j < cols; j++) w.push(`${R(POSS(j), 'K')}/${R(PIECE(j), 'E')}`); // the base outputs
+  // the WIDM / WID3M coil nets are hole-saturated (slide feeds + splices)
+  // so the tap banks mirror THROUGH a retired fork contact instead of
+  // parallel-coiling: + -> WIDM4.set1 (freed by the tree emitter) -> the
+  // bank's coil chain; same signal, one freed contact set each
+  const widmBank = new MirrorBank({ name: 'FANWIDM', source: null, base: L.FANMIR, capacity: Math.ceil(cols / 2), w, R, minusOf });
+  w.push(`${plusOf(WIDM4)}/${R(WIDM4, 'H')}`, `${R(WIDM4, 'G')}/${R(L.FANMIR, 'E')}`);
+  const wid3Bank = new MirrorBank({ name: 'FANWID3', source: null, base: L.FANMIR + Math.ceil(cols / 2), capacity: Math.ceil(cols / 2), w, R, minusOf });
+  w.push(`${plusOf(WID3M)}/${R(WID3M, 'H')}`, `${R(WID3M, 'G')}/${R(L.FANMIR + Math.ceil(cols / 2), 'E')}`);
+  for (let j = 1; j < cols; j++) {
+    const bOuts: string[] = [];
+    {
+      const wm = widmBank.request('gate');
+      const pm = fanPos[j - 1].request('gate');
+      w.push(`${plusOf(wm.relay)}/${R(wm.relay, wm.arm)}`);
+      w.push(`${R(wm.relay, wm.no)}/${R(pm.relay, pm.arm)}`);
+      bOuts.push(R(pm.relay, pm.no));
+    }
+    if (j >= 2) {
+      const tm = wid3Bank.request('gate');
+      const pm = fanPos[j - 2].request('gate');
+      w.push(`${plusOf(tm.relay)}/${R(tm.relay, tm.arm)}`);
+      w.push(`${R(tm.relay, tm.no)}/${R(pm.relay, pm.arm)}`);
+      bOuts.push(R(pm.relay, pm.no));
+    }
+    for (let k = 1; k < bOuts.length; k++) w.push(`${bOuts[k - 1]}/${bOuts[k]}`);
+    w.push(`${bOuts[bOuts.length - 1]}/${R(PIECE(j), 'E')}`);
+  }
+  // the T fan: offset rails from the geometry (members = states whose
+  // top span covers the offset), one rail relay + a mirror bank each
+  const tRailBanks: Array<{ bank: MirrorBank; d: number }> = [];
+  {
+    let railN = 0;
+    let mirOff = 2 * Math.ceil(cols / 2);
+    for (const d of [-1, 0, 1, 2]) {
+      const members: number[] = [];
+      for (let i = 0; i < NSTATES; i++) {
+        const sh = SHAPES[i];
+        // STAGGERED states only: a symmetric top (2tall, O, the legacy
+        // slide-talls) writes phase 2 through the B fan — the T fan
+        // exists exactly for tops that DIFFER from the bottom footprint
+        const staggered = sh.tW > 0 && (sh.tOff !== sh.bOff || sh.tW !== sh.bW);
+        if (staggered && d >= sh.tOff && d < sh.tOff + sh.tW) members.push(i);
+      }
+      const u = L.FANRAIL + railN++;
+      let prev: string | null = null;
+      for (const si of members) {
+        const cs = stBanks[si].request('gate');
+        w.push(`${plusOf(cs.relay)}/${R(cs.relay, cs.arm)}`);
+        if (prev !== null) w.push(`${prev}/${R(cs.relay, cs.no)}`);
+        prev = R(cs.relay, cs.no);
+      }
+      // (no legacy pairs here: the legacy slide-talls are SYMMETRIC, so
+      // their phase-2 top rides the B fan; legacy STAG tops come from
+      // the TOPMASK slides directly)
+      w.push(`${prev as string}/${R(u, 'E')}`, `${R(u, 'F')}/${minusOf(u)}`);
+      const bank = new MirrorBank({ name: `FANT${d}`, source: u, base: L.FANMIR + mirOff, capacity: Math.ceil(cols / 2) + 1, w, R, minusOf });
+      mirOff += Math.ceil(cols / 2) + 1;
+      if (mirOff > L.FANMIR_CAP) throw new Error('fan mirrors overflow');
+      tRailBanks.push({ bank, d });
+    }
+  }
+  // per column: chain the tap outputs and enter the coil net once
+  for (let j = 0; j < cols; j++) {
+    const outs: string[] = [];
+    for (const { bank, d } of tRailBanks) {
+      const p = j - d;
+      if (p < 0 || p >= cols) continue;
+      const rm = bank.request('gate');
+      const pm = fanPos[p].request('gate');
+      w.push(`${plusOf(rm.relay)}/${R(rm.relay, rm.arm)}`);
+      w.push(`${R(rm.relay, rm.no)}/${R(pm.relay, pm.arm)}`);
+      outs.push(R(pm.relay, pm.no));
+    }
+    for (let k = 1; k < outs.length; k++) w.push(`${outs[k - 1]}/${outs[k]}`);
+    if (outs.length > 0) w.push(`${outs[outs.length - 1]}/${R(PIECET(j), 'E')}`);
   }
 
   // ---------- game over: the stack topped out ----------
@@ -2002,19 +2117,9 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // first multivac counter's trap). Multi-branch columns chain their
   // outputs; each PIECET(j).E takes one wire at its free hole.
   // T(0) = S & pos1
-  w.push(`${plusOf(SM(0))}/${R(SM(0), 'H')}`, `${R(SM(0), 'G')}/${R(POSM2(1), 'L')}`, `${R(POSM2(1), 'K')}/${R(PIECET(0), 'E')}`);
   // T(1) = S & pos1  |  S & pos2  |  Z & pos0
-  w.push(`${plusOf(SM(0))}/${R(SM(0), 'L')}`, `${R(SM(0), 'K')}/${R(POSM3(1), 'H')}`);
-  w.push(`${plusOf(SM(1))}/${R(SM(1), 'H')}`, `${R(SM(1), 'G')}/${R(POSM2(2), 'L')}`);
-  w.push(`${plusOf(ZM(0))}/${R(ZM(0), 'H')}`, `${R(ZM(0), 'G')}/${R(POSM2(0), 'L')}`);
-  w.push(`${R(POSM3(1), 'G')}/${R(POSM2(2), 'K')}`, `${R(POSM2(2), 'K')}/${R(POSM2(0), 'K')}`, `${R(POSM2(0), 'K')}/${R(PIECET(1), 'E')}`);
   // T(2) = S & pos2  |  Z & pos0  |  Z & pos1
-  w.push(`${plusOf(SM(1))}/${R(SM(1), 'L')}`, `${R(SM(1), 'K')}/${R(POSM3(3), 'H')}`);
-  w.push(`${plusOf(ZM(0))}/${R(ZM(0), 'L')}`, `${R(ZM(0), 'K')}/${R(POSM3(0), 'H')}`);
-  w.push(`${plusOf(ZM(1))}/${R(ZM(1), 'H')}`, `${R(ZM(1), 'G')}/${R(POSM3(1), 'L')}`);
-  w.push(`${R(POSM3(3), 'G')}/${R(POSM3(0), 'G')}`, `${R(POSM3(0), 'G')}/${R(POSM3(1), 'K')}`, `${R(POSM3(1), 'K')}/${R(PIECET(2), 'E')}`);
   // T(3) = Z & pos1
-  w.push(`${plusOf(ZM(1))}/${R(ZM(1), 'L')}`, `${R(ZM(1), 'K')}/${R(POSM3(2), 'H')}`, `${R(POSM3(2), 'G')}/${R(PIECET(3), 'E')}`);
 
   // ---------- 3b-3b coils: the mode gates and mode-only top reads ------
   // SG mirrors chain off the S state net, ZG off the Z net (their NC/NO
@@ -2140,19 +2245,11 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // (TRPM(1)'s second set is the 3b-4b triple bound in the right-into-2 tree)
   // the B fan's third column: pos(j-2) AND WID3 -> the PIECE(j) coil
   // nets, entering at the WIDM-branch output jacks' free holes
-  w.push(`${plusOf(WID3M)}/${R(WID3M, 'H')}`, `${R(WID3M, 'G')}/${R(POSM5(0), 'H')}`, `${R(POSM5(0), 'G')}/${R(WIDM, 'K')}`);
-  w.push(`${plusOf(WID3M)}/${R(WID3M, 'L')}`, `${R(WID3M, 'K')}/${R(POSM5(4), 'H')}`, `${R(POSM5(4), 'G')}/${R(WIDM2, 'G')}`);
   // the T fan: per-state private pairs onto the column nets' free holes
   // T(0) += L1 & pos0
-  w.push(`${plusOf(L1M(0))}/${R(L1M(0), 'L')}`, `${R(L1M(0), 'K')}/${R(POSM5(0), 'L')}`, `${R(POSM5(0), 'K')}/${R(POSM2(1), 'K')}`);
   // T(1) += T1 & pos0  |  L1 & pos1
-  w.push(`${plusOf(T1M(0))}/${R(T1M(0), 'L')}`, `${R(T1M(0), 'K')}/${R(POSM5(1), 'L')}`, `${R(POSM5(1), 'K')}/${R(POSM3(1), 'G')}`);
-  w.push(`${plusOf(L1M(1))}/${R(L1M(1), 'H')}`, `${R(L1M(1), 'G')}/${R(POSM5(4), 'L')}`, `${R(POSM5(4), 'K')}/${R(POSM5(1), 'K')}`);
   // T(2) += J1 & pos0  |  T1 & pos1
-  w.push(`${plusOf(J1M(0))}/${R(J1M(0), 'L')}`, `${R(J1M(0), 'K')}/${R(POSM5(1), 'H')}`, `${R(POSM5(1), 'G')}/${R(POSM3(3), 'G')}`);
-  w.push(`${plusOf(T1M(1))}/${R(T1M(1), 'H')}`, `${R(T1M(1), 'G')}/${R(POSM5(5), 'L')}`, `${R(POSM5(5), 'K')}/${R(POSM5(1), 'G')}`);
   // T(3) += J1 & pos1
-  w.push(`${plusOf(J1M(1))}/${R(J1M(1), 'H')}`, `${R(J1M(1), 'G')}/${R(POSM5(5), 'H')}`, `${R(POSM5(5), 'G')}/${R(POSM3(2), 'G')}`);
   // transitions into 6/7/8: the root chain extends, each branch reads
   // the target's delta cells (Z->L1 grows bottom p+2 AND top p; L1->J1
   // moves the top stem p -> p+2; J1->T1 moves it p+2 -> p+1)
@@ -2205,8 +2302,6 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(BCUT, 'E')}/${R(BCUTM, 'E')}`);
   // the base-column cut: ONE contact ahead of the chained POSS arms
   // (one-hot slaves make the shared arm net legal)
-  w.push(`${plusOf(BCUT)}/${R(BCUT, 'H')}`, `${R(BCUT, 'J')}/${R(POSS(0), 'L')}`);
-  w.push(`${R(POSS(0), 'L')}/${R(POSS(1), 'L')}`, `${R(POSS(1), 'L')}/${R(POSS(2), 'L')}`, `${R(POSS(2), 'L')}/${R(POSS(3), 'L')}`);
   // rails: T2 joins WIDM (at TRP.G's free hole), L2 joins WID3; VMODE and
   // STAG gain one TT contact each (spliced into the 4a links)
   w.push(`${plusOf(T2M(1))}/${R(T2M(1), 'H')}`, `${R(T2M(1), 'G')}/${R(TRP, 'G')}`);
@@ -2215,14 +2310,6 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(TRPM(0), 'G')}/${R(TTM(0), 'G')}`, `${R(TTM(0), 'G')}/${R(VMODEM(3), 'E')}`);
   w.push(`${R(TRPM(0), 'K')}/${R(TTM(0), 'K')}`, `${R(TTM(0), 'K')}/${R(STAGM2, 'E')}`);
   // the T fan: six TT x pos branches onto the column nets' free holes
-  w.push(`${plusOf(TTM(1))}/${R(TTM(1), 'H')}`, `${R(TTM(1), 'G')}/${R(POSM5(3), 'L')}`, `${R(POSM5(3), 'K')}/${R(POSM5(0), 'K')}`);
-  w.push(`${plusOf(TTM(1))}/${R(TTM(1), 'L')}`, `${R(TTM(1), 'K')}/${R(POSM6(0), 'H')}`);
-  w.push(`${plusOf(TTM(2))}/${R(TTM(2), 'H')}`, `${R(TTM(2), 'G')}/${R(POSM5(7), 'L')}`);
-  w.push(`${R(POSM6(0), 'G')}/${R(POSM5(7), 'K')}`, `${R(POSM5(7), 'K')}/${R(POSM5(4), 'K')}`);
-  w.push(`${plusOf(TTM(2))}/${R(TTM(2), 'L')}`, `${R(TTM(2), 'K')}/${R(POSM6(0), 'L')}`);
-  w.push(`${plusOf(TTM(3))}/${R(TTM(3), 'H')}`, `${R(TTM(3), 'G')}/${R(POSM6(3), 'H')}`);
-  w.push(`${R(POSM6(0), 'K')}/${R(POSM6(3), 'G')}`, `${R(POSM6(3), 'G')}/${R(POSM5(5), 'K')}`);
-  w.push(`${plusOf(TTM(3))}/${R(TTM(3), 'L')}`, `${R(TTM(3), 'K')}/${R(POSM6(3), 'L')}`, `${R(POSM6(3), 'K')}/${R(POSM5(5), 'G')}`);
   // pos mirror chains for the new contacts
   w.push(`${R(POSM5(3), 'E')}/${R(POSM6(0), 'E')}`, `${R(POSM6(0), 'E')}/${R(POSM6(1), 'E')}`, `${R(POSM6(1), 'E')}/${R(POSM6(2), 'E')}`);
   w.push(`${R(POSM5(7), 'E')}/${R(POSM6(3), 'E')}`, `${R(POSM6(3), 'E')}/${R(POSM6(4), 'E')}`, `${R(POSM6(4), 'E')}/${R(POSM6(5), 'E')}`);
