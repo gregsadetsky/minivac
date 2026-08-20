@@ -166,6 +166,21 @@ export const OM = 374; // O-state mirror: WIDB + VMODE rails
 export const I2TM = 375; // 2-tall mirror: VMODE rail
 export const I2WM = 376; // 2-wide mirror: WIDB rail
 export const POSM3 = (k: number) => 377 + k; // T-fan pos mirrors: k=0 pos0, k=1,2 pos1, k=3 pos2 (377..380)
+// 3b-3b — the legality trees re-gated per the TRUE target top columns.
+// key fact: the existing tree checks are false ONLY one mode at a time:
+// every LEGINVT (point-1/left) check is correct for symmetric AND S
+// (S's target top set {c-1,c} contains c) and false only for Z; every
+// LEGINVT2 (wide point-2) check is correct for symmetric AND Z and false
+// only for S. So the trees keep their exact shape: LEGINVT coils gain a
+// NOT-Z gate, LEGINVT2 coils a NOT-S gate (a dead check relay passes
+// through — its NC is closed), and the missing columns insert as plain
+// series hops: LTS = S-gated top reads of c-1, LTZ = Z-gated reads of
+// c+1/c+2, plus two pure BOUNDS checks (S cannot enter pos 0, Z cannot
+// enter pos 2 — an S/Z state mirror's NO straight to the return).
+export const LTS = (k: number) => 381 + k; // S-only top reads: k=0 col0, k=1 col1 (coil = rail AND S)
+export const LTZ = (k: number) => 383 + k; // Z-only top reads: k=0 col1, k=1 col2, k=2,3 col3
+export const SG = (k: number) => 387 + k; // S mirrors: SG(0) = the NOT-S coil gates, SG(1) = the LTS coil gates
+export const ZG = (k: number) => 389 + k; // Z mirrors: ZG(0,1) = NOT-Z coil gates, ZG(2,3) = LTZ gates + the Z bound
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
@@ -174,11 +189,11 @@ export const POSM3 = (k: number) => 377 + k; // T-fan pos mirrors: k=0 pos0, k=1
 // free. (They lived on m40 through the piece rung, sharing sections with
 // relays whose + jacks HAPPENED to be unused; the 12-row layout landed
 // TWIN's + on the shared section and the capacity auditor caught it.)
-export const LEFTBTN = { button: 3, machine: 64 };
-export const RIGHTBTN = { button: 4, machine: 64 };
-export const UPBTN = { button: 2, machine: 64 }; // steps the shape ring (press+release = one step)
-export const WIDSLIDE = { slide: 5, machine: 64 };
-export const MACHINES = 65; // relays through m63.2 + the dedicated button machine m64; m36's coms serve as the junctions
+export const LEFTBTN = { button: 3, machine: 66 };
+export const RIGHTBTN = { button: 4, machine: 66 };
+export const UPBTN = { button: 2, machine: 66 }; // steps the shape ring (press+release = one step)
+export const WIDSLIDE = { slide: 5, machine: 66 };
+export const MACHINES = 67; // relays through m65.2 + the dedicated button machine m66; m36's coms serve as the junctions
 
 // ---- the ROWS-parameterized layout (rung 11 groundwork) ----
 // The same allocation map as the exported constants, laid out sequentially
@@ -243,6 +258,8 @@ export interface TetrisLayout {
   SM: (k: number) => number; ZM: (k: number) => number;
   OM: number; I2TM: number; I2WM: number;
   POSM3: (k: number) => number;
+  LTS: (k: number) => number; LTZ: (k: number) => number;
+  SG: (k: number) => number; ZG: (k: number) => number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -305,6 +322,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const stagBase = take(17); // PIECET x4, CUTC5/6, STAGM, CUTB1..4, CUTBD, LEGB x4, STAGM2
   const shrBase = take(20); // the shape ring: 6 states x (clk, master, slave) + UPM + SHBOOT
   const smBase = take(15); // state mirrors SM x4, ZM x4, OM, I2TM, I2WM + POSM3 x4
+  const ltBase = take(12); // 3b-3b: LTS x2, LTZ x4, SG x2, ZG x4
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -360,6 +378,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
     SM: k => smBase + k, ZM: k => smBase + 4 + k,
     OM: smBase + 8, I2TM: smBase + 9, I2WM: smBase + 10,
     POSM3: k => smBase + 11 + k,
+    LTS: k => ltBase + k, LTZ: k => ltBase + 2 + k,
+    SG: k => ltBase + 6 + k, ZG: k => ltBase + 8 + k,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -433,6 +453,9 @@ export function tetrisLayout(rows: number): TetrisLayout {
   for (let k = 0; k < 4; k++) claim('ZM', ZM(k));
   claim('OM/I2TM/I2WM', OM, I2TM, I2WM);
   for (let k = 0; k < 4; k++) claim('POSM3', POSM3(k));
+  claim('LTS', LTS(0), LTS(1));
+  for (let k = 0; k < 4; k++) claim('LTZ', LTZ(k));
+  claim('SG/ZG', SG(0), SG(1), ZG(0), ZG(1), ZG(2), ZG(3));
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -485,6 +508,9 @@ export function tetrisLayout(rows: number): TetrisLayout {
   eq('UPM', L.UPM, UPM); eq('SHBOOT', L.SHBOOT, SHBOOT);
   for (let k = 0; k < 4; k++) { eq('SM', L.SM(k), SM(k)); eq('ZM', L.ZM(k), ZM(k)); eq('POSM3', L.POSM3(k), POSM3(k)); }
   eq('OM', L.OM, OM); eq('I2TM', L.I2TM, I2TM); eq('I2WM', L.I2WM, I2WM);
+  eq('LTS', L.LTS(0), LTS(0)); eq('LTS', L.LTS(1), LTS(1));
+  for (let k = 0; k < 4; k++) { eq('LTZ', L.LTZ(k), LTZ(k)); eq('ZG', L.ZG(k), ZG(k)); }
+  eq('SG', L.SG(0), SG(0)); eq('SG', L.SG(1), SG(1));
   eq('machines', L.machines, MACHINES);
   eq('btnMachine', L.btnMachine, LEFTBTN.machine);
   eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
@@ -513,6 +539,7 @@ export function tetrisCircuit(rows = 8): {
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, LEGINV2, WIDM3, WIDM4,
     MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
+    LTS, LTZ, SG, ZG,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
   // every anchor that shared a machine with relays eventually collided
@@ -1319,7 +1346,9 @@ export function tetrisCircuit(rows = 8): {
   // rows 1..6 only: row 0 has no row above (the write clips there too)
   // and row 7 is post-lock. dark rails = no top constraint, so flat
   // pieces, no-token steering and the power-on ring never feel this bank.
-  const legTRails = [takeGroups(grown(2, 1)), takeGroups(grown(2, 1)), takeGroups(grown(2, 1)), takeGroups(grown(2, 1))];
+  // grown to 3 base groups in 3b-3b: the mode-gated coil feeds (NOT-Z /
+  // NOT-S gates + the LTS/LTZ reads) add two taps per column
+  const legTRails = [takeGroups(grown(3, 1)), takeGroups(grown(3, 1)), takeGroups(grown(3, 1)), takeGroups(grown(3, 1))];
   for (const lg of legTRails) for (let i = 1; i < lg.length; i++) w.push(`${lg[i - 1]}/${lg[i]}`);
   const legTUse = [{ n: 0 }, { n: 0 }, { n: 0 }, { n: 0 }];
   const legTTap = (j: number) => tap(legTRails[j], legTUse[j]);
@@ -1333,11 +1362,22 @@ export function tetrisCircuit(rows = 8): {
       w.push(`${R(MIRC(r - 1, j < 2 ? 0 : 1), armPrev)}/${R(mt, arm)}`, `${R(mt, no)}/${legTTap(j)}`);
     }
   }
+  // 3b-3b: the top-bank coils are MODE-GATED at the feed — LEGINVT
+  // through a NOT-Z contact (its checks are correct for symmetric AND S:
+  // S's target top set {c-1,c} contains c; false only for Z) and
+  // LEGINVT2 through a NOT-S contact (correct for symmetric AND Z). A
+  // gated-off coil is dead and its NC contacts pass the sample through,
+  // so the tree shapes below stay EXACTLY as they were. Legacy slide-
+  // staggered mode (STAG up, no ring state) keeps the old symmetric
+  // checks, unchanged.
   for (let j = 0; j < 4; j++) {
-    w.push(`${legTTap(j)}/${R(LEGINVT(j), 'E')}`, `${R(LEGINVT(j), 'F')}/${minusOf(LEGINVT(j))}`);
+    const zg = ZG(j < 2 ? 0 : 1);
+    const [zArm, zNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
+    w.push(`${legTTap(j)}/${R(zg, zArm)}`, `${R(zg, zNc)}/${R(LEGINVT(j), 'E')}`);
+    w.push(`${R(LEGINVT(j), 'F')}/${minusOf(LEGINVT(j))}`);
   }
-  w.push(`${R(LEGINVT(2), 'E')}/${R(LEGINVT2(2), 'E')}`, `${R(LEGINVT2(2), 'F')}/${minusOf(LEGINVT2(2))}`);
-  w.push(`${R(LEGINVT(3), 'E')}/${R(LEGINVT2(3), 'E')}`, `${R(LEGINVT2(3), 'F')}/${minusOf(LEGINVT2(3))}`);
+  w.push(`${legTTap(2)}/${R(SG(0), 'H')}`, `${R(SG(0), 'J')}/${R(LEGINVT2(2), 'E')}`, `${R(LEGINVT2(2), 'F')}/${minusOf(LEGINVT2(2))}`);
+  w.push(`${legTTap(3)}/${R(SG(0), 'L')}`, `${R(SG(0), 'N')}/${R(LEGINVT2(3), 'E')}`, `${R(LEGINVT2(3), 'F')}/${minusOf(LEGINVT2(3))}`);
   // vmode mirrors for the tall forks (VMODE's own spare set can't serve
   // six tap trees); coils daisy-chained through the coil jacks
   w.push(`${R(VMODE, 'E')}/${R(VMODEM(0), 'E')}`);
@@ -1357,16 +1397,13 @@ export function tetrisCircuit(rows = 8): {
   // left needs no wide stage). Refusal returns collect on matrix groups
   // (two chained for the both-direction positions) and re-latch the
   // current master through its coil jack's spare hole.
-  const retNode = [
-    takeGroups(1)[0],
-    takeGroups(2),
-    takeGroups(2),
-  ] as const;
-  w.push(`${retNode[1][0]}/${retNode[1][1]}`, `${retNode[2][0]}/${retNode[2][1]}`);
-  const ret = (p: number, k: number) =>
-    p === 0 ? (retNode[0] as string) : (retNode[p] as string[])[k >= 3 ? 1 : 0];
-  const retUse = [0, 0, 0];
-  const retTap = (p: number) => ret(p, retUse[p]++);
+  // return groups grown in 3b-3b: the mode hops (LTS/LTZ/bounds) add up
+  // to five refusal throws per position — a uniform tap allocator now
+  // (the old hand-split 1/2/2 chains overflowed the moment they grew)
+  const retNode = [takeGroups(2), takeGroups(3), takeGroups(3)];
+  for (const g of retNode) for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
+  const retUse = [{ n: 0 }, { n: 0 }, { n: 0 }];
+  const retTap = (p: number) => tap(retNode[p], retUse[p]);
   w.push(`${retTap(0)}/${R(POSA(0), 'E')}`);
   w.push(`${retTap(1)}/${R(POSA(1), 'E')}`);
   w.push(`${retTap(2)}/${R(POSA(2), 'E')}`);
@@ -1378,7 +1415,21 @@ export function tetrisCircuit(rows = 8): {
     w.push(`${R(LEGINV(c), 'J')}/${R(vm, 'H')}`); // free: the tall fork
     w.push(`${R(vm, 'G')}/${R(LEGINVT(c), 'H')}`); // tall: check top-c
     w.push(`${R(LEGINVT(c), 'G')}/${retTap(c - 1)}`); // top-c occupied
-    w.push(`${R(LEGINVT(c), 'J')}/${R(vm, 'J')}`); // top-c free: join X
+    // 3b-3b: S's extra top column (c-1) rides IN SERIES — under any other
+    // mode the LTS coil is dead and its NC passes through. For c=2 the Z
+    // BOUND follows: Z cannot enter pos 2, so ZG(3)'s NO (closed iff the
+    // Z state is up) returns the sample unconditionally.
+    if (c === 1) {
+      w.push(`${R(LEGINVT(1), 'J')}/${R(LTS(0), 'H')}`);
+      w.push(`${R(LTS(0), 'G')}/${retTap(0)}`); // S: top-0 occupied
+      w.push(`${R(LTS(0), 'J')}/${R(vm, 'J')}`); // free: join X
+    } else {
+      w.push(`${R(LEGINVT(2), 'J')}/${R(LTS(1), 'H')}`);
+      w.push(`${R(LTS(1), 'G')}/${retTap(1)}`); // S: top-1 occupied
+      w.push(`${R(LTS(1), 'J')}/${R(ZG(3), 'L')}`);
+      w.push(`${R(ZG(3), 'K')}/${retTap(1)}`); // the Z bound: refuse
+      w.push(`${R(ZG(3), 'N')}/${R(vm, 'J')}`); // free: join X
+    }
     w.push(`${R(vm, 'J')}/${R(WIDM3, wArm)}`); // X: the wide fork
     w.push(`${R(WIDM3, wNc)}/${comOf(POSA(c))}`); // narrow: step
     w.push(`${R(WIDM3, wNo)}/${R(LEGINV2(c + 1), 'H')}`); // wide: bottom-c+1
@@ -1386,8 +1437,16 @@ export function tetrisCircuit(rows = 8): {
     w.push(`${R(LEGINV2(c + 1), 'J')}/${R(vm, 'L')}`); // free: tall fork #2
     w.push(`${R(vm, 'N')}/${R(WIDM3, wNc)}`); // flat-wide: join the step wire
     w.push(`${R(vm, 'K')}/${R(LEGINVT2(c + 1), 'H')}`); // tall-wide: top-c+1
-    w.push(`${R(LEGINVT2(c + 1), 'J')}/${R(vm, 'N')}`); // free: join
     w.push(`${R(LEGINVT2(c + 1), 'G')}/${retTap(c - 1)}`); // occupied
+    // 3b-3b: Z's extra top column (c+2) — only c=1 has one on the board
+    // (c=2's Z was already returned by the bound at point 1)
+    if (c === 1) {
+      w.push(`${R(LEGINVT2(2), 'J')}/${R(LTZ(2), 'H')}`);
+      w.push(`${R(LTZ(2), 'G')}/${retTap(0)}`); // Z: top-3 occupied
+      w.push(`${R(LTZ(2), 'J')}/${R(vm, 'N')}`); // free: join
+    } else {
+      w.push(`${R(LEGINVT2(3), 'J')}/${R(vm, 'N')}`); // free: join
+    }
   }
   w.push(`${R(POSM(2), 'K')}/${R(LEGINV(3), 'H')}`);
   w.push(`${R(LEGINV(3), 'G')}/${retTap(2)}`); // bottom-3 occupied
@@ -1405,18 +1464,44 @@ export function tetrisCircuit(rows = 8): {
     [VMODEM(3), 'H', 'J', 'G'], // into 1
     [VMODEM(3), 'L', 'N', 'K'], // into 2
   ];
+  // 3b-3b: each left tree's tall path gains its mode hops in series after
+  // the (NOT-Z-gated) symmetric check: the S bound (left into 0 is out of
+  // S's fit range) or S's extra column c-1, then Z's true target columns
+  // c+1 / c+2 (dead coils pass through; left into 2 clips c+2 = 4).
   for (const c of [0, 1, 2] as const) {
     const [vm, vArm, vNc, vNo] = leftFork[c];
     w.push(`${R(POSM(c + 1), 'G')}/${R(LEGINV(c), 'L')}`); // the tap in
     w.push(`${R(LEGINV(c), 'N')}/${R(vm, vArm)}`); // bottom free: tall fork
     w.push(`${R(vm, vNc)}/${comOf(POSA(c))}`); // flat: step
     w.push(`${R(vm, vNo)}/${R(LEGINVT(c), 'L')}`); // tall: top-c
-    w.push(`${R(LEGINVT(c), 'N')}/${R(vm, vNc)}`); // free: join the step wire
-    if (c === 2) {
-      // position 3 has no return group: tie both left refusals, one wire
-      w.push(`${R(LEGINV(2), 'K')}/${R(LEGINVT(2), 'K')}`);
-      w.push(`${R(LEGINVT(2), 'K')}/${R(POSA(3), 'E')}`);
+    if (c === 0) {
+      w.push(`${R(LEGINVT(0), 'N')}/${R(SM(3), 'L')}`);
+      w.push(`${R(SM(3), 'K')}/${retTap(1)}`); // the S bound: refuse
+      w.push(`${R(SM(3), 'N')}/${R(LTZ(0), 'H')}`);
+      w.push(`${R(LTZ(0), 'G')}/${retTap(1)}`); // Z: top-1 occupied
+      w.push(`${R(LTZ(0), 'J')}/${R(LTZ(1), 'H')}`);
+      w.push(`${R(LTZ(1), 'G')}/${retTap(1)}`); // Z: top-2 occupied
+      w.push(`${R(LTZ(1), 'J')}/${R(vm, vNc)}`); // free: join the step wire
+    } else if (c === 1) {
+      w.push(`${R(LEGINVT(1), 'N')}/${R(LTS(0), 'L')}`);
+      w.push(`${R(LTS(0), 'K')}/${retTap(2)}`); // S: top-0 occupied
+      w.push(`${R(LTS(0), 'N')}/${R(LTZ(1), 'L')}`);
+      w.push(`${R(LTZ(1), 'K')}/${retTap(2)}`); // Z: top-2 occupied
+      w.push(`${R(LTZ(1), 'N')}/${R(LTZ(3), 'L')}`);
+      w.push(`${R(LTZ(3), 'K')}/${retTap(2)}`); // Z: top-3 occupied
+      w.push(`${R(LTZ(3), 'N')}/${R(vm, vNc)}`); // free: join the step wire
     } else {
+      w.push(`${R(LEGINVT(2), 'N')}/${R(LTS(1), 'L')}`);
+      w.push(`${R(LTS(1), 'N')}/${R(LTZ(3), 'H')}`);
+      w.push(`${R(LTZ(3), 'J')}/${R(vm, vNc)}`); // free: join the step wire
+      // position 3 has no return group: the refusals chain jack-to-jack
+      // into the master's coil (the LTS/LTZ NO throws join the chain)
+      w.push(`${R(LEGINV(2), 'K')}/${R(LEGINVT(2), 'K')}`);
+      w.push(`${R(LEGINVT(2), 'K')}/${R(LTS(1), 'K')}`);
+      w.push(`${R(LTS(1), 'K')}/${R(LTZ(3), 'G')}`);
+      w.push(`${R(LTZ(3), 'G')}/${R(POSA(3), 'E')}`);
+    }
+    if (c !== 2) {
       w.push(`${R(LEGINV(c), 'K')}/${retTap(c + 1)}`); // bottom occupied
       w.push(`${R(LEGINVT(c), 'K')}/${retTap(c + 1)}`); // top occupied
     }
@@ -1660,6 +1745,26 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${R(POSM3(3), 'G')}/${R(POSM3(0), 'G')}`, `${R(POSM3(0), 'G')}/${R(POSM3(1), 'K')}`, `${R(POSM3(1), 'K')}/${R(PIECET(2), 'E')}`);
   // T(3) = Z & pos1
   w.push(`${plusOf(ZM(1))}/${R(ZM(1), 'L')}`, `${R(ZM(1), 'K')}/${R(POSM3(2), 'H')}`, `${R(POSM3(2), 'G')}/${R(PIECET(3), 'E')}`);
+
+  // ---------- 3b-3b coils: the mode gates and mode-only top reads ------
+  // SG mirrors chain off the S state net, ZG off the Z net (their NC/NO
+  // contacts are the NOT-S/NOT-Z gates and the LTS/LTZ coil gates wired
+  // into the legality section above). LTS/LTZ coils are top-rail reads
+  // gated AT THE COIL by a state contact: dead in every other mode, so
+  // their NC hops in the trees pass through.
+  w.push(`${R(SM(3), 'E')}/${R(SG(0), 'E')}`, `${R(SG(0), 'E')}/${R(SG(1), 'E')}`);
+  w.push(`${R(ZM(3), 'E')}/${R(ZG(0), 'E')}`, `${R(ZG(0), 'E')}/${R(ZG(1), 'E')}`);
+  w.push(`${R(ZG(1), 'E')}/${R(ZG(2), 'E')}`, `${R(ZG(2), 'E')}/${R(ZG(3), 'E')}`);
+  for (const m of [SG(0), SG(1), ZG(0), ZG(1), ZG(2), ZG(3), LTS(0), LTS(1), LTZ(0), LTZ(1), LTZ(2), LTZ(3)])
+    w.push(`${R(m, 'F')}/${minusOf(m)}`);
+  // S-gated reads (coil = rail AND S): columns 0 and 1
+  w.push(`${legTTap(0)}/${R(SG(1), 'H')}`, `${R(SG(1), 'G')}/${R(LTS(0), 'E')}`);
+  w.push(`${legTTap(1)}/${R(SG(1), 'L')}`, `${R(SG(1), 'K')}/${R(LTS(1), 'E')}`);
+  // Z-gated reads: column 1, column 2, column 3 (two relays for col 3)
+  w.push(`${legTTap(1)}/${R(ZG(2), 'H')}`, `${R(ZG(2), 'G')}/${R(LTZ(0), 'E')}`);
+  w.push(`${legTTap(2)}/${R(ZG(2), 'L')}`, `${R(ZG(2), 'K')}/${R(LTZ(1), 'E')}`);
+  w.push(`${legTTap(3)}/${R(ZG(3), 'H')}`, `${R(ZG(3), 'G')}/${R(LTZ(2), 'E')}`);
+  w.push(`${R(LTZ(2), 'E')}/${R(LTZ(3), 'E')}`);
 
   return { wires: w, rails: dataRails, layout: L, btnMachine };
 }

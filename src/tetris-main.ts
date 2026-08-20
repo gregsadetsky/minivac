@@ -219,11 +219,11 @@ function rowCells(r: number): number {
 // token row / one row above it", so the machine itself refuses sideways
 // moves into stored cells — bottom AND top cell of a tall piece, wide
 // edges included (the page just presses the button and reads back
-// whether the register stepped). This JS check remains for TWO seams:
-// the ArrowUp RESHAPE (the shape ring steps unconditionally until 3b-3c
-// gates the UP path in contacts) and the STAGGERED top pair (the
-// legality trees read the top row per the bottom mask's columns; an S/Z
-// top pair enters a different column — 3b-3b re-gates them).
+// whether the register stepped). Since 3b-3b the trees read the TRUE
+// target top columns (S/Z shifted pairs included) and the fit bounds
+// refuse in contacts too, so steering has NO seam left. This JS check
+// remains for exactly ONE: the ArrowUp RESHAPE (the shape ring steps
+// unconditionally until 3b-3c gates the UP path in contacts).
 function wouldOverlap(nPos: number, nIx: number): boolean {
   const s = SHAPES[nIx];
   const tok = tokenRow();
@@ -314,29 +314,14 @@ document.addEventListener('keydown', e => {
     const p = posAt();
     if (p < 0) return;
     const dir = e.key === 'ArrowRight' ? 1 : -1;
-    // the machine decides the symmetric part: stored cells (bottom and
-    // top rows), the wide edges, and the wall all refuse in contacts.
-    // The page skips only the obvious edge no-ops (incl. the staggered
-    // fit bounds), then presses and reads back whether the register
-    // stepped.
+    // the machine decides ALL of it since 3b-3b: stored cells under the
+    // TRUE target footprint (an S/Z top pair enters a shifted column —
+    // the trees read exactly those now), the wide edges, the wall, and
+    // the staggered fit bounds all refuse in contacts. The page skips
+    // only the obvious edge no-ops, then presses and reads back whether
+    // the register stepped.
     const next = Math.min(maxPos(), Math.max(minPos(), p + dir));
     if (next === p) return;
-    // stag seam: the legality trees read the top row per the BOTTOM
-    // mask's columns — an S/Z top pair enters a DIFFERENT column, so the
-    // page refuses those targets itself (and the machine may falsely
-    // refuse a legal one; conservative) until the shape ring re-gates
-    // the trees (3b-3).
-    const st = shape().stag;
-    const tokNow = tokenRow();
-    if (st !== 0 && tokNow > 0) {
-      const nt = (0b11 << (next + st)) & 0b1111;
-      for (let j = 0; j < COLS; j++) {
-        if (((nt >> j) & 1) === 1 && relay(IO.cellRelay(tokNow - 1, j))) {
-          render('blocked — the top pair would land on the stack');
-          return;
-        }
-      }
-    }
     act(`column ${next}`, () => {
       press(dir > 0 ? IO.right : IO.left);
       if (posAt() === p) return 'blocked — the contacts refused the step';

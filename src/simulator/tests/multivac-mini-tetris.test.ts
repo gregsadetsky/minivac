@@ -1613,6 +1613,100 @@ describe('Multivac: mini-tetris (50 machines)', () => {
     expect(g.m.getState().alerts).toEqual([]);
   });
 
+  // 3b-3b: the legality trees read the TRUE target top columns. LEGINVT
+  // checks are NOT-Z-gated (correct for symmetric AND S, false only for
+  // Z), LEGINVT2 NOT-S-gated; LTS/LTZ add the mode-only columns as series
+  // hops; SBND/ZBND refuse the out-of-range positions in contacts. The
+  // page's staggered steering guard dies with this.
+  it('staggered steering: the trees follow the shifted top pair (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
+    // an S: its top pair rides one column LEFT of the bottom pair.
+    // operator writes happen BEFORE selecting the shape: with a ring-wide
+    // state up the union keeps WIDM closed and a write would bridge rails
+    // through the piece gates (operatorWrite's slide-narrowing can't
+    // override the ring).
+    let g = makeGame();
+    const up = () => g.pressBtn(TETRIS_IO.up);
+    g.operatorWrite(4, 0b0001); // stored at (4,0): S-left's target top col
+    for (let k = 0; k < 4; k++) up(); // -> S
+    g.pressBtn(TETRIS_IO.right);
+    g.pressBtn(TETRIS_IO.right); // S at pos 2 (bottom 2-3, top 1-2)
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // spawn + fall to token row 5
+    expect(g.tokenAt()).toEqual([5]);
+    g.pressBtn(TETRIS_IO.left); // target pos 1: top set {0,1} hits (4,0)
+    expect(g.posAt(), 'S left into the stored top column: refused').toBe(2);
+    g.pressBtn(TETRIS_IO.right); // pos 3 would put the bottom past the wall
+    expect(g.posAt(), 'the wide wall still refuses').toBe(2);
+    for (let t = 6; t <= 7; t++) g.tick(); // rest on the floor
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'S bottom 2-3').toBe(0b1100);
+    expect(g.row(6), 'S top 1-2').toBe(0b0110);
+    // bounds: a fresh S may never ENTER pos 0 — contacts, empty board
+    g.pressBtn(TETRIS_IO.right); // re-homed 0 -> 1
+    g.tick(); // spawn (the reset re-armed SPAWN)
+    g.tick(); // token at 1, far from the stack
+    expect(g.tokenAt()).toEqual([1]);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'the S bound: pos 0 refused in contacts').toBe(1);
+    g.pressBtn(TETRIS_IO.right); // pos 2 is clean up here
+    expect(g.posAt(), 'a legal S step still goes').toBe(2);
+    for (let t = 2; t <= 4; t++) g.tick(); // fall to token 4
+    expect(g.tokenAt()).toEqual([4]);
+    g.tick(); // into 5 — (6,2) below: merged lock on arrival
+    expect(g.tokenAt(), 'locked on the stack').toEqual([5]);
+    g.tick(); // phase 2: top {1,2} onto row 4 (joining the operator block)
+    g.tick(); // reset
+    expect(g.row(5), 'second S bottom merged').toBe(0b1100);
+    expect(g.row(4), 'second S top + the stored block').toBe(0b0111);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // a Z beside a left tower: the OLD symmetric check refused a left
+    // step whenever the TARGET pos column was stored one row up — but Z's
+    // top pair lives one column RIGHT of the bottom. The refusal death is
+    // the receipt. (One tower per game: each tower sits in the OTHER
+    // position's fall path.)
+    g = makeGame();
+    g.operatorWrite(4, 0b0001); // the tower at (4,0); pos-1 fall path clear
+    for (let k = 0; k < 5; k++) g.pressBtn(TETRIS_IO.up); // -> Z
+    g.pressBtn(TETRIS_IO.right); // Z at pos 1 (bottom 1-2, top 2-3)
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the tower
+    expect(g.tokenAt()).toEqual([5]);
+    g.pressBtn(TETRIS_IO.right); // pos 2 is out of Z range
+    expect(g.posAt(), 'the Z bound: pos 2 refused in contacts').toBe(1);
+    g.pressBtn(TETRIS_IO.left); // target 0: top set {1,2} — (4,0) is NOT in it
+    expect(g.posAt(), 'the false refusal died: Z steps under the tower').toBe(0);
+    g.pressBtn(TETRIS_IO.right); // back to 1: everything clear up here
+    expect(g.posAt()).toBe(1);
+    for (let t = 6; t <= 7; t++) g.tick(); // rest on the floor at pos 1
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'Z bottom 1-2').toBe(0b0110);
+    expect(g.row(6), 'Z top 2-3').toBe(0b1100);
+    expect(g.row(4), 'the tower kept').toBe(0b0001);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // ...and the far top column (c+2): a right tower the old trees never
+    // looked at now refuses a Z right step in contacts.
+    g = makeGame();
+    g.operatorWrite(4, 0b1000); // the tower at (4,3); pos-0 fall path clear
+    for (let k = 0; k < 5; k++) g.pressBtn(TETRIS_IO.up); // -> Z at home 0
+    g.pressStart();
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5 (top {1,2} clears col 3)
+    expect(g.tokenAt()).toEqual([5]);
+    g.pressBtn(TETRIS_IO.right); // target 1: top set {2,3} DOES hit (4,3)
+    expect(g.posAt(), 'the far top column refuses in contacts').toBe(0);
+    for (let t = 6; t <= 7; t++) g.tick(); // rest on the floor at pos 0
+    g.tick(); // phase 2
+    g.tick(); // reset
+    expect(g.row(7), 'Z bottom 0-1').toBe(0b0011);
+    expect(g.row(6), 'Z top 1-2').toBe(0b0110);
+    expect(g.row(4), 'the tower kept').toBe(0b1000);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
   // the score ring: a one-hot decimal digit stepped once per line clear
   // (the token-ring pattern with CLEARP as the clock; digit 0 seeded at
   // power-on through SCBOOT, which latches away on the first clear). The
