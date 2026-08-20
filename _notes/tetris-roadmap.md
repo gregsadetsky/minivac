@@ -688,8 +688,32 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    land) and the ROTATION GROUPS design (_notes/rotation-groups.md,
    alternative C: ring reorder for adjacent pairs + 4 D-feed muxes +
    NOTOK-gated cross-group roots) sent to adversarial review.
-   NEXT: rotation groups (pending the review verdict); then pivot-order
-   reuse in the fast engine (the 7s cascade is solve-bound).
+   ROTATION GROUPS landed 2026-08-20 late (0eff1da): UP turns the
+   falling piece and chooses the shape pre-spawn, and the whole trick
+   is that the ring's SUCCESSOR MAP is not in the clock network at all
+   — each master's coil com is fed through its predecessor slave's
+   set2, so the D-feed wires ARE the map. NOTOK ("no token anywhere",
+   an NC-series chain over the ring-slave mirrors plus the row-0 mirror
+   the SEEDM bank never had) re-aims them: energized pre-spawn they
+   point at the selection successor (the 0..11 chooser), de-energized
+   mid-fall at the rotation partner (1<->2, i<->i+3 across L/J/T).
+   ELEVEN muxes, no root gating: a one-orientation state's mux NC is
+   wired NOWHERE, so mid-fall no master is fed, the clock finds no
+   branch, and 1x1/O/S/Z refuse rotation exactly as an out-of-range
+   bound refuses. the cross-review earned its keep again — it killed
+   the ring REORDER (states 6..11's spine is hand-laid by index across
+   ~150 generator lines plus ~20 test/page/driver sites), caught that
+   the NOTOK chain missed row 0 (where every piece spawns), and flagged
+   that a plain root gate would kill the very flips it was meant to
+   enable; the 11-mux variant sidesteps the roots entirely. receipts:
+   rotation both ways + singleton refusal + the full chooser cycle, the
+   mux flipping under a HELD up across both a spawn and a lock, the
+   page driver turning L -> L flip -> L on a falling piece.
+   NEXT: pivot-order / symbolic-factorization reuse in the fast engine
+   — but MEASURE FIRST (_notes/pivot-reuse.md): the lever only exists
+   if sparsity patterns repeat, and every relay flip changes the
+   pattern. then the I piece + vertical orientations (the 3-row piece
+   engine), random dealing, and 10 columns.
    (UP steps within the current piece's orientations), random dealing,
    pivot-order reuse in the fast engine (the 7s cascade is solve-bound),
    and the 3-row piece engine toward the I piece and verticals.
