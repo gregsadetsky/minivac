@@ -89,6 +89,26 @@ reshape (ring step s1->s2 at pos p): check B2(p)\B1(p) and T2(p)\T1(p)
 plus the bound clamp — exactly what the UP transition network wires
 today as one-hot pos fans + series delta hops.
 
+## the check tables (scratchpad/check-table.mjs; VERIFIED against the
+## hand-laid trees on three states: S p1R, Z p0R + the NOT-Z gate, and
+## the narrow single-column checks — formula reproduces the wiring)
+
+at any cols, stepping RIGHT into target c checks rails at fixed offsets
+from c per state: b = c + bOff + bW - 1, t = c + tOff + tW - 1 (tW>0);
+LEFT into c: b = c + bOff, t = c + tOff. the tables are shift-invariant
+across the interior — one pattern per state per direction, bounds at the
+range edges. offsets (db, dt) per state, RIGHT:
+1x1 (0,-)  2wide (1,-)  2tall (0,0)  O (1,1)  S (1,0)  Z (1,2)
+L (2,0)  J (2,2)  T (2,1)  L2 (2,2)  J2 (0,2)  T2 (1,2)
+emitter shape = the existing trunk generalized: shared bottom check at
+c+0 -> tall fork -> shared top at c+0 -> wide fork -> b at c+1 -> tall-
+wide t at c+1, with state-gated series hops for every staggered delta
+(c+2 reads and the asymmetric combos), and bound refusals as state-
+mirror contacts where c is outside the state's range. the resource half:
+reads at c+2 (and repeated reads per column) need parallel-coil rail
+copies where a relay's two contact sets run out — the LEGINV2 pattern,
+allocated per column by CONSUMER COUNT, not hand-laid.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
