@@ -596,18 +596,27 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const mirctXBase = take(mirbExtra * (rows - 2)); // top-rail gates beyond MIRCT x2
   const cutXBase = take(mirbExtra * 5); // 5 cut families x extra pairs beyond cols 4
   const posrstXBase = take(mirbExtra); // reset re-home NCs beyond POSRST x2
-  // rotation (the ring's mid-fall successor): NOTOK + its contact
-  // mirrors + the row-0 token mirror the SEEDM bank lacks
-  const rotBase = take(7);
   const upC = upResourceCounts(cols);
   const upPosBase = take(upC.posTotal); // UP-transition pos fan mirrors
   const upReadBase = take(upC.readTotal); // UP-transition delta reads
+  // rotation (the ring's mid-fall successor): NOTOK + its contact
+  // mirrors + the row-0 token mirror the SEEDM bank lacks. allocated
+  // LAST on purpose: taking these relays mid-sequence shifted every
+  // later bank by 7, which re-hosted coils onto other machines and
+  // pushed one section's supply past the overload alarm (measured:
+  // machine 9 peaked 3.44A before, 3.61A after, alarm at 3.5A).
+  const rotBase = take(7);
   return {
     rows,
     cols,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
     W: (r, k) => wBase + cols * r + k,
-    CELL: (r, j) => cellBase + cols * r + j,
+    // COLUMN-major on purpose: row-major put a whole row's cells on one
+    // machine, so writing over a stacked row concentrated every
+    // occupancy read on that single supply (measured 3.44-3.61A on one
+    // section, past the overload alarm). Interleaving spreads a row's
+    // load across supplies.
+    CELL: (r, j) => cellBase + rows * j + r,
     RING: (i, part) => ringBase + 3 * i + part,
     MIRA: r => mirBase + 2 * r,
     MIRB: r => mirBase + 2 * r + 1,

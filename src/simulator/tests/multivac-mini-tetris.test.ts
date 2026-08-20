@@ -2049,15 +2049,29 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       }
       return -1;
     };
+    const shapeAt6 = (g: ReturnType<typeof makeGame>) => {
+      for (let i = 0; i < NSTATES; i++) {
+        const r = TETRIS_IO.shapeRelay(i);
+        if (g.m.getMachineState(r.machine).relays[r.index]) return i;
+      }
+      return -1;
+    };
 
-    // 1x1 -> 2wide: the new bottom cell (tok, p+1) is stored
+    // 2tall -> 2wide (the domino's rotation): the new bottom cell at
+    // (tok, p+1) is stored. since the rotation rung a falling piece's
+    // UP turns it inside its own family, so the mid-fall probe is the
+    // ROTATION 2tall <-> 2wide rather than the old chooser step — the
+    // refusal physics under test is identical (a delta cell is taken).
     let g = makeGame();
     g.operatorWrite(5, 0b0010); // the tower at (5,1)
+    g.pressBtn(TETRIS_IO.up); // 2wide
+    g.pressBtn(TETRIS_IO.up); // 2tall, pre-spawn (the chooser)
+    expect(shapeAt(g), 'chose the tall domino before spawning').toBe(2);
     g.pressStart();
-    for (let t = 0; t <= 5; t++) g.tick(); // 1x1 at pos 0, token 5
+    for (let t = 0; t <= 5; t++) g.tick(); // 2tall at pos 0, token 5
     expect(g.tokenAt()).toEqual([5]);
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt(g), 'widening onto the tower: refused').toBe(0);
+    expect(shapeAt(g), 'rotating flat onto the tower: refused').toBe(2);
     expect(g.posAt(), 'the register held through the refusal').toBe(0);
     g.tick(); // token 6: the row beside is clear now
     g.pressBtn(TETRIS_IO.up);
@@ -2088,62 +2102,32 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(g.row(4), 'the overhang kept').toBe(0b0001);
     expect(g.m.getState().alerts).toEqual([]);
 
-    // 2tall -> O: the new COLUMN is checked on BOTH rows (bottom then top)
+    // the chooser-only edges (2tall->O, O->S, S->Z) can no longer be
+    // taken mid-fall at all — since the rotation rung UP turns a
+    // falling piece inside its family — so their delta checks are
+    // unreachable in play and there is nothing left to assert about
+    // them here. What IS reachable is the rest of the rotation family.
+    // NOTE which DIRECTION is testable: turning L1 -> L2 adds top cells
+    // in the very columns L1's bottom occupies, so any cell that could
+    // block it would have stopped the fall first (the provably
+    // unreachable class). The reverse is reachable precisely because
+    // the overhang falls PAST a stack: L2's bottom is one column, so
+    // cells beside it never stop the fall, and turning back to L1 needs
+    // exactly those cells.
     g = makeGame();
-    g.operatorWrite(5, 0b0010); // the tower at (5,1)
-    g.pressBtn(TETRIS_IO.up);
-    g.pressBtn(TETRIS_IO.up); // 2tall at pos 0
+    g.operatorWrite(5, 0b0110); // the stack at (5,1) and (5,2)
+    g.pressBtn(TETRIS_IO.right); // pos 1 (the chooser needs it past S)
+    for (let k = 0; k < 9; k++) g.pressBtn(TETRIS_IO.up); // L2, pre-spawn
+    expect(shapeAt6(g), 'chose the L flip before spawning').toBe(9);
     g.pressStart();
-    for (let t = 0; t <= 5; t++) g.tick(); // token 5
+    for (let t = 0; t <= 5; t++) g.tick(); // token 5: the bottom column is clear
+    expect(g.tokenAt()).toEqual([5]);
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt(g), 'O onto the tower row: refused by the bottom read').toBe(2);
-    g.tick(); // token 6: the tower is now one row UP of the token
+    expect(shapeAt6(g), 'turning back onto the stack beside it: refused').toBe(9);
+    expect(g.posAt(), 'the register held through the refusal').toBe(1);
+    g.tick(); // token 6: below the stack now
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt(g), 'O under the tower: refused by the top read').toBe(2);
-    g.tick(); // token 7: floor lock as the narrow tall piece
-    g.tick(); // phase 2
-    g.tick(); // reset
-    expect(g.row(7)).toBe(0b0001);
-    expect(g.row(6)).toBe(0b0001);
-    expect(g.row(5), 'the tower kept').toBe(0b0010);
-    expect(g.m.getState().alerts).toEqual([]);
-
-    // O -> S: the new top cell sits one column LEFT
-    g = makeGame();
-    g.operatorWrite(4, 0b0001); // the floater at (4,0)
-    g.pressBtn(TETRIS_IO.right); // pos 1
-    for (let k = 0; k < 3; k++) g.pressBtn(TETRIS_IO.up); // O
-    g.pressStart();
-    for (let t = 0; t <= 5; t++) g.tick(); // token 5
-    g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt(g), 'S under the floater: refused').toBe(3);
-    g.tick(); // token 6
-    g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt(g), 'clear of it the UP conducts').toBe(4);
-    g.tick(); // floor lock at 7
-    g.tick(); // phase 2
-    g.tick(); // reset
-    expect(g.row(7), 'S bottom 1-2').toBe(0b0110);
-    expect(g.row(6), 'S top 0-1').toBe(0b0011);
-    expect(g.m.getState().alerts).toEqual([]);
-
-    // S -> Z: the new top pair sits one and two columns RIGHT
-    g = makeGame();
-    g.operatorWrite(4, 0b1000); // the floater at (4,3)
-    g.pressBtn(TETRIS_IO.right); // pos 1
-    for (let k = 0; k < 4; k++) g.pressBtn(TETRIS_IO.up); // S
-    g.pressStart();
-    for (let t = 0; t <= 5; t++) g.tick(); // token 5
-    g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt(g), 'Z under the far floater: refused').toBe(4);
-    g.tick(); // token 6
-    g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt(g), 'clear of it the UP conducts').toBe(5);
-    g.tick(); // floor lock at 7
-    g.tick(); // phase 2
-    g.tick(); // reset
-    expect(g.row(7), 'Z bottom 1-2').toBe(0b0110);
-    expect(g.row(6), 'Z top 2-3').toBe(0b1100);
+    expect(shapeAt6(g), 'a row later the same turn conducts').toBe(6);
     expect(g.m.getState().alerts).toEqual([]);
   });
 
