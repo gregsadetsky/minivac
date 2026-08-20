@@ -305,6 +305,7 @@ export const MACHINES = 85; // relays through m83.3 + the dedicated button machi
 // and write machinery are per-column and scale on their own rung.
 export interface TetrisLayout {
   rows: number;
+  cols: number;
   A0: number; A0m: number; A1: number; A2: number;
   W: (r: number, k: number) => number;
   CELL: (r: number, j: number) => number;
@@ -381,9 +382,14 @@ export interface TetrisLayout {
   relays: number; // wired coils (the junction gap is com-only)
 }
 
-export function tetrisLayout(rows: number): TetrisLayout {
+export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   if (rows < 4 || rows % 2 !== 0) throw new Error('rows must be even and >= 4');
-  const cols = 4;
+  // the second parameterization axis (see _notes/wider-well.md). the
+  // mechanical loops below already flow from this value; the column-CLASS
+  // sites (POSM4/5/6 maps, per-state bound contacts, the D-tap tree
+  // shapes, mirror/cut/rail COUNTS) are still hand-laid for 4 — the fence
+  // comes down subsystem by subsystem as each class map is derived.
+  if (cols !== 4) throw new Error('cols !== 4 needs the class derivations (wider-well phase C)');
   let n = 0;
   const take = (k: number) => {
     const a = n;
@@ -391,7 +397,9 @@ export function tetrisLayout(rows: number): TetrisLayout {
     return a;
   };
   const aBase = take(4);
-  const wBase = take(rows * 4);
+  // W per row: gates + breakers, one contact SET per column, two sets per
+  // relay -> 2*ceil(cols/2) relays (== cols when even; the fence holds 4)
+  const wBase = take(rows * cols);
   const cellBase = take(rows * cols);
   const ringBase = take(rows * 3);
   const mirBase = take(rows * 2);
@@ -448,8 +456,9 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const oscBase = take(2); // 3b-5: TOSC, TDRV (the self-tick oscillator)
   return {
     rows,
+    cols,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
-    W: (r, k) => wBase + 4 * r + k,
+    W: (r, k) => wBase + cols * r + k,
     CELL: (r, j) => cellBase + cols * r + j,
     RING: (i, part) => ringBase + 3 * i + part,
     MIRA: r => mirBase + 2 * r,
@@ -709,13 +718,13 @@ export function tetrisLayout(rows: number): TetrisLayout {
   eq('btnMachine3', L.btnMachine, WIDSLIDE.machine);
 }
 
-export function tetrisCircuit(rows = 8): {
+export function tetrisCircuit(rows = 8, cols = 4): {
   wires: string[];
   rails: string[][]; // data rail j -> its chained groups
   layout: TetrisLayout; // this build's index map (== the exports at rows=8)
   btnMachine: number; // LEFT/RIGHT buttons + WID slide live here (m40 classic)
 } {
-  const L = tetrisLayout(rows);
+  const L = tetrisLayout(rows, cols);
   // shadow the default-geometry exports with this build's layout: the
   // whole wiring body below reads THESE, so a taller well is a parameter
   const {
@@ -779,12 +788,12 @@ export function tetrisCircuit(rows = 8): {
     R(A0m, 'J'), R(A0m, 'G'), R(A0m, 'N'), R(A0m, 'K'),
   ];
 
-  const dataRails = [takeGroups(grown(6, 2)), takeGroups(grown(6, 2)), takeGroups(grown(6, 2)), takeGroups(grown(6, 2))]; // 6: 21 taps/rail at 8 rows since the T bank joined
+  const dataRails = Array.from({ length: cols }, () => takeGroups(grown(6, 2))); // 6: 21 taps/rail at 8 rows since the T bank joined
   const railJack = (j: number, hole: number) => dataRails[j][Math.floor(hole / 4)];
   // chain each rail's groups (each link burns one hole on both sides, so a
   // group offers 4 fresh holes; railJack spreads consumers accordingly)
   for (const g of dataRails) for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
-  const railUse: number[] = [0, 0, 0, 0];
+  const railUse: number[] = Array(cols).fill(0);
   const tapRail = (j: number) => railJack(j, railUse[j]++);
 
   // gates (W, W' on comA) and breakers (W'', W''' on comB) are triggered
@@ -797,36 +806,39 @@ export function tetrisCircuit(rows = 8): {
   // breaking holds. The game's lock path does the full OR-write, CLEARP
   // does the clearing, and the register-file file keeps the classic
   // destructive-write machinery.
+  const nGates = Math.ceil(cols / 2); // W(r, 0..nGates-1) gates, then breakers
   for (let r = 0; r < rows; r++) {
     const comA = comOf(W(r, 0));
-    const comB = comOf(W(r, 2));
+    const comB = comOf(W(r, nGates));
     // the 3-bit operator-write decoder addresses 8 rows; on a taller well
     // the deep rows are game-writable only (locks fire W via the MIRA
     // triggers, not the decoder)
     if (r < 8) w.push(`${sel[r]}/${comA}`);
-    for (let k = 0; k < 4; k++) {
-      const src = k < 2 ? comA : comB;
+    for (let k = 0; k < 2 * nGates; k++) {
+      const src = k < nGates ? comA : comB;
       w.push(`${src}/${R(W(r, k), 'E')}`, `${R(W(r, k), 'F')}/${minusOf(W(r, k))}`);
     }
-    for (let j = 0; j < 4; j++) {
+    for (let j = 0; j < cols; j++) {
       const c = CELL(r, j);
       const [arm, no, nc] = j % 2 === 0 ? ['H', 'G', 'J'] : ['L', 'K', 'N'];
-      const g = W(r, j < 2 ? 0 : 1);
+      const g = W(r, Math.floor(j / 2));
       w.push(`${tapRail(j)}/${R(g, arm)}`, `${R(g, no)}/${comOf(c)}`); // data gate
       // the breaker contact serves BOTH cell-private paths with one arm:
       // NC = the hold (idle), NO = the lock readback (press) — the cell's
       // own + through its own contact onto its own rail. Any SHARED readback
       // rail bridges the write rails through a stacked row's ON cells (two
       // drafts of this file died to exactly that, one row down and one up).
-      const b = W(r, j < 2 ? 2 : 3);
+      const b = W(r, nGates + Math.floor(j / 2));
       w.push(`${plusOf(c)}/${R(b, arm)}`, `${R(b, nc)}/${R(c, 'H')}`); // hold break
       w.push(`${R(b, no)}/${R(c, 'L')}`); // press-scoped readback feed
       w.push(`${R(c, 'G')}/${comOf(c)}`);
       w.push(`${comOf(c)}/${R(c, 'E')}`, `${R(c, 'F')}/${minusOf(c)}`);
     }
   }
-  // operator data slides on m1 sections 1-4
-  for (let j = 0; j < 4; j++) {
+  // operator data slides on m1 sections 1-4 (m1.5 is the tick slide and
+  // m1.6 START, so columns past 4 have no operator slide — the game's own
+  // writes cover them; phase C revisits if operator masks must widen)
+  for (let j = 0; j < Math.min(cols, 4); j++) {
     w.push(`m1.${j + 1}+/m1.${j + 1}S`, `m1.${j + 1}T/${tapRail(j)}`);
   }
 
@@ -885,7 +897,7 @@ export function tetrisCircuit(rows = 8): {
   // mirror for the sense — are wired at those relays; there is NO shared
   // readback rail anywhere: every shared variant bridged the write rails)
   for (let r = 0; r < rows; r++) {
-    for (let j = 0; j < 4; j++) {
+    for (let j = 0; j < cols; j++) {
       w.push(`${R(CELL(r, j), 'K')}/${tapRail(j)}`);
     }
   }
@@ -994,14 +1006,14 @@ export function tetrisCircuit(rows = 8): {
   // bridged them one node further up: only fully private feeds are safe).
   for (let r = 0; r < rows; r++) {
     w.push(`${tap(railB0p, bpUse)}/${R(MIRA(r), 'H')}`, `${R(MIRA(r), 'G')}/${comOf(W(r, 0))}`);
-    w.push(`${tap(railB0, b0Use)}/${R(MIRA(r), 'L')}`, `${R(MIRA(r), 'K')}/${comOf(W(r, 2))}`);
+    w.push(`${tap(railB0, b0Use)}/${R(MIRA(r), 'L')}`, `${R(MIRA(r), 'K')}/${comOf(W(r, nGates))}`);
     if (r < rows - 1) {
-      const taps: Array<[number, string, string]> = [
-        [MIRB(r), 'H', 'G'], [MIRB(r), 'L', 'K'],
-        [MIRB2(r), 'H', 'G'], [MIRB2(r), 'L', 'K'],
-      ];
-      for (let j = 0; j < 4; j++) {
-        const [mr, arm, no] = taps[j];
+      // one contact set per column: MIRB carries columns 0-1, MIRB2 2-3
+      // (a wider well needs more mirrors per row — phase C grows the bank)
+      const mirs = [MIRB(r), MIRB2(r)];
+      for (let j = 0; j < cols; j++) {
+        const mr = mirs[Math.floor(j / 2)];
+        const [arm, no] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
         w.push(`${plusOf(mr)}/${R(mr, arm)}`, `${R(mr, no)}/${R(CELL(r + 1, j), 'L')}`);
       }
     } else {
@@ -1018,12 +1030,12 @@ export function tetrisCircuit(rows = 8): {
   // colFan needs no feed to bridge, a jack is a tie — and a collapse move's
   // row content would leak across the masked columns (the mask can change
   // between the lock and the collapse, so this is reachable in play).
-  for (let j = 0; j < 4; j++) {
+  for (let j = 0; j < cols; j++) {
     const p = PIECE(j);
-    const cutc = j < 2 ? CUTC1 : CUTC2;
-    const cutb = j < 2 ? CUTB1 : CUTB2;
+    const cutc = [CUTC1, CUTC2][Math.floor(j / 2)]; // one cut set per column
+    const cutb = [CUTB1, CUTB2][Math.floor(j / 2)]; // (phase C grows the banks)
     const [cArm, cNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
-    const cutk = j < 2 ? CUTC3 : CUTC4;
+    const cutk = [CUTC3, CUTC4][Math.floor(j / 2)];
     // coils fed from the POS register (see the piece-register section) —
     // the per-column slides are gone; position is machine state now
     w.push(`${R(p, 'F')}/${minusOf(p)}`);
@@ -1032,7 +1044,7 @@ export function tetrisCircuit(rows = 8): {
     // of the bottom-press leak) -> CUTC (NC, opens during collapses) ->
     w.push(`${colFan}/${R(cutb, cArm)}`, `${R(cutb, cNc)}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
     w.push(`${R(p, 'G')}/${tapRail(j)}`);
-    const cutb2 = j < 2 ? CUTB3 : CUTB4;
+    const cutb2 = [CUTB3, CUTB4][Math.floor(j / 2)];
     w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${R(cutb2, cArm)}`);
     w.push(`${R(cutb2, cNc)}/${R(cutk, cArm)}`, `${R(cutk, cNc)}/${collideNode}`);
   }
@@ -1056,19 +1068,19 @@ export function tetrisCircuit(rows = 8): {
   // (a full row could never persist), found by their tests. By the wave the
   // delayed feed arrives, the rails carry only the mask and the token
   // row's own readback — the true line state.
-  for (let j = 0; j < 4; j++) {
+  for (let j = 0; j < cols; j++) {
     w.push(`${tapRail(j)}/${R(LINE(j), 'E')}`, `${R(LINE(j), 'F')}/${minusOf(LINE(j))}`);
   }
   w.push(`${plusOf(RAILGATE2)}/${R(RAILGATE2, 'H')}`, `${R(RAILGATE2, 'G')}/${R(LINEDLY, 'E')}`);
   w.push(`${R(LINEDLY, 'F')}/${minusOf(LINEDLY)}`);
   w.push(`${plusOf(LINEDLY)}/${R(LINEDLY, 'H')}`, `${R(LINEDLY, 'G')}/${R(LINE(0), 'H')}`);
-  w.push(`${R(LINE(0), 'G')}/${R(LINE(1), 'H')}`, `${R(LINE(1), 'G')}/${R(LINE(2), 'H')}`);
+  for (let j = 1; j < cols - 1; j++) w.push(`${R(LINE(j - 1), 'G')}/${R(LINE(j), 'H')}`);
   // the chain fires CPSET, and CPSET's contact — sourcing from + — sets
   // CLEARP. Wiring the chain straight into CLEARP's com lets CLEARP's
   // +-armed latch backfeed rail A through the still-closed LINE contacts
   // after the release: the whole press state froze as one parasitic latch
   // (this file's line-clear debug trace caught the entire circuit at it=1).
-  w.push(`${R(LINE(2), 'G')}/${R(LINE(3), 'H')}`, `${R(LINE(3), 'G')}/${comOf(CPSET)}`);
+  w.push(`${R(LINE(cols - 2), 'G')}/${R(LINE(cols - 1), 'H')}`, `${R(LINE(cols - 1), 'G')}/${comOf(CPSET)}`);
   w.push(`${comOf(CPSET)}/${R(CPSET, 'E')}`, `${R(CPSET, 'F')}/${minusOf(CPSET)}`);
   w.push(`${plusOf(CPSET)}/${R(CPSET, 'H')}`, `${R(CPSET, 'G')}/${comOf(CLEARP)}`);
   w.push(`${comOf(CLEARP)}/${R(CLEARP, 'E')}`, `${R(CLEARP, 'F')}/${minusOf(CLEARP)}`);
@@ -1400,7 +1412,7 @@ export function tetrisCircuit(rows = 8): {
   // direction chains: one gate contact, POSM arms daisy-chained behind it
   w.push(`${plusOf(LEFTM)}/${R(LEFTM, 'H')}`, `${R(LEFTM, 'G')}/${R(POSM(0), 'H')}`);
   w.push(`${plusOf(RIGHTM)}/${R(RIGHTM, 'H')}`, `${R(RIGHTM, 'G')}/${R(POSM(0), 'L')}`);
-  for (let j = 1; j < 4; j++) {
+  for (let j = 1; j < cols; j++) {
     w.push(`${R(POSM(j - 1), 'H')}/${R(POSM(j), 'H')}`);
     w.push(`${R(POSM(j - 1), 'L')}/${R(POSM(j), 'L')}`);
   }
@@ -1414,7 +1426,7 @@ export function tetrisCircuit(rows = 8): {
   // one refused press would wipe the ring. The edge self-loops stay
   // ungated: stepping into your own column is always legal.
   w.push(`${R(POSM(0), 'G')}/${comOf(POSA(0))}`); // left self-loop at 0
-  w.push(`${R(POSM(3), 'K')}/${comOf(POSA(3))}`); // right self-loop at 3
+  w.push(`${R(POSM(cols - 1), 'K')}/${comOf(POSA(cols - 1))}`); // right self-loop at the wall
   // (the gated taps for the six real moves are pushed in the legality
   // section, after the rails they route through exist)
   // masters: hold from mid-press through the release window (ANYBM2.G
@@ -1422,11 +1434,11 @@ export function tetrisCircuit(rows = 8): {
   // TWIN.G's chain into the new slave's com, in the window only
   w.push(`${plusOf(ANYBM2)}/${R(ANYBM2, 'H')}`, `${R(ANYBM2, 'G')}/${R(POSA(0), 'L')}`);
   w.push(`${plusOf(TWIN)}/${R(TWIN, 'H')}`, `${R(TWIN, 'G')}/${R(POSA(0), 'H')}`);
-  for (let j = 1; j < 4; j++) {
+  for (let j = 1; j < cols; j++) {
     w.push(`${R(POSA(j - 1), 'L')}/${R(POSA(j), 'L')}`);
     w.push(`${R(POSA(j - 1), 'H')}/${R(POSA(j), 'H')}`);
   }
-  for (let j = 0; j < 4; j++) {
+  for (let j = 0; j < cols; j++) {
     w.push(`${comOf(POSA(j))}/${R(POSA(j), 'E')}`, `${R(POSA(j), 'F')}/${minusOf(POSA(j))}`);
     w.push(`${R(POSA(j), 'K')}/${comOf(POSA(j))}`); // hold: L(chain) -> K -> own com
     w.push(`${R(POSA(j), 'G')}/${comOf(POSS(j))}`); // transfer: H(chain) -> G -> slave com
@@ -1437,17 +1449,16 @@ export function tetrisCircuit(rows = 8): {
   // (both coils die the wave ANYBM2's contacts open), so the idle holds
   // re-close on the same wave the transfer feed dies: the new slave is
   // caught without a gap.
-  w.push(`${R(POSA(3), 'L')}/${R(ANYBM, 'H')}`, `${R(ANYBM, 'J')}/${R(TWIN, 'E')}`, `${R(TWIN, 'F')}/${minusOf(TWIN)}`);
+  w.push(`${R(POSA(cols - 1), 'L')}/${R(ANYBM, 'H')}`, `${R(ANYBM, 'J')}/${R(TWIN, 'E')}`, `${R(TWIN, 'F')}/${minusOf(TWIN)}`);
   // slaves: idle hold through TWIN's NC (closed except in the window) and
   // the POSRST spawn-reset breaks; set2 feeds the PIECE column coils (the
   // slides are gone)
   w.push(`${plusOf(TWIN)}/${R(TWIN, 'L')}`, `${R(TWIN, 'N')}/${R(POSRST(0), 'H')}`);
   w.push(`${R(POSRST(0), 'H')}/${R(POSRST(0), 'L')}`, `${R(POSRST(0), 'L')}/${R(POSRST(1), 'H')}`, `${R(POSRST(1), 'H')}/${R(POSRST(1), 'L')}`);
-  const rstNc: Array<[number, string]> = [
-    [POSRST(0), 'J'], [POSRST(0), 'N'], [POSRST(1), 'J'], [POSRST(1), 'N'],
-  ];
-  for (let j = 0; j < 4; j++) {
-    const [rr, nc] = rstNc[j];
+  // one NC per column: POSRST(0) covers 0-1, POSRST(1) 2-3 (phase C grows)
+  for (let j = 0; j < cols; j++) {
+    const rr = POSRST(Math.floor(j / 2));
+    const nc = j % 2 === 0 ? 'J' : 'N';
     w.push(`${R(rr, nc)}/${R(POSS(j), 'H')}`, `${R(POSS(j), 'G')}/${comOf(POSS(j))}`);
     w.push(`${comOf(POSS(j))}/${R(POSS(j), 'E')}`, `${R(POSS(j), 'F')}/${minusOf(POSS(j))}`);
     w.push(`${comOf(POSS(j))}/${R(POSM(j), 'E')}`, `${R(POSM(j), 'F')}/${minusOf(POSM(j))}`);
@@ -1516,21 +1527,21 @@ export function tetrisCircuit(rows = 8): {
   // from the rail side.
   // grown to 3 base groups in 3b-4b: LTB3 taps the col-3 rail (and the
   // uniform growth leaves room for the coming overhang forms)
-  const legRails = [takeGroups(grown(3, 1)), takeGroups(grown(3, 1)), takeGroups(grown(3, 1)), takeGroups(grown(3, 1))];
+  const legRails = Array.from({ length: cols }, () => takeGroups(grown(3, 1)));
   for (const lg of legRails) for (let i = 1; i < lg.length; i++) w.push(`${lg[i - 1]}/${lg[i]}`);
-  const legUse = [{ n: 0 }, { n: 0 }, { n: 0 }, { n: 0 }];
+  const legUse = Array.from({ length: cols }, () => ({ n: 0 }));
   const legTap = (j: number) => tap(legRails[j], legUse[j]);
   for (let r = 0; r <= rows - 2; r++) {
     const feed0 = r === 0 ? comOf(MIRA(0)) : R(TOPW(r), 'E');
     w.push(`${feed0}/${R(MIRC(r, 0), 'E')}`, `${R(MIRC(r, 0), 'E')}/${R(MIRC(r, 1), 'E')}`);
     w.push(`${R(MIRC(r, 0), 'F')}/${minusOf(MIRC(r, 0))}`, `${R(MIRC(r, 1), 'F')}/${minusOf(MIRC(r, 1))}`);
-    for (let j = 0; j < 4; j++) {
-      const mr = MIRC(r, j < 2 ? 0 : 1);
+    for (let j = 0; j < cols; j++) {
+      const mr = MIRC(r, Math.floor(j / 2));
       const [arm, no] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
       w.push(`${comOf(CELL(r, j))}/${R(mr, arm)}`, `${R(mr, no)}/${legTap(j)}`);
     }
   }
-  for (let j = 0; j < 4; j++) {
+  for (let j = 0; j < cols; j++) {
     w.push(`${legTap(j)}/${R(LEGINV(j), 'E')}`, `${R(LEGINV(j), 'F')}/${minusOf(LEGINV(j))}`);
   }
   // second reads of columns 2 and 3 (parallel coils, coil-jack chained)
@@ -1550,18 +1561,18 @@ export function tetrisCircuit(rows = 8): {
   // pieces, no-token steering and the power-on ring never feel this bank.
   // grown to 3 base groups in 3b-3b: the mode-gated coil feeds (NOT-Z /
   // NOT-S gates + the LTS/LTZ reads) add two taps per column
-  const legTRails = [takeGroups(grown(3, 1)), takeGroups(grown(3, 1)), takeGroups(grown(3, 1)), takeGroups(grown(3, 1))];
+  const legTRails = Array.from({ length: cols }, () => takeGroups(grown(3, 1)));
   for (const lg of legTRails) for (let i = 1; i < lg.length; i++) w.push(`${lg[i - 1]}/${lg[i]}`);
-  const legTUse = [{ n: 0 }, { n: 0 }, { n: 0 }, { n: 0 }];
+  const legTUse = Array.from({ length: cols }, () => ({ n: 0 }));
   const legTTap = (j: number) => tap(legTRails[j], legTUse[j]);
   for (let r = 1; r <= rows - 2; r++) {
     w.push(`${R(MIRC(r, 1), 'E')}/${R(MIRCT(r, 0), 'E')}`, `${R(MIRCT(r, 0), 'E')}/${R(MIRCT(r, 1), 'E')}`);
     w.push(`${R(MIRCT(r, 0), 'F')}/${minusOf(MIRCT(r, 0))}`, `${R(MIRCT(r, 1), 'F')}/${minusOf(MIRCT(r, 1))}`);
-    for (let j = 0; j < 4; j++) {
+    for (let j = 0; j < cols; j++) {
       const armPrev = j % 2 === 0 ? 'H' : 'L';
-      const mt = MIRCT(r, j < 2 ? 0 : 1);
+      const mt = MIRCT(r, Math.floor(j / 2));
       const [arm, no] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
-      w.push(`${R(MIRC(r - 1, j < 2 ? 0 : 1), armPrev)}/${R(mt, arm)}`, `${R(mt, no)}/${legTTap(j)}`);
+      w.push(`${R(MIRC(r - 1, Math.floor(j / 2)), armPrev)}/${R(mt, arm)}`, `${R(mt, no)}/${legTTap(j)}`);
     }
   }
   // 3b-3b: the top-bank coils are MODE-GATED at the feed — LEGINVT
@@ -1572,8 +1583,8 @@ export function tetrisCircuit(rows = 8): {
   // so the tree shapes below stay EXACTLY as they were. Legacy slide-
   // staggered mode (STAG up, no ring state) keeps the old symmetric
   // checks, unchanged.
-  for (let j = 0; j < 4; j++) {
-    const zg = ZG(j < 2 ? 0 : 1);
+  for (let j = 0; j < cols; j++) {
+    const zg = ZG(Math.floor(j / 2));
     const [zArm, zNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
     w.push(`${legTTap(j)}/${R(zg, zArm)}`, `${R(zg, zNc)}/${R(LEGINVT(j), 'E')}`);
     w.push(`${R(LEGINVT(j), 'F')}/${minusOf(LEGINVT(j))}`);
@@ -1583,8 +1594,8 @@ export function tetrisCircuit(rows = 8): {
   // vmode mirrors for the tall forks (VMODE's own spare set can't serve
   // six tap trees); coils daisy-chained through the coil jacks
   w.push(`${R(VMODE, 'E')}/${R(VMODEM(0), 'E')}`);
-  for (let p = 1; p < 4; p++) w.push(`${R(VMODEM(p - 1), 'E')}/${R(VMODEM(p), 'E')}`);
-  for (let p = 0; p < 4; p++) w.push(`${R(VMODEM(p), 'F')}/${minusOf(VMODEM(p))}`);
+  for (let p = 1; p < cols; p++) w.push(`${R(VMODEM(p - 1), 'E')}/${R(VMODEM(p), 'E')}`);
+  for (let p = 0; p < cols; p++) w.push(`${R(VMODEM(p), 'F')}/${minusOf(VMODEM(p))}`);
 
   // the gated D-taps: every stage is a CHANGEOVER (blocked returns the
   // sample to the current master — see the ring notes) and every OPTIONAL
@@ -1871,10 +1882,10 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${R(CUTB3, 'F')}/${minusOf(CUTB3)}`, `${R(CUTB4, 'F')}/${minusOf(CUTB4)}`);
   w.push(`${R(CUTC5, 'F')}/${minusOf(CUTC5)}`, `${R(CUTC6, 'F')}/${minusOf(CUTC6)}`);
   w.push(`${R(CUTB1, 'F')}/${minusOf(CUTB1)}`, `${R(CUTB2, 'F')}/${minusOf(CUTB2)}`);
-  for (let j = 0; j < 4; j++) {
+  for (let j = 0; j < cols; j++) {
     const pt = PIECET(j);
     w.push(`${bmS}.${j + 1}+/${bmS}.${j + 1}S`, `${bmS}.${j + 1}T/${R(pt, 'E')}`, `${R(pt, 'F')}/${minusOf(pt)}`);
-    const cutc = j < 2 ? CUTC5 : CUTC6;
+    const cutc = [CUTC5, CUTC6][Math.floor(j / 2)]; // phase C grows the bank
     const [cArm, cNo] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
     w.push(`${colFanT}/${R(cutc, cArm)}`, `${R(cutc, cNo)}/${R(pt, 'H')}`);
     w.push(`${R(pt, 'G')}/${tapRail(j)}`);
@@ -1893,10 +1904,12 @@ export function tetrisCircuit(rows = 8): {
   // can never read occupied at the token row. Branch pairs tie at the
   // LEGB output jacks to fit collideNode's hole budget; a backward walk
   // from the node dead-ends at + or an open contact in every state.
-  for (let j = 0; j < 4; j++) {
-    const feed =
-      j === 0 ? R(LEGINV(0), 'E') : j === 1 ? R(LEGINV(1), 'E') : j === 2 ? R(LEGINV2(2), 'E') : R(LEGINV2(3), 'E');
-    w.push(`${feed}/${R(LEGB(j), 'E')}`, `${R(LEGB(j), 'F')}/${minusOf(LEGB(j))}`);
+  // occupied() feeds per column — a CLASS map: 0,1 read LEGINV directly,
+  // 2,3 the LEGINV2 parallel copies (LEGINV(2/3)'s sets are spent). phase
+  // C re-derives which columns need copies at a wider well.
+  const legbFeed = [R(LEGINV(0), 'E'), R(LEGINV(1), 'E'), R(LEGINV2(2), 'E'), R(LEGINV2(3), 'E')];
+  for (let j = 0; j < cols; j++) {
+    w.push(`${legbFeed[j]}/${R(LEGB(j), 'E')}`, `${R(LEGB(j), 'F')}/${minusOf(LEGB(j))}`);
     w.push(`${plusOf(PIECET(j))}/${R(PIECET(j), 'L')}`, `${R(PIECET(j), 'K')}/${R(LEGB(j), 'H')}`);
   }
   // branch outputs chain jack-to-jack and enter at COLLIDE's com (its one
