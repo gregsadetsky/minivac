@@ -66,7 +66,7 @@ root.innerHTML = `
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},44px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
     <div style="margin-top:10px;color:#5c646e">
-      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = piece shape &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; enter = start
+      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = shape &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
     </div>
     <details style="margin-top:18px;color:#5c646e;text-align:left;max-width:520px">
       <summary style="cursor:pointer;text-align:center">dump the circuit</summary>
@@ -110,6 +110,39 @@ const shapeLabel = () =>
 
 function relay(loc: { machine: number; index: number }): boolean {
   return sim.getMachineState(loc.machine).relays[loc.index];
+}
+
+// the clatter: the real machine is 400+ relays and every armature clicks.
+// Each paint diffs the relay states and plays a staggered burst of the
+// app's real relay samples, capped so a collapse doesn't fire hundreds.
+const clickOn = new Audio('/relay-on.mp3');
+const clickOff = new Audio('/relay-off.mp3');
+let soundOn = true;
+const prevStates: boolean[][] = [];
+function clatter() {
+  let on = 0;
+  let off = 0;
+  for (let m = 0; m < L.machines; m++) {
+    const rel = sim.getMachineState(m).relays;
+    const prev = prevStates[m];
+    for (let i = 0; i < 6; i++) {
+      const now = !!rel[i];
+      if (prev && prev[i] !== now) {
+        if (now) on++;
+        else off++;
+      }
+    }
+    prevStates[m] = rel.slice();
+  }
+  if (!soundOn) return;
+  const bursts = Math.min(7, on + off);
+  for (let k = 0; k < bursts; k++) {
+    const a = (k < Math.min(4, on) ? clickOn : clickOff).cloneNode() as HTMLAudioElement;
+    a.volume = 0.18 + Math.random() * 0.22;
+    setTimeout(() => {
+      a.play().catch(() => {});
+    }, Math.random() * 110);
+  }
 }
 
 // the piece's column lives in the machine: the position register's
@@ -167,6 +200,7 @@ function wouldOverlap(nPos: number, nWidth: number, nTall: boolean): boolean {
 }
 
 function render(note?: string) {
+  clatter();
   if (relay(IO.gameOverRelay)) {
     // the latch is relay-held: only a power cycle clears it
     for (let r = 0; r < ROWS; r++)
@@ -218,6 +252,11 @@ function applyShape() {
 
 document.addEventListener('keydown', e => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
+  if (e.key === 'm' || e.key === 'M') {
+    soundOn = !soundOn;
+    if (!busy) render(soundOn ? 'relay clatter on' : 'relay clatter off');
+    return;
+  }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     if (busy) return;
     const p = posAt();
