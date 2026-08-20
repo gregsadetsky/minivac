@@ -9,10 +9,10 @@
  * the piece is, it asks. Everything the game decides (falling, landing,
  * stacking, line clears, the two-row vertical write, the row collapse
  * that walks the stack down after a clear) happens inside the circuit —
- * now the 12-ROW WELL: the generator is rows-parameterized (rung 11), so
- * this page plays 396 relays across 68 minivacs; the page only works the
- * tick/shape slides, the LEFT/RIGHT buttons and START — exactly what a
- * human at 68 real Minivacs would do.
+ * now the 12-ROW WELL: the generator is rows-parameterized (rung 11); the
+ * relay/machine counts on screen are computed from the layout. the page
+ * only works the tick/shape slides, the LEFT/RIGHT buttons and START —
+ * exactly what a human at that many real Minivacs would do.
  * After a lock the machine owes itself bookkeeping ticks (the vertical
  * phase-2 write, then the reset, which also re-homes the register); the
  * page runs those automatically while the LOCKED slave is up, which also
@@ -100,13 +100,30 @@ for (let j = 0; j < COLS; j++) {
 document.getElementById('dump')!.textContent =
   `${wires.length} wires, ${L.machines} machines\n\n` + wires.join('\n');
 
-let width = 1; // 1 or 2 columns (the WID slide)
-let tall = false; // VMODE: the piece is 2 cells tall (the vertical rung)
+// the shape set: flat/tall rectangles + the staggered S and Z (whose top
+// pair shifts one column off the bottom pair — the machine's TOPMASK
+// slides + STAG mode, shapes rung 3b). stag: -1 = top shifted left (S),
+// +1 = shifted right (Z), 0 = symmetric.
+const SHAPES = [
+  { label: '1x1', w: 1, tall: false, stag: 0 },
+  { label: '2 wide', w: 2, tall: false, stag: 0 },
+  { label: '2 tall', w: 1, tall: true, stag: 0 },
+  { label: '2x2 square', w: 2, tall: true, stag: 0 },
+  { label: 'S', w: 2, tall: true, stag: -1 },
+  { label: 'Z', w: 2, tall: true, stag: 1 },
+] as const;
+let shapeIx = 0;
+const shape = () => SHAPES[shapeIx];
+const width = () => shape().w;
+const tall = () => shape().tall;
 let busy = true;
 let ticks = 0;
 let sim: MinivacSimulator;
-const shapeLabel = () =>
-  tall ? (width === 2 ? '2x2 square' : '2 tall') : width === 2 ? '2 wide' : '1x1';
+const shapeLabel = () => shape().label;
+// position bounds per shape: the bottom pair must fit, and a staggered
+// top pair must fit too (S needs pos >= 1, Z needs pos <= 1)
+const minPos = () => (shape().stag < 0 ? 1 : 0);
+const maxPos = () => COLS - width() + (shape().stag > 0 ? -1 : 0);
 
 function relay(loc: { machine: number; index: number }): boolean {
   return sim.getMachineState(loc.machine).relays[loc.index];
@@ -154,7 +171,17 @@ function posAt(): number {
 
 function mask(): number {
   const p = posAt();
-  return p < 0 ? 0 : (width === 2 ? 0b11 : 0b1) << p;
+  return p < 0 ? 0 : (width() === 2 ? 0b11 : 0b1) << p;
+}
+
+function topMask(): number {
+  const p = posAt();
+  if (p < 0 || !tall()) return 0;
+  const st = shape().stag;
+  if (st === 0) return mask();
+  // p+st can dip below 0 transiently right after a reset re-homes the
+  // register (the operator steps back in bounds before the next spawn)
+  return p + st < 0 ? 0 : (0b11 << (p + st)) & 0b1111;
 }
 
 function press(b: { button: number; machine: number }) {
@@ -184,17 +211,20 @@ function rowCells(r: number): number {
 // token row / one row above it", so the machine itself refuses sideways
 // moves into stored cells — bottom AND top cell of a tall piece, wide
 // edges included (the page just presses the button and reads back
-// whether the register stepped). This JS check remains for exactly ONE
-// seam: the ArrowUp RESHAPE — changing width/tallness is a slide, and a
-// slide cannot be electrically refused.
-function wouldOverlap(nPos: number, nWidth: number, nTall: boolean): boolean {
+// whether the register stepped). This JS check remains for TWO seams
+// until the shape ring (3b-3): the ArrowUp RESHAPE (a slide flip cannot
+// be electrically refused) and the STAGGERED top pair (the legality
+// trees read the top row per the bottom mask's columns; an S/Z top pair
+// enters a different column).
+function wouldOverlap(nPos: number, nIx: number): boolean {
+  const s = SHAPES[nIx];
   const tok = tokenRow();
   if (tok < 0) return false;
-  const m = (nWidth === 2 ? 0b11 : 0b1) << nPos;
+  const bm = (s.w === 2 ? 0b11 : 0b1) << nPos;
+  const tm = !s.tall ? 0 : s.stag === 0 ? bm : (0b11 << (nPos + s.stag)) & 0b1111;
   for (let j = 0; j < COLS; j++) {
-    if (((m >> j) & 1) === 0) continue;
-    if (relay(IO.cellRelay(tok, j))) return true;
-    if (nTall && tok > 0 && relay(IO.cellRelay(tok - 1, j))) return true;
+    if (((bm >> j) & 1) === 1 && relay(IO.cellRelay(tok, j))) return true;
+    if (tok > 0 && ((tm >> j) & 1) === 1 && relay(IO.cellRelay(tok - 1, j))) return true;
   }
   return false;
 }
@@ -211,17 +241,20 @@ function render(note?: string) {
     return;
   }
   const tok = tokenRow();
-  const m = mask();
+  const bm = mask();
+  const tm = topMask(); // = bm for symmetric tall shapes, shifted for S/Z
   for (let r = 0; r < ROWS; r++) {
     for (let j = 0; j < COLS; j++) {
       const on = relay(IO.cellRelay(r, j));
-      const inPiece = r === tok || (tall && tok > 0 && r === tok - 1);
-      const isPiece = inPiece && ((m >> j) & 1) === 1;
+      const isPiece =
+        (r === tok && ((bm >> j) & 1) === 1) ||
+        (tok > 0 && r === tok - 1 && ((tm >> j) & 1) === 1);
       pixels[r][j].style.background = isPiece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
+  const um = bm | tm;
   for (let j = 0; j < COLS; j++) {
-    colMarks[j].style.background = ((m >> j) & 1) === 1 ? '#7fd4ff' : 'transparent';
+    colMarks[j].style.background = ((um >> j) & 1) === 1 ? '#7fd4ff' : 'transparent';
   }
   const alerts = sim.getState().alerts;
   status.textContent =
@@ -245,9 +278,34 @@ function act(label: string, fn: () => string | void) {
 
 function applyShape() {
   const w = IO.wid;
-  sim.setSlide(w.slide, width === 2 ? 'right' : 'left', w.machine);
+  sim.setSlide(w.slide, width() === 2 ? 'right' : 'left', w.machine);
   const v = IO.vmode;
-  sim.setSlide(v.slide, tall ? 'right' : 'left', v.machine);
+  sim.setSlide(v.slide, tall() ? 'right' : 'left', v.machine);
+  // the staggered slides are ABSOLUTE columns: recompute from the live
+  // register position every time the shape or position changes
+  const st = shape().stag;
+  sim.setSlide(6, st !== 0 ? 'right' : 'left', btnMachine); // STAG
+  const t = st !== 0 ? topMask() : 0;
+  for (let j = 0; j < COLS; j++) sim.setSlide(j + 1, (t >> j) & 1 ? 'right' : 'left', btnMachine);
+}
+
+// after a lock the reset tick re-homes the register to column 0 — out of
+// bounds for a staggered shape (S needs pos>=1). The operator steps the
+// fresh position back in bounds BEFORE the next spawn (pre-spawn steps
+// are legal: no token, the legality rails read empty) and re-syncs the
+// absolute TOPMASK columns.
+function resyncPiece() {
+  let cur = posAt();
+  let guard = 0;
+  while (cur >= 0 && cur < minPos() && guard++ < COLS) {
+    press(IO.right);
+    cur = posAt();
+  }
+  while (cur > maxPos() && guard++ < COLS) {
+    press(IO.left);
+    cur = posAt();
+  }
+  applyShape();
 }
 
 document.addEventListener('keydown', e => {
@@ -262,45 +320,62 @@ document.addEventListener('keydown', e => {
     const p = posAt();
     if (p < 0) return;
     const dir = e.key === 'ArrowRight' ? 1 : -1;
-    // the machine decides everything here: stored cells (bottom and top
-    // rows), the wide edges, and the wall all refuse in contacts. The
-    // page skips only the obvious edge no-ops, then presses and reads
-    // back whether the register stepped.
-    const next = Math.min(COLS - width, Math.max(0, p + dir));
+    // the machine decides the symmetric part: stored cells (bottom and
+    // top rows), the wide edges, and the wall all refuse in contacts.
+    // The page skips only the obvious edge no-ops (incl. the staggered
+    // fit bounds), then presses and reads back whether the register
+    // stepped.
+    const next = Math.min(maxPos(), Math.max(minPos(), p + dir));
     if (next === p) return;
+    // stag seam: the legality trees read the top row per the BOTTOM
+    // mask's columns — an S/Z top pair enters a DIFFERENT column, so the
+    // page refuses those targets itself (and the machine may falsely
+    // refuse a legal one; conservative) until the shape ring re-gates
+    // the trees (3b-3).
+    const st = shape().stag;
+    const tokNow = tokenRow();
+    if (st !== 0 && tokNow > 0) {
+      const nt = (0b11 << (next + st)) & 0b1111;
+      for (let j = 0; j < COLS; j++) {
+        if (((nt >> j) & 1) === 1 && relay(IO.cellRelay(tokNow - 1, j))) {
+          render('blocked — the top pair would land on the stack');
+          return;
+        }
+      }
+    }
     act(`column ${next}`, () => {
       press(dir > 0 ? IO.right : IO.left);
       if (posAt() === p) return 'blocked — the contacts refused the step';
+      if (st !== 0) applyShape(); // the TOPMASK slides are absolute columns
     });
   } else if (e.key === 'ArrowUp') {
-    // cycle 1x1 -> 2 wide -> 2 tall -> 2x2 (tall = the VMODE slide: the
-    // machine writes the row above the token on the phase-2 tick)
+    // cycle the shape set (the last two are the staggered S and Z: their
+    // top pair rides the TOPMASK slide bank + STAG mode, shapes rung 3b)
     if (busy) return;
     const p = posAt();
     if (p < 0) return;
-    let nWidth = width;
-    let nTall = tall;
-    if (!tall && width === 1) nWidth = 2;
-    else if (!tall) {
-      nTall = true;
-      nWidth = 1;
-    } else if (width === 1) nWidth = 2;
-    else {
-      nTall = false;
-      nWidth = 1;
-    }
-    const nPos = Math.min(p, COLS - nWidth);
-    if (wouldOverlap(nPos, nWidth, nTall)) {
+    const nIx = (shapeIx + 1) % SHAPES.length;
+    const ns = SHAPES[nIx];
+    const nMin = ns.stag < 0 ? 1 : 0;
+    const nMax = COLS - ns.w + (ns.stag > 0 ? -1 : 0);
+    const nPos = Math.min(nMax, Math.max(nMin, p));
+    if (wouldOverlap(nPos, nIx)) {
       render('blocked — no room for that shape here');
       return;
     }
-    act('shape', () => {
-      if (nPos < p) {
-        press(IO.left); // widening at the wall: step in first
-        if (posAt() !== nPos) return 'blocked — no room for that shape here';
+    act(ns.label, () => {
+      // clamping into the new shape's bounds = operator steps, still
+      // machine-checked per the CURRENT shape's footprint
+      let cur = p;
+      let guard = 0;
+      while (cur !== nPos && guard++ < COLS) {
+        press(cur < nPos ? IO.right : IO.left);
+        const stepped = posAt();
+        if (stepped === cur) break; // the contacts refused
+        cur = stepped;
       }
-      width = nWidth;
-      tall = nTall;
+      if (cur !== nPos) return 'blocked — no room for that shape here';
+      shapeIx = nIx;
       applyShape();
     });
   } else if (e.key === 'ArrowDown' || e.key === ' ') {
@@ -334,6 +409,9 @@ document.addEventListener('keydown', e => {
             );
             step(n + 1);
           } else {
+            // n>0 means a lock's bookkeeping ran, i.e. the register was
+            // re-homed — staggered shapes need their bounds + TOPMASK back
+            if (n > 0 && shape().stag !== 0 && !relay(IO.gameOverRelay)) resyncPiece();
             busy = false;
             const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
             render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
