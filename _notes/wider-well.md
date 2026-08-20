@@ -182,6 +182,23 @@ at cols=4 must land within these counts (equal or tighter). the script
 doubles as the C gate's cross-check: run it on the emitted netlist and
 diff the spend per source family.
 
+## gate tooling
+
+- byte gate: scratchpad/dump-netlist.mjs (exact list order) — held for
+  phases A+B.
+- SET gate: scratchpad/dump-netlist-sorted.mjs (endpoints normalized,
+  list sorted, duplicates kept = multiset) — two dumps equal iff the
+  circuits are electrically identical regardless of push order. this is
+  the gate for allocator conversions (MirrorBank emits coil wires
+  lazily, so positions shift while the wire multiset must not).
+- spend gate: scratchpad/contact-ledger.mjs — per-set usage diff.
+- emitter 0 (MirrorBank, src/circuits/contact-alloc.ts) is LANDED and
+  unit-tested, not yet wired in. pilot conversion target: VMODEM (its
+  8 sets are spent in natural tree order — right-1 s1+s2, right-2
+  s1+s2, wall s1, left-0 s2, left-1 s1... wait: left-1 and left-2 ride
+  VMODEM(3); left-0 rides VMODEM(2).set2 — request order in tree order
+  reproduces the hand map exactly, so the SET gate must hold).
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
