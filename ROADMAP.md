@@ -358,6 +358,72 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    completion) + long random gameplay under FAST (the page's engine):
    158 ticks / 40 locks / 19 vertical / 5 clears, zero model mismatches.
 
+GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
+   GAMEOVER (GOM mirrors token-at-0, LKM2 gives the set a lock-scoped
+   arm) and the latch blocks every spawn — both set paths (START and the
+   reset tick's auto-re-arm, which the first draft missed) enter through
+   the latch's one NC contact. the first draft's rail-tapped set ALSO
+   back-fed + through the held latch into row 0's hold-break (the tie-
+   point law again: a set path must dead-end at + or an open contact in
+   EVERY state, not just idle). receipts: the game-over test (top-out,
+   latch held, spawn refused, steering dead) + the random-gameplay runs
+   now play MULTIPLE GAMES per run — a top-out power-cycles a fresh
+   machine (seed 20260820: 4 games / 40 locks / 326 ticks); the page
+   freezes rust-red with the score and a reload note.
+   THE SCORE RING LANDED 2026-08-20, same session: one decimal digit
+   (0-9, wraps) stepped once per line clear — the token-ring
+   master/slave/clock pattern re-used verbatim with CLEARP as the clock
+   plus SCBOOT power-on seed pulse-fed off CLEARPM's spare K (feeding the
+   seed from the clock chain would latch the ring clocks high forever). a
+   binary counter was designed first and killed on paper: its done-track
+   leaked + into below-toggle masters through bidirectional contacts
+   (three redesigns, each needing another mirror bank — the ring is
+   cheaper AND the pattern was already proven). buttons/WID moved to a
+   dedicated relay-free machine (layout.btnMachine) after two anchor
+   schemes drifted with rows; the registry asserts the geometry. receipt:
+   eleven scored clears including the 9-to-0 wrap, green first run; the
+   page shows the score live.
+   STAGGERED PIECES (shapes 3b-1) LANDED 2026-08-20, same session: S and
+   Z. a shape on this machine is a (bottomMask, topMask) pair — the
+   phase-2 top write now samples a TOPMASK slide bank (PIECET) behind
+   STAGM's changeover when the STAG slide is up. the T fan conducts ONLY
+   during a staggered phase 2 (normally-open cuts CUTC5/6), the B fan and
+   its collision taps are severed for that window (CUTB1-4), and ALL six
+   cuts ride one delay hop (CUTBD): the release trace caught a clean
+   mid-press write growing a phantom cell when the fresh top row's
+   readback re-fed the data rails one relaxation wave after raw-rail cuts
+   dropped — cuts must die depth-aligned with what they race. a
+   press-scoped tap gate was tried and REVERTED: it severed the bottom
+   collision's between-ticks pre-arm running through the same taps
+   (pieces fell straight through blocks; the idle + on the taps is
+   audited benign — LINEDLY keeps the LINE chain unpowered).
+   TOP COLLISION (3b-2) LANDED same session: a staggered notch rests ON
+   stored content — PIECET+LEGB series branches pre-arm COLLIDE at its
+   com (the collide node was at capacity; entering through the com's one
+   spare hole is the same trick as GAMEOVER's NC entry), scoped by STAGM2
+   after a hostile-TOPMASK regression caught the ungated term resting a
+   symmetric piece mid-air. receipts: S/Z write tests + notch-rests-on-
+   content + a hostile symmetric regression (STAG off + TOPMASK 0b1111
+   ignored), all green under fast.
+   THE PAGE PLAYS S AND Z, same session: the shape cycle grew the
+   staggered pair; arrow steps re-sync the absolute TOPMASK columns,
+   entering a staggered shape auto-clamps the register into its fit
+   bounds (again after every reset re-home, as pre-spawn operator steps —
+   exactly what a human at the slides would do), the preview paints the
+   shifted top pair. the JS guard now covers exactly TWO seams until the
+   shape ring (3b-3): the reshape slide flip and the staggered top
+   column the legality trees can't see (they read the top row per the
+   BOTTOM mask's columns; the machine may also falsely refuse — both
+   directions of that seam die when the ring re-gates the trees).
+   playwright receipt: the driver cycles through all six shapes, drops an
+   S onto a stack, and reads the staggered zigzag out of the pixels.
+   NEXT (3b-3, the shape ring): one-hot shape x orientation ring stepped
+   by the UP button (the score-ring pattern), two mask fans from pos
+   (POSM2/WIDM generalized to per-state offsets), phase-2 T bank + VMODE
+   from ring contacts, legality trees re-gated per T-mask column, the
+   page guard deleted. L/J/T need it (3-wide bottoms). design in
+   _notes/shapes-design.md; MASS at the rung close.
+
 ## display/input notes
 
 - the canvas viewer reads relay states directly as pixels — the playfield does
