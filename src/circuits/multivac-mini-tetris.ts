@@ -25,41 +25,47 @@ export const comOf = (n: number) => `m${Math.floor(n / 6)}.${(n % 6) + 1}com`;
 export const plusOf = (n: number) => `m${Math.floor(n / 6)}.${(n % 6) + 1}+`;
 export const minusOf = (n: number) => `m${Math.floor(n / 6)}.${(n % 6) + 1}-`;
 
-export const A0 = 0, A0m = 1, A1 = 2, A2 = 3; // decoder address relays
-export const W = (r: number, k: number) => 4 + 4 * r + k; // write groups, k = 0..3
-export const CELL = (r: number, j: number) => 36 + 4 * r + j; // field cells
-export const RING = (i: number, part: number) => 68 + 3 * i + part; // clk, master, slave
-export const MIRA = (r: number) => 92 + 2 * r; // slave mirror A (W triggers)
-export const MIRB = (r: number) => 93 + 2 * r; // slave mirror B (collision)
-export const RESETM = (x: number) => 108 + x; // 4 reset mirrors, 2 stages each
-export const COLLIDE = 112, COLLIDEM = 113, LKM = 114, RSTM = 115;
-export const SPAWN = 116, SPAWNCLR = 117, CLEARP = 118; // CLEARP: line-clear pending
-export const LINE = (j: number) => 119 + j;
-export const PIECE = (j: number) => 123 + j;
-export const LKS = 127, TICKM = 128; // LOCKED slave + tick-phase mirror
-export const COLLIDEM2 = 129; // isolates the collision node from COLLIDE's com
-export const READGATE = 130; // depth-1 press relay: powers the depth-2 rails
-export const MIRB2 = (r: number) => 131 + r; // second collision mirror per row
-export const PRESSCUT = (x: number) => 139 + x; // 4 relays: drop the collision mirrors during a press
-export const RAILGATE2 = 143; // second-hop rail power, aligns rail life with the W group
-export const RSTM2 = 144; // clears the CLEARP latch during the reset tick
-export const CPSET = 145; // isolates CLEARP's set path from the LINE chain
+// the DEFAULT-GEOMETRY map: every constant below derives from the
+// layout allocator at (8 rows, 4 cols) — tetrisLayout is the primary
+// source now (wider-well phase C shifts bank sizes; literals would
+// break). the inline comments document each bank; jack ranges in
+// them describe TODAY'S map and move with the allocator.
+const L8 = tetrisLayout(8);
+export const A0 = L8.A0, A0m = L8.A0m, A1 = L8.A1, A2 = L8.A2; // decoder address relays
+export const W = L8.W; // write groups, k = 0..3
+export const CELL = L8.CELL; // field cells
+export const RING = L8.RING; // clk, master, slave
+export const MIRA = L8.MIRA; // slave mirror A (W triggers)
+export const MIRB = L8.MIRB; // slave mirror B (collision)
+export const RESETM = L8.RESETM; // 4 reset mirrors, 2 stages each
+export const COLLIDE = L8.COLLIDE, COLLIDEM = L8.COLLIDEM, LKM = L8.LKM, RSTM = L8.RSTM;
+export const SPAWN = L8.SPAWN, SPAWNCLR = L8.SPAWNCLR, CLEARP = L8.CLEARP; // CLEARP: line-clear pending
+export const LINE = L8.LINE;
+export const PIECE = L8.PIECE;
+export const LKS = L8.LKS, TICKM = L8.TICKM; // LOCKED slave + tick-phase mirror
+export const COLLIDEM2 = L8.COLLIDEM2; // isolates the collision node from COLLIDE's com
+export const READGATE = L8.READGATE; // depth-1 press relay: powers the depth-2 rails
+export const MIRB2 = L8.MIRB2; // second collision mirror per row
+export const PRESSCUT = L8.PRESSCUT; // 4 relays: drop the collision mirrors during a press
+export const RAILGATE2 = L8.RAILGATE2; // second-hop rail power, aligns rail life with the W group
+export const RSTM2 = L8.RSTM2; // clears the CLEARP latch during the reset tick
+export const CPSET = L8.CPSET; // isolates CLEARP's set path from the LINE chain
 // ---- vertical pieces ("phase-2 top write", roadmap rung 9b) ----
 // a vertical piece = the column mask, two cells tall. The bottom cell IS the
 // token (collision unchanged: the bottom leads). The lock press writes the
 // bottom row through the existing path, untouched; a P2 master/slave pair
 // then turns the NEXT tick into phase 2 — a second, private write of row
 // r-1 through the TOPW mirrors — and the reset moves to the tick after.
-export const VMODE = 146; // piece-shape mode relay (slide-driven)
-export const TOPW = (r: number) => 146 + r; // r=1..7: slave-r mirrors, route the phase-2 triggers to row r-1
-export const P2M = 154; // phase-2 master: latched by a vertical lock press
-export const P2S = 155; // phase-2 slave: the resetrail branch contact (two-phase, like LKS)
-export const P2CLR = 156; // breaks P2M's latch during phase 2 (like RSTM for LKM)
-export const P2GATE = 157; // phase-2 READGATE: powers the two trigger rails
-export const P2COL = 158; // phase-2 RAILGATE2: powers the column feed
-export const TICKM2 = 159; // second tick mirror: clocks P2M -> P2S (TICKM's contacts are spoken for)
-export const P2CUT = (x: number) => 160 + x; // 4 relays: drop the collision mirrors during phase 2
-export const LINEDLY = 164; // delays the LINE chain's feed past the collision-sense cut
+export const VMODE = L8.VMODE; // piece-shape mode relay (slide-driven)
+export const TOPW = L8.TOPW; // r=1..7: slave-r mirrors, route the phase-2 triggers to row r-1
+export const P2M = L8.P2M; // phase-2 master: latched by a vertical lock press
+export const P2S = L8.P2S; // phase-2 slave: the resetrail branch contact (two-phase, like LKS)
+export const P2CLR = L8.P2CLR; // breaks P2M's latch during phase 2 (like RSTM for LKM)
+export const P2GATE = L8.P2GATE; // phase-2 READGATE: powers the two trigger rails
+export const P2COL = L8.P2COL; // phase-2 RAILGATE2: powers the column feed
+export const TICKM2 = L8.TICKM2; // second tick mirror: clocks P2M -> P2S (TICKM's contacts are spoken for)
+export const P2CUT = L8.P2CUT; // 4 relays: drop the collision mirrors during phase 2
+export const LINEDLY = L8.LINEDLY; // delays the LINE chain's feed past the collision-sense cut
 // ---- row collapse ("the elevator", roadmap rung 10) ----
 // after a line clear at row r the hole walks UP: THREE ticks per row —
 // alpha fires the source and hole rows' gates only (the source's content
@@ -76,31 +82,31 @@ export const LINEDLY = 164; // delays the LINE chain's feed past the collision-s
 // clock) and drains by walking off stage 1. Full design + rejected
 // alternatives + the observed-but-unexplained alpha-release anomaly:
 // _notes/collapse-design.md
-export const ELEVC = (t: number) => 162 + 3 * t; // stage clocks (165..183)
-export const ELEVA = (t: number) => 163 + 3 * t; // stage masters (166..184)
-export const ELEVSL = (t: number) => 164 + 3 * t; // stage slaves (167..185)
-export const SEEDM = (t: number) => 185 + t; // ring-slave mirrors: seed the chain at the token row (186..192)
-export const CLEARPM = 193; // CLEARP mirror: scopes the seed to clearing locks
-export const LANE = 194; // collapse tick-lane slave (branches between LKS and COLLIDE)
-export const TICKM3 = 195; // third tick mirror: clocks LANE and the phase toggle
-export const TGM = 196, TGS = 197; // phase bit 0 (master/slave)
-export const TG2M = 222, TG2S = 223; // phase bit 1: the collapse is THREE
+export const ELEVC = L8.ELEVC; // stage clocks (165..183)
+export const ELEVA = L8.ELEVA; // stage masters (166..184)
+export const ELEVSL = L8.ELEVSL; // stage slaves (167..185)
+export const SEEDM = L8.SEEDM; // ring-slave mirrors: seed the chain at the token row (186..192)
+export const CLEARPM = L8.CLEARPM; // CLEARP mirror: scopes the seed to clearing locks
+export const LANE = L8.LANE; // collapse tick-lane slave (branches between LKS and COLLIDE)
+export const TICKM3 = L8.TICKM3; // third tick mirror: clocks LANE and the phase toggle
+export const TGM = L8.TGM, TGS = L8.TGS; // phase bit 0 (master/slave)
+export const TG2M = L8.TG2M, TG2S = L8.TG2S; // phase bit 1: the collapse is THREE
 // ticks per stage — alpha (gates-only move), beta (breakers-only clear),
 // gamma (chain step with every rail dark). Stepping with a hot rail fired
 // the freshly hot stage's routing mid-tick and killed the next row before
 // its copy (the trace caught it); gamma isolates the step. Cycle:
 // alpha arms TGM -> beta (TGS); beta arms TG2M -> gamma (TG2S); gamma arms
 // nothing -> alpha. Decodes ride the toggles' own contacts off cgbRail.
-export const ELEVW1 = (t: number) => 196 + 2 * t; // trigger-routing mirrors (198..210 even)
-export const ELEVW2 = (t: number) => 197 + 2 * t; // (199..211 odd)
-export const CGA = 212, CGB = 213; // collapse rail feeds (alpha rail / both-phase rail)
-export const CGB2 = 214; // second-hop breaker rail: aligns the source hold-break with the gate wave
-export const CUTC1 = 215, CUTC2 = 216; // cut the piece arms off colFan during a collapse
-export const CUTC3 = 224, CUTC4 = 225; // and the piece taps off collideNode: with 2+ mask
+export const ELEVW1 = L8.ELEVW1; // trigger-routing mirrors (198..210 even)
+export const ELEVW2 = L8.ELEVW2; // (199..211 odd)
+export const CGA = L8.CGA, CGB = L8.CGB; // collapse rail feeds (alpha rail / both-phase rail)
+export const CGB2 = L8.CGB2; // second-hop breaker rail: aligns the source hold-break with the gate wave
+export const CUTC1 = L8.CUTC1, CUTC2 = L8.CUTC2; // cut the piece arms off colFan during a collapse
+export const CUTC3 = L8.CUTC3, CUTC4 = L8.CUTC4; // and the piece taps off collideNode: with 2+ mask
 // columns the collision fan is a SECOND rail-to-rail bridge (rail -> K ->
 // collideNode -> K' -> rail'), and the phase decode's gap-held gates would
 // latch a bridged bit (caught by the instrumented random run at tick 31)
-export const JUNC = (k: number) => 216 + k; // spare-section 4-hole coms as junction boxes
+export const JUNC = L8.JUNC; // spare-section 4-hole coms as junction boxes
 // (JUNC(0) shares m36.1 with CUTC2 — a section's com jack is electrically
 // separate from its relay, so the junction coexists with the coil)
 // ---- the piece register, increment 1 (roadmap piece rung) ----
@@ -113,44 +119,44 @@ export const JUNC = (k: number) => 216 + k; // spare-section 4-hole coms as junc
 // AND the seeding story. The PIECE column relays re-feed from the register:
 // slave j's tap, or WIDM AND slave j-1 (the wide edge). Width itself is the
 // WID slide; legality gating (lateral collision) is the next increment.
-export const POSA = (j: number) => 226 + j; // step masters (226..229)
-export const POSS = (j: number) => 230 + j; // position slaves, one-hot (230..233)
-export const POSM = (j: number) => 234 + j; // slave mirrors: left/right D taps (234..237)
-export const LEFTM = 238, RIGHTM = 239; // button-line mirrors (direction gates)
-export const ANYBM = 240; // either button, depth 1: feeds the delay stage
-export const ANYBM2 = 241; // depth 2 echo: master hold, + TWIN's window detector
-export const WIDM = 242, WIDM2 = 243; // wide-mode mirrors (WID slide) for the edge feeds
-export const POSRST = (x: number) => 244 + x; // 2 relays: the RESET tick re-homes POS
-export const TWIN = 246; // the release window (ANYBM down AND ANYBM2 still up): transfer NOW
-export const BOOTL = 247; // latches on the first press; its NC is the power-on home seed
-export const POSM2 = (j: number) => 248 + j; // 3 more slave mirrors: the wide taps' pos gates
+export const POSA = L8.POSA; // step masters (226..229)
+export const POSS = L8.POSS; // position slaves, one-hot (230..233)
+export const POSM = L8.POSM; // slave mirrors: left/right D taps (234..237)
+export const LEFTM = L8.LEFTM, RIGHTM = L8.RIGHTM; // button-line mirrors (direction gates)
+export const ANYBM = L8.ANYBM; // either button, depth 1: feeds the delay stage
+export const ANYBM2 = L8.ANYBM2; // depth 2 echo: master hold, + TWIN's window detector
+export const WIDM = L8.WIDM, WIDM2 = L8.WIDM2; // wide-mode mirrors (WID slide) for the edge feeds
+export const POSRST = L8.POSRST; // 2 relays: the RESET tick re-homes POS
+export const TWIN = L8.TWIN; // the release window (ANYBM down AND ANYBM2 still up): transfer NOW
+export const BOOTL = L8.BOOTL; // latches on the first press; its NC is the power-on home seed
+export const POSM2 = L8.POSM2; // 3 more slave mirrors: the wide taps' pos gates
 // increment 2 — lateral legality in contacts:
-export const MIRC = (r: number, h: number) => 251 + 2 * r + h; // rows 0..6 x2: token-row gates for the occupancy taps
-export const LEGINV = (j: number) => 265 + j; // "column j occupied at the token row" (rail coil); its changeover routes the step
-export const LEGINV2 = (k: number) => 267 + k; // k=2,3: second reads of columns 2,3 for the wide right-edge checks
-export const WIDM3 = 271, WIDM4 = 272; // wide-mode mirrors: the wide forks + the wall gate
+export const MIRC = L8.MIRC; // rows 0..6 x2: token-row gates for the occupancy taps
+export const LEGINV = L8.LEGINV; // "column j occupied at the token row" (rail coil); its changeover routes the step
+export const LEGINV2 = L8.LEGINV2; // k=2,3: second reads of columns 2,3 for the wide right-edge checks
+export const WIDM3 = L8.WIDM3, WIDM4 = L8.WIDM4; // wide-mode mirrors: the wide forks + the wall gate
 // increment 3a — the tall piece's TOP row refuses too:
-export const MIRCT = (r: number, h: number) => 273 + 2 * (r - 1) + h; // rows 1..6 x2: "token at r" reading row r-1 (273..284)
-export const LEGINVT = (j: number) => 285 + j; // "column j occupied one row ABOVE the token" (285..288)
-export const LEGINVT2 = (k: number) => 287 + k; // k=2,3: top second-reads for the 2x2's right edge (289,290)
-export const VMODEM = (p: number) => 291 + p; // vmode mirrors: the tall forks in the D-tap trees (291..294)
+export const MIRCT = L8.MIRCT; // rows 1..6 x2: "token at r" reading row r-1 (273..284)
+export const LEGINVT = L8.LEGINVT; // "column j occupied one row ABOVE the token" (285..288)
+export const LEGINVT2 = L8.LEGINVT2; // k=2,3: top second-reads for the 2x2's right edge (289,290)
+export const VMODEM = L8.VMODEM; // vmode mirrors: the tall forks in the D-tap trees (291..294)
 // the game-over latch (appended: the tall-well layout below stays stable)
-export const GOM = 295; // "token at row 0" mirror (chained off MIRC(0,1)'s coil jack)
-export const GAMEOVER = 296; // latches on any lock at row 0; its NC blocks START forever
-export const LKM2 = 297; // lock-master mirror: the +-fed lock scope for GAMEOVER's set
+export const GOM = L8.GOM; // "token at row 0" mirror (chained off MIRC(0,1)'s coil jack)
+export const GAMEOVER = L8.GAMEOVER; // latches on any lock at row 0; its NC blocks START forever
+export const LKM2 = L8.LKM2; // lock-master mirror: the +-fed lock scope for GAMEOVER's set
 // the score ring (0..9, one step per line clear — the token-ring pattern):
-export const SCR = (i: number, part: number) => 298 + 3 * i + part; // clk, master, slave per digit (298..327)
-export const SCBOOT = 328; // latches on the first clear; its NC is digit 0's power-on seed
+export const SCR = L8.SCR; // clk, master, slave per digit (298..327)
+export const SCBOOT = L8.SCBOOT; // latches on the first clear; its NC is digit 0's power-on seed
 // staggered pieces (S/Z — shapes increment 3b-1):
-export const PIECET = (j: number) => 329 + j; // the TOP-row mask bank (TOPMASK slides on the button machine)
-export const CUTC5 = 333, CUTC6 = 334; // colFanT's collapse cuts (the CUTC pattern for the T fan)
-export const STAGM = 335; // the STAG slide's mirror: phase 2 feeds colFanT (staggered) instead of colFan
-export const CUTB1 = 336, CUTB2 = 337; // sever the B fan during a staggered phase 2 (its closed gates bridge rails through colFan)
-export const CUTB3 = 338, CUTB4 = 339; // ...and the collision-tap side: the SECOND bridge (collideNode), rung 10's lesson verbatim
-export const CUTBD = 340; // one-hop delay for ALL the stagger cuts: they must outlive the gates/rails/readback at the release
+export const PIECET = L8.PIECET; // the TOP-row mask bank (TOPMASK slides on the button machine)
+export const CUTC5 = L8.CUTC5, CUTC6 = L8.CUTC6; // colFanT's collapse cuts (the CUTC pattern for the T fan)
+export const STAGM = L8.STAGM; // the STAG slide's mirror: phase 2 feeds colFanT (staggered) instead of colFan
+export const CUTB1 = L8.CUTB1, CUTB2 = L8.CUTB2; // sever the B fan during a staggered phase 2 (its closed gates bridge rails through colFan)
+export const CUTB3 = L8.CUTB3, CUTB4 = L8.CUTB4; // ...and the collision-tap side: the SECOND bridge (collideNode), rung 10's lesson verbatim
+export const CUTBD = L8.CUTBD; // one-hop delay for ALL the stagger cuts: they must outlive the gates/rails/readback at the release
 // the top collision term (shapes 3b-2): a staggered notch rests on stored content
-export const LEGB = (j: number) => 341 + j; // second reads of "col j occupied at the token row" (the legality rails)
-export const STAGM2 = 345; // second STAG mirror: the top collision term applies only in staggered mode
+export const LEGB = L8.LEGB; // second reads of "col j occupied at the token row" (the legality rails)
+export const STAGM2 = L8.STAGM2; // second STAG mirror: the top collision term applies only in staggered mode
 // the shape ring (3b-3a): a 6-state one-hot ring stepped by the UP button,
 // state order = the page's cycle (0=1x1, 1=2wide, 2=2tall, 3=O, 4=S, 5=Z).
 // the ring DERIVES the mode rails the operator slides drive, wiring into
@@ -159,15 +165,15 @@ export const STAGM2 = 345; // second STAG mirror: the top collision term applies
 // legally; a disagreement UNIONS, which is what real hardware would do).
 // slide-driven tests/procedures stay valid; state 0 = all rails off =
 // the slide defaults.
-export const SHR = (i: number, part: number) => 346 + 3 * i + part; // clk, master, slave per state (346..363)
-export const UPM = 364; // UP-button mirror: set1 clocks the ring, set2 K pulses SHBOOT (the CLEARPM pattern)
-export const SHBOOT = 365; // latches on the first UP; its NC seeds state 0 (the BOOTL idiom, private relay)
-export const SM = (k: number) => 366 + k; // S-state mirrors (366..369): 4 T-fan branches + WIDB/VMODE/STAGM rails
-export const ZM = (k: number) => 370 + k; // Z-state mirrors (370..373): same ledger as S
-export const OM = 374; // O-state mirror: WIDB + VMODE rails
-export const I2TM = 375; // 2-tall mirror: VMODE rail
-export const I2WM = 376; // 2-wide mirror: WIDB rail
-export const POSM3 = (k: number) => 377 + k; // T-fan pos mirrors: k=0 pos0, k=1,2 pos1, k=3 pos2 (377..380)
+export const SHR = L8.SHR; // clk, master, slave per state (346..363)
+export const UPM = L8.UPM; // UP-button mirror: set1 clocks the ring, set2 K pulses SHBOOT (the CLEARPM pattern)
+export const SHBOOT = L8.SHBOOT; // latches on the first UP; its NC seeds state 0 (the BOOTL idiom, private relay)
+export const SM = L8.SM; // S-state mirrors (366..369): 4 T-fan branches + WIDB/VMODE/STAGM rails
+export const ZM = L8.ZM; // Z-state mirrors (370..373): same ledger as S
+export const OM = L8.OM; // O-state mirror: WIDB + VMODE rails
+export const I2TM = L8.I2TM; // 2-tall mirror: VMODE rail
+export const I2WM = L8.I2WM; // 2-wide mirror: WIDB rail
+export const POSM3 = L8.POSM3; // T-fan pos mirrors: k=0 pos0, k=1,2 pos1, k=3 pos2 (377..380)
 // 3b-3b — the legality trees re-gated per the TRUE target top columns.
 // key fact: the existing tree checks are false ONLY one mode at a time:
 // every LEGINVT (point-1/left) check is correct for symmetric AND S
@@ -179,10 +185,10 @@ export const POSM3 = (k: number) => 377 + k; // T-fan pos mirrors: k=0 pos0, k=1
 // series hops: LTS = S-gated top reads of c-1, LTZ = Z-gated reads of
 // c+1/c+2, plus two pure BOUNDS checks (S cannot enter pos 0, Z cannot
 // enter pos 2 — an S/Z state mirror's NO straight to the return).
-export const LTS = (k: number) => 381 + k; // S-only top reads: k=0 col0, k=1 col1 (coil = rail AND S)
-export const LTZ = (k: number) => 383 + k; // Z-only top reads: k=0 col1, k=1 col2, k=2,3 col3
-export const SG = (k: number) => 387 + k; // S mirrors: SG(0) = the NOT-S coil gates, SG(1) = the LTS coil gates
-export const ZG = (k: number) => 389 + k; // Z mirrors: ZG(0,1) = NOT-Z coil gates, ZG(2,3) = LTZ gates + the Z bound
+export const LTS = L8.LTS; // S-only top reads: k=0 col0, k=1 col1 (coil = rail AND S)
+export const LTZ = L8.LTZ; // Z-only top reads: k=0 col1, k=1 col2, k=2,3 col3
+export const SG = L8.SG; // S mirrors: SG(0) = the NOT-S coil gates, SG(1) = the LTS coil gates
+export const ZG = L8.ZG; // Z mirrors: ZG(0,1) = NOT-Z coil gates, ZG(2,3) = LTZ gates + the Z bound
 // 3b-3c — UP-transition legality: the ring's clock feed conducts through
 // a check network instead of a plain wire. The energized MASTER (one-hot:
 // the current state's successor, sampled while the clock is low) names
@@ -227,19 +233,19 @@ export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
   min: Math.max(0, -s.bOff, s.tW > 0 ? -s.tOff : 0),
   max: Math.min(cols - s.bOff - s.bW, s.tW > 0 ? cols - s.tOff - s.tW : cols),
 });
-export const SHR2 = (i: number, part: number) => 415 + 3 * (i - 6) + part; // states 6..8: clk, master, slave (415..423)
-export const MMIR2 = (i: number) => 424 + (i - 6); // into-6..8 transition gates (424..426)
+export const SHR2 = L8.SHR2; // states 6..8: clk, master, slave (415..423)
+export const MMIR2 = L8.MMIR2; // into-6..8 transition gates (424..426)
 // POSM5 set map (7 pos0 + 7 pos1 uses): k=0 B-fan PIECE(2) + T-fan L1;
 // k=1 T-fan J1 + T1; k=2 into-6 p0 + into-7 p0; k=3 into-8 p0 + spare;
 // k=4..7 the same roles at pos1.
-export const POSM5 = (k: number) => 427 + k; // pos mirrors: k=0..3 pos0, k=4..7 pos1 (427..434)
-export const UTR2 = (k: number) => 435 + k; // more top-rail reads: k=0 col0, k=1 col1, k=2 col2 (435..437)
-export const TRP = 438; // the triple rail: L1|J1|T1
-export const TRPM = (k: number) => 439 + k; // TRP mirrors (439..440)
-export const L1M = (k: number) => 441 + k; // L1 state mirrors (441..442)
-export const J1M = (k: number) => 443 + k; // J1 state mirrors (443..444)
-export const T1M = (k: number) => 445 + k; // T1 state mirrors (445..446)
-export const WID3M = 447; // "the bottom grows a third column": the offset-2 taps' gate
+export const POSM5 = L8.POSM5; // pos mirrors: k=0..3 pos0, k=4..7 pos1 (427..434)
+export const UTR2 = L8.UTR2; // more top-rail reads: k=0 col0, k=1 col1, k=2 col2 (435..437)
+export const TRP = L8.TRP; // the triple rail: L1|J1|T1
+export const TRPM = L8.TRPM; // TRP mirrors (439..440)
+export const L1M = L8.L1M; // L1 state mirrors (441..442)
+export const J1M = L8.J1M; // J1 state mirrors (443..444)
+export const T1M = L8.T1M; // T1 state mirrors (445..446)
+export const WID3M = L8.WID3M; // "the bottom grows a third column": the offset-2 taps' gate
 // 3b-4b — TRIPLE STEERING: the legality trees re-class per top geometry
 // and the NS cut dies. the gate generalization: LEGINVT's checks are
 // correct for {sym, S, L1} (their target top CONTAINS the checked
@@ -249,15 +255,15 @@ export const WID3M = 447; // "the bottom grows a third column": the offset-2 tap
 // state-gated series hops (LTJ/LTT top reads, LTB3 the triple bottom's
 // entering col 3), plus TRPBND (a triple cannot right-step into pos 2).
 // left-into-2 keeps no triple legs: a triple is never at pos 3.
-export const ZJT = 448; // gate coil: Z|J1|T1 (feeds ZG(0,1), the NOT gates on LEGINVT)
-export const SLJ = 449; // gate coil: S|L1|J1 (feeds SG(0), the NOT gate on LEGINVT2)
-export const ZM2 = 450; // one more Z mirror (ZJT's Z contact)
-export const SM2 = 451; // one more S mirror (SLJ's S contact)
-export const J1M2 = 452, J1M3 = 453; // more J1 mirrors: gate feeds + the LTJ coil gates
-export const T1M2 = 454; // more T1 contacts: the LTT coil gates
-export const LTJ = (k: number) => 455 + k; // J1-only top reads: k=0 col2, k=1 col3
-export const LTT = (k: number) => 457 + k; // T1-only top reads: k=0 col1, k=1 col2
-export const LTB3 = 459; // triple-only bottom read of col 3 (the right step's entering column)
+export const ZJT = L8.ZJT; // gate coil: Z|J1|T1 (feeds ZG(0,1), the NOT gates on LEGINVT)
+export const SLJ = L8.SLJ; // gate coil: S|L1|J1 (feeds SG(0), the NOT gate on LEGINVT2)
+export const ZM2 = L8.ZM2; // one more Z mirror (ZJT's Z contact)
+export const SM2 = L8.SM2; // one more S mirror (SLJ's S contact)
+export const J1M2 = L8.J1M2, J1M3 = L8.J1M3; // more J1 mirrors: gate feeds + the LTJ coil gates
+export const T1M2 = L8.T1M2; // more T1 contacts: the LTT coil gates
+export const LTJ = L8.LTJ; // J1-only top reads: k=0 col2, k=1 col3
+export const LTT = L8.LTT; // T1-only top reads: k=0 col1, k=1 col2
+export const LTB3 = L8.LTB3; // triple-only bottom read of col 3 (the right step's entering column)
 // 3b-4c — the OVERHANG TRIO completes the 2-row box: 9 L2=(001,111)
 // B={p+2}, 10 J2=(100,111) B={p}, 11 T2=(010,111) B={p+1}, all with the
 // 3-wide TT top and range {0,1}. the base bottom column is CUT for
@@ -270,21 +276,21 @@ export const LTB3 = 459; // triple-only bottom read of col 3 (the right step's e
 // (L2-gated c+2) and T2B (T2-gated c+1), the shared top via LTOT
 // (TT-gated c+2 on the right step), and the pos-2 bound extends to TT.
 // the into-0 wrap gains its first check: T2 -> 1x1 uncovers (tok, p).
-export const SHR3 = (i: number, part: number) => 460 + 3 * (i - 9) + part; // states 9..11 (460..468)
-export const MMIR3 = (i: number) => 469 + (i - 9); // into-9..11 gates (469..471)
-export const TT = 472; // the triple-TOP rail: L2|J2|T2
-export const TTM = (k: number) => 473 + k; // TT mirrors (473..477)
-export const BCUT = 478; // the base-column cut (coil = L2|T2); set2 + BCUTM = the OVR bypasses
-export const BCUTM = 479;
-export const L2M = (k: number) => 480 + k; // L2 mirrors (480..482)
-export const J2M = 483; // J2 mirror
-export const T2M = (k: number) => 484 + k; // T2 mirrors (484..486)
-export const LTOT = 487; // TT-gated top read of col 3 (right-step entering top)
-export const LTOB = (k: number) => 488 + k; // L2-gated bottom reads: k=0 col2, k=1 col3
-export const T2B = (k: number) => 490 + k; // T2-gated bottom reads: k=0 col1, k=1 col2
-export const UTR3 = 492; // one more top-col3 read (the T1->L2 transition)
-export const LEGB3 = (k: number) => 493 + k; // more bottom reads: k=0 col1, k=1 col2, k=2 col0
-export const POSM6 = (k: number) => 496 + k; // pos mirrors: k=0..2 pos0, k=3..5 pos1 (496..501)
+export const SHR3 = L8.SHR3; // states 9..11 (460..468)
+export const MMIR3 = L8.MMIR3; // into-9..11 gates (469..471)
+export const TT = L8.TT; // the triple-TOP rail: L2|J2|T2
+export const TTM = L8.TTM; // TT mirrors (473..477)
+export const BCUT = L8.BCUT; // the base-column cut (coil = L2|T2); set2 + BCUTM = the OVR bypasses
+export const BCUTM = L8.BCUTM;
+export const L2M = L8.L2M; // L2 mirrors (480..482)
+export const J2M = L8.J2M; // J2 mirror
+export const T2M = L8.T2M; // T2 mirrors (484..486)
+export const LTOT = L8.LTOT; // TT-gated top read of col 3 (right-step entering top)
+export const LTOB = L8.LTOB; // L2-gated bottom reads: k=0 col2, k=1 col3
+export const T2B = L8.T2B; // T2-gated bottom reads: k=0 col1, k=1 col2
+export const UTR3 = L8.UTR3; // one more top-col3 read (the T1->L2 transition)
+export const LEGB3 = L8.LEGB3; // more bottom reads: k=0 col1, k=1 col2, k=2 col0
+export const POSM6 = L8.POSM6; // pos mirrors: k=0..2 pos0, k=3..5 pos1 (496..501)
 // 3b-5 — THE MACHINE TICKS ITSELF: a two-relay slow-release oscillator
 // on real capacitors. TOSC's coil parallels a paralleled cap bank and is
 // fed through TDRV's NC; TDRV is fed through TOSC's NO; TDRV's second
@@ -299,16 +305,16 @@ export const POSM6 = (k: number) => 496 + k; // pos mirrors: k=0..2 pos0, k=3..5
 // TOSC's own section: the operator chooses self-play. Period: a few
 // hundred ms with four paralleled sections at 100ms steps (measured in
 // the oscillator test; more sections or larger steps slow it further).
-export const TOSC = 502; // the timing relay (coil || cap bank)
-export const TDRV = 503; // the driver: follows TOSC, its set2 drives the tick net
-export const MMIR = (i: number) => 393 + i; // master mirrors: gate the into-state-i branch (393..398)
-export const POSM4 = (k: number) => 399 + k; // pos mirrors for the branches: k=0 pos0, k=1,2 pos1, k=3,4 pos2, k=5 pos3 (399..404)
+export const TOSC = L8.TOSC; // the timing relay (coil || cap bank)
+export const TDRV = L8.TDRV; // the driver: follows TOSC, its set2 drives the tick net
+export const MMIR = L8.MMIR; // master mirrors: gate the into-state-i branch (393..398)
+export const POSM4 = L8.POSM4; // pos mirrors for the branches: k=0 pos0, k=1,2 pos1, k=3,4 pos2, k=5 pos3 (399..404)
 // (POSM4(5) exists because NOTHING on POSM(3) was borrowable: its L arm
 // IS the right-press sample bus and its K is the edge self-loop — tying
 // a check node there let a join backfeed fire the D-tap trees and wipe
 // the register to [1,1,1,1], caught by the ring walk test mid-build)
-export const LEGB2 = (k: number) => 405 + k; // second bottom-rail reads for cols 1,2,3 (405..407)
-export const UTR = (k: number) => 408 + k; // top-rail reads: k=0 col0, k=1,2 col1, k=3,4 col2, k=5,6 col3 (408..414)
+export const LEGB2 = L8.LEGB2; // second bottom-rail reads for cols 1,2,3 (405..407)
+export const UTR = L8.UTR; // top-rail reads: k=0 col0, k=1,2 col1, k=3,4 col2, k=5,6 col3 (408..414)
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
@@ -317,11 +323,11 @@ export const UTR = (k: number) => 408 + k; // top-rail reads: k=0 col0, k=1,2 co
 // free. (They lived on m40 through the piece rung, sharing sections with
 // relays whose + jacks HAPPENED to be unused; the 12-row layout landed
 // TWIN's + on the shared section and the capacity auditor caught it.)
-export const LEFTBTN = { button: 3, machine: 84 };
-export const RIGHTBTN = { button: 4, machine: 84 };
-export const UPBTN = { button: 2, machine: 84 }; // steps the shape ring (press+release = one step)
-export const WIDSLIDE = { slide: 5, machine: 84 };
-export const MACHINES = 85; // relays through m83.3 + the dedicated button machine m84; m36's coms serve as the junctions
+export const LEFTBTN = { button: 3, machine: L8.btnMachine };
+export const RIGHTBTN = { button: 4, machine: L8.btnMachine };
+export const UPBTN = { button: 2, machine: L8.btnMachine }; // steps the shape ring (press+release = one step)
+export const WIDSLIDE = { slide: 5, machine: L8.btnMachine };
+export const MACHINES = L8.machines; // the default build: the relay machines + the dedicated button machine
 
 // ---- the ROWS-parameterized layout (rung 11 groundwork) ----
 // The same allocation map as the exported constants, laid out sequentially
@@ -657,93 +663,6 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let k = 0; k < 6; k++) claim('POSM6', POSM6(k));
   claim('TOSC/TDRV', TOSC, TDRV);
 
-  // the parameterized layout must reproduce the hand-laid map exactly at
-  // the default geometry — every scalar, every function over its domain,
-  // and the machine count
-  const L = tetrisLayout(8);
-  const eq = (name: string, a: number, b: number) => {
-    if (a !== b) throw new Error(`layout(8).${name} = ${a}, expected ${b}`);
-  };
-  eq('A0', L.A0, A0); eq('A0m', L.A0m, A0m); eq('A1', L.A1, A1); eq('A2', L.A2, A2);
-  for (let r = 0; r < 8; r++) for (let k = 0; k < 4; k++) eq('W', L.W(r, k), W(r, k));
-  for (let r = 0; r < 8; r++) for (let j = 0; j < 4; j++) eq('CELL', L.CELL(r, j), CELL(r, j));
-  for (let i = 0; i < 8; i++) for (let pt = 0; pt < 3; pt++) eq('RING', L.RING(i, pt), RING(i, pt));
-  for (let r = 0; r < 8; r++) { eq('MIRA', L.MIRA(r), MIRA(r)); eq('MIRB', L.MIRB(r), MIRB(r)); eq('MIRB2', L.MIRB2(r), MIRB2(r)); }
-  for (let x = 0; x < 4; x++) { eq('RESETM', L.RESETM(x), RESETM(x)); eq('PRESSCUT', L.PRESSCUT(x), PRESSCUT(x)); eq('P2CUT', L.P2CUT(x), P2CUT(x)); }
-  eq('COLLIDE', L.COLLIDE, COLLIDE); eq('COLLIDEM', L.COLLIDEM, COLLIDEM); eq('LKM', L.LKM, LKM); eq('RSTM', L.RSTM, RSTM);
-  eq('SPAWN', L.SPAWN, SPAWN); eq('SPAWNCLR', L.SPAWNCLR, SPAWNCLR); eq('CLEARP', L.CLEARP, CLEARP);
-  for (let j = 0; j < 4; j++) { eq('LINE', L.LINE(j), LINE(j)); eq('PIECE', L.PIECE(j), PIECE(j)); eq('POSA', L.POSA(j), POSA(j)); eq('POSS', L.POSS(j), POSS(j)); eq('POSM', L.POSM(j), POSM(j)); eq('LEGINV', L.LEGINV(j), LEGINV(j)); eq('LEGINVT', L.LEGINVT(j), LEGINVT(j)); eq('VMODEM', L.VMODEM(j), VMODEM(j)); }
-  eq('LKS', L.LKS, LKS); eq('TICKM', L.TICKM, TICKM); eq('COLLIDEM2', L.COLLIDEM2, COLLIDEM2); eq('READGATE', L.READGATE, READGATE);
-  eq('RAILGATE2', L.RAILGATE2, RAILGATE2); eq('RSTM2', L.RSTM2, RSTM2); eq('CPSET', L.CPSET, CPSET); eq('VMODE', L.VMODE, VMODE);
-  for (let r = 1; r <= 7; r++) eq('TOPW', L.TOPW(r), TOPW(r));
-  eq('P2M', L.P2M, P2M); eq('P2S', L.P2S, P2S); eq('P2CLR', L.P2CLR, P2CLR); eq('P2GATE', L.P2GATE, P2GATE); eq('P2COL', L.P2COL, P2COL); eq('TICKM2', L.TICKM2, TICKM2);
-  eq('LINEDLY', L.LINEDLY, LINEDLY);
-  for (let t = 1; t <= 7; t++) {
-    eq('ELEVC', L.ELEVC(t), ELEVC(t)); eq('ELEVA', L.ELEVA(t), ELEVA(t)); eq('ELEVSL', L.ELEVSL(t), ELEVSL(t));
-    eq('SEEDM', L.SEEDM(t), SEEDM(t)); eq('ELEVW1', L.ELEVW1(t), ELEVW1(t)); eq('ELEVW2', L.ELEVW2(t), ELEVW2(t));
-  }
-  eq('CLEARPM', L.CLEARPM, CLEARPM); eq('LANE', L.LANE, LANE); eq('TICKM3', L.TICKM3, TICKM3); eq('TGM', L.TGM, TGM); eq('TGS', L.TGS, TGS);
-  eq('CGA', L.CGA, CGA); eq('CGB', L.CGB, CGB); eq('CGB2', L.CGB2, CGB2); eq('CUTC1', L.CUTC1, CUTC1); eq('CUTC2', L.CUTC2, CUTC2);
-  for (let k = 0; k <= 5; k++) eq('JUNC', L.JUNC(k), JUNC(k));
-  eq('TG2M', L.TG2M, TG2M); eq('TG2S', L.TG2S, TG2S); eq('CUTC3', L.CUTC3, CUTC3); eq('CUTC4', L.CUTC4, CUTC4);
-  eq('LEFTM', L.LEFTM, LEFTM); eq('RIGHTM', L.RIGHTM, RIGHTM); eq('ANYBM', L.ANYBM, ANYBM); eq('ANYBM2', L.ANYBM2, ANYBM2);
-  eq('WIDM', L.WIDM, WIDM); eq('WIDM2', L.WIDM2, WIDM2); eq('WIDM3', L.WIDM3, WIDM3); eq('WIDM4', L.WIDM4, WIDM4);
-  for (let x = 0; x < 2; x++) eq('POSRST', L.POSRST(x), POSRST(x));
-  eq('TWIN', L.TWIN, TWIN); eq('BOOTL', L.BOOTL, BOOTL);
-  for (let j = 0; j < 3; j++) eq('POSM2', L.POSM2(j), POSM2(j));
-  for (let r = 0; r <= 6; r++) { eq('MIRC0', L.MIRC(r, 0), MIRC(r, 0)); eq('MIRC1', L.MIRC(r, 1), MIRC(r, 1)); }
-  for (let r = 1; r <= 6; r++) { eq('MIRCT0', L.MIRCT(r, 0), MIRCT(r, 0)); eq('MIRCT1', L.MIRCT(r, 1), MIRCT(r, 1)); }
-  eq('LEGINV2(2)', L.LEGINV2(2), LEGINV2(2)); eq('LEGINV2(3)', L.LEGINV2(3), LEGINV2(3));
-  eq('LEGINVT2(2)', L.LEGINVT2(2), LEGINVT2(2)); eq('LEGINVT2(3)', L.LEGINVT2(3), LEGINVT2(3));
-  eq('GOM', L.GOM, GOM); eq('GAMEOVER', L.GAMEOVER, GAMEOVER); eq('LKM2', L.LKM2, LKM2);
-  for (let i = 0; i < 10; i++)
-    for (let pt = 0; pt < 3; pt++) eq('SCR', L.SCR(i, pt), SCR(i, pt));
-  eq('SCBOOT', L.SCBOOT, SCBOOT);
-  for (let j = 0; j < 4; j++) eq('PIECET', L.PIECET(j), PIECET(j));
-  eq('CUTC5', L.CUTC5, CUTC5); eq('CUTC6', L.CUTC6, CUTC6); eq('STAGM', L.STAGM, STAGM); eq('CUTB1', L.CUTB1, CUTB1); eq('CUTB2', L.CUTB2, CUTB2); eq('CUTB3', L.CUTB3, CUTB3); eq('CUTB4', L.CUTB4, CUTB4); eq('CUTBD', L.CUTBD, CUTBD);
-  for (let j = 0; j < 4; j++) eq('LEGB', L.LEGB(j), LEGB(j));
-  eq('STAGM2', L.STAGM2, STAGM2);
-  for (let i = 0; i < 6; i++)
-    for (let pt = 0; pt < 3; pt++) eq('SHR', L.SHR(i, pt), SHR(i, pt));
-  eq('UPM', L.UPM, UPM); eq('SHBOOT', L.SHBOOT, SHBOOT);
-  for (let k = 0; k < 4; k++) { eq('SM', L.SM(k), SM(k)); eq('ZM', L.ZM(k), ZM(k)); eq('POSM3', L.POSM3(k), POSM3(k)); }
-  eq('OM', L.OM, OM); eq('I2TM', L.I2TM, I2TM); eq('I2WM', L.I2WM, I2WM);
-  eq('LTS', L.LTS(0), LTS(0)); eq('LTS', L.LTS(1), LTS(1));
-  for (let k = 0; k < 4; k++) { eq('LTZ', L.LTZ(k), LTZ(k)); eq('ZG', L.ZG(k), ZG(k)); }
-  eq('SG', L.SG(0), SG(0)); eq('SG', L.SG(1), SG(1));
-  for (let i = 0; i < 6; i++) eq('MMIR', L.MMIR(i), MMIR(i));
-  for (let k = 0; k < 6; k++) eq('POSM4', L.POSM4(k), POSM4(k));
-  for (let k = 0; k < 3; k++) eq('LEGB2', L.LEGB2(k), LEGB2(k));
-  for (let k = 0; k < 7; k++) eq('UTR', L.UTR(k), UTR(k));
-  for (let i = 6; i < 9; i++)
-    for (let pt = 0; pt < 3; pt++) eq('SHR2', L.SHR2(i, pt), SHR2(i, pt));
-  for (let i = 6; i < 9; i++) eq('MMIR2', L.MMIR2(i), MMIR2(i));
-  for (let k = 0; k < 8; k++) eq('POSM5', L.POSM5(k), POSM5(k));
-  for (let k = 0; k < 3; k++) eq('UTR2', L.UTR2(k), UTR2(k));
-  eq('TRP', L.TRP, TRP); eq('TRPM', L.TRPM(0), TRPM(0)); eq('TRPM', L.TRPM(1), TRPM(1));
-  eq('L1M', L.L1M(0), L1M(0)); eq('J1M', L.J1M(0), J1M(0)); eq('T1M', L.T1M(0), T1M(0));
-  eq('WID3M', L.WID3M, WID3M);
-  eq('ZJT', L.ZJT, ZJT); eq('SLJ', L.SLJ, SLJ); eq('ZM2', L.ZM2, ZM2); eq('SM2', L.SM2, SM2);
-  eq('J1M2', L.J1M2, J1M2); eq('J1M3', L.J1M3, J1M3); eq('T1M2', L.T1M2, T1M2);
-  eq('LTJ', L.LTJ(0), LTJ(0)); eq('LTJ', L.LTJ(1), LTJ(1));
-  eq('LTT', L.LTT(0), LTT(0)); eq('LTT', L.LTT(1), LTT(1));
-  eq('LTB3', L.LTB3, LTB3);
-  for (let i = 9; i < 12; i++)
-    for (let pt = 0; pt < 3; pt++) eq('SHR3', L.SHR3(i, pt), SHR3(i, pt));
-  for (let i = 9; i < 12; i++) eq('MMIR3', L.MMIR3(i), MMIR3(i));
-  eq('TT', L.TT, TT);
-  for (let k = 0; k < 5; k++) eq('TTM', L.TTM(k), TTM(k));
-  eq('BCUT', L.BCUT, BCUT); eq('BCUTM', L.BCUTM, BCUTM);
-  for (let k = 0; k < 3; k++) { eq('L2M', L.L2M(k), L2M(k)); eq('T2M', L.T2M(k), T2M(k)); eq('LEGB3', L.LEGB3(k), LEGB3(k)); }
-  eq('J2M', L.J2M, J2M);
-  eq('LTOT', L.LTOT, LTOT); eq('LTOB', L.LTOB(0), LTOB(0)); eq('LTOB', L.LTOB(1), LTOB(1));
-  eq('T2B', L.T2B(0), T2B(0)); eq('T2B', L.T2B(1), T2B(1)); eq('UTR3', L.UTR3, UTR3);
-  for (let k = 0; k < 6; k++) eq('POSM6', L.POSM6(k), POSM6(k));
-  eq('TOSC', L.TOSC, TOSC); eq('TDRV', L.TDRV, TDRV);
-  eq('machines', L.machines, MACHINES);
-  eq('btnMachine', L.btnMachine, LEFTBTN.machine);
-  eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
-  eq('btnMachine3', L.btnMachine, WIDSLIDE.machine);
 }
 
 export function tetrisCircuit(rows = 8, cols = 4): {
