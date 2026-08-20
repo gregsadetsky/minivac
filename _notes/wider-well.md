@@ -318,6 +318,29 @@ cost; compaction later).
   relays; accepted (tick +~20%, more armatures on the wall).
 - ret taps: ~6/tree; count exactly while emitting, assert <= cap.
 
+## the step trees are EMITTED (16:05Z, landing in progress)
+
+the uniform union-gated emitter replaced the hand-laid D-tap section:
+ten union rails + per-state mirror banks (chained off each state's
+EXISTING mirror-chain tails — the slave coil jacks were full), the
+gated read pool, per-source ret groups (4 each — ~15 refusal taps
+peak, width-invariant), pending-output coalescing before the master
+coms (their budgets are exactly coil + hold + self-loop + step).
+retired: LEGINV2/LEGINVT2/VMODEM-contacts/WIDM3-4-contacts/SG-ZG NOT
+gates/LTS/LTZ/LTJ/LTT/LTB3/LTOT/LTOB/T2B (+their rail taps freed);
+the VMODEM coil chain stays wired (it IS the tall compatibility-OR
+splice point), WIDM3/4 coils stay (the WIDB splice rides them).
+iteration bugs the capacity asserts caught, in order: L2/T2 mirror
+caps undercounted the per-tree spends; POSA com overflow (fixed by
+coalescing); slave-E overflow (fixed by tail-chaining); ret groups
+ran dry at 3 (grown to 4).
+growth: 8-row 499 -> 627 relays (85 -> 107 machines), 12-row 605 ->
+733 (104 -> 125), dead banks included.
+receipts so far: walk test green, all steering tests green including
+seeded random gameplay; full file + check + driver pending, then the
+dense batch before any deploy. the fence (cols !== 4) STAYS until the
+fan + transition emitters land.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.

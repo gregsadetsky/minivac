@@ -17,7 +17,8 @@
  * list is the compiled output.
  */
 
-import { MirrorBank } from './contact-alloc';
+import { GatedReadPool, MirrorBank } from './contact-alloc';
+import type { ContactSet } from './contact-alloc';
 
 // ---- relay allocation: relay n lives at machine floor(n/6), section n%6+1
 export const R = (n: number, jack: string) => `m${Math.floor(n / 6)}.${(n % 6) + 1}${jack}`;
@@ -422,6 +423,10 @@ export interface TetrisLayout {
   LTOT: number; LTOB: (k: number) => number; T2B: (k: number) => number;
   UTR3: number; LEGB3: (k: number) => number; POSM6: (k: number) => number;
   TOSC: number; TDRV: number;
+  STPMIR: number; STPMIR_CAP: number;
+  STPUNION: number; STPUNION_CAP: number;
+  STPUGATE: number; STPUGATE_CAP: number;
+  STPREAD: number; STPREAD_CAP: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -499,6 +504,13 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const shr3Base = take(9); // 3b-4c: states 9..11 (L2, J2, T2)
   const g4cBase = take(33); // MMIR3 x3, TT+TTM x6, BCUT x2, L2M x3, J2M, T2M x3, LTOT, LTOB x2, T2B x2, UTR3, LEGB3 x3, POSM6 x6
   const oscBase = take(2); // 3b-5: TOSC, TDRV (the self-tick oscillator)
+  // ---- the wider-well step-tree emitter's banks (uniform union-gated
+  // trees; the hand-laid tree support banks above go dead-unwired) ----
+  // caps are generous formula bounds; the emitter asserts actual <= cap
+  const stpMirBase = take(40 + 6 * (cols - 1)); // per-state member + singleton-gate mirrors
+  const stpUnionBase = take(10); // the union rails (B0..WALLB)
+  const stpUGateBase = take(12 * (cols - 1)); // union mirrors: per-tree gate contacts
+  const stpReadBase = take(8 * (cols - 1)); // the gated read pool
   return {
     rows,
     cols,
@@ -575,6 +587,10 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     LTOT: g4cBase + 18, LTOB: k => g4cBase + 19 + k, T2B: k => g4cBase + 21 + k,
     UTR3: g4cBase + 23, LEGB3: k => g4cBase + 24 + k, POSM6: k => g4cBase + 27 + k,
     TOSC: oscBase, TDRV: oscBase + 1,
+    STPMIR: stpMirBase, STPMIR_CAP: 40 + 6 * (cols - 1),
+    STPUNION: stpUnionBase, STPUNION_CAP: 10,
+    STPUGATE: stpUGateBase, STPUGATE_CAP: 12 * (cols - 1),
+    STPREAD: stpReadBase, STPREAD_CAP: 8 * (cols - 1),
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -673,6 +689,10 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   claim('LEGB3', LEGB3(0), LEGB3(1), LEGB3(2));
   for (let k = 0; k < 6; k++) claim('POSM6', POSM6(k));
   claim('TOSC/TDRV', TOSC, TDRV);
+  for (let k = 0; k < L8.STPMIR_CAP; k++) claim('STPMIR', L8.STPMIR + k);
+  for (let k = 0; k < L8.STPUNION_CAP; k++) claim('STPUNION', L8.STPUNION + k);
+  for (let k = 0; k < L8.STPUGATE_CAP; k++) claim('STPUGATE', L8.STPUGATE + k);
+  for (let k = 0; k < L8.STPREAD_CAP; k++) claim('STPREAD', L8.STPREAD + k);
 
 }
 
@@ -695,15 +715,15 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     ELEVW1, ELEVW2, CGA, CGB, CGB2, CUTC1, CUTC2, JUNC,
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
-    POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, LEGINV2, WIDM3, WIDM4,
-    MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
+    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
-    LTS, LTZ, SG, ZG,
+    SG, ZG,
     MMIR, POSM4, LEGB2, UTR,
     SHR2, MMIR2, POSM5, UTR2, TRP, TRPM, L1M, J1M, T1M, WID3M,
-    ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2, LTJ, LTT, LTB3,
+    ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2,
     SHR3, MMIR3, TT, TTM, BCUT, BCUTM, L2M, J2M, T2M,
-    LTOT, LTOB, T2B, UTR3, LEGB3, POSM6,
+    UTR3, LEGB3, POSM6,
     TOSC, TDRV,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
@@ -1502,10 +1522,8 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   for (let j = 0; j < cols; j++) {
     w.push(`${legTap(j)}/${R(LEGINV(j), 'E')}`, `${R(LEGINV(j), 'F')}/${minusOf(LEGINV(j))}`);
   }
-  // second reads of columns 2 and 3 (parallel coils, coil-jack chained)
-  // for the wide right-edge checks — LEGINV's own sets are spoken for
-  w.push(`${R(LEGINV(2), 'E')}/${R(LEGINV2(2), 'E')}`, `${R(LEGINV2(2), 'F')}/${minusOf(LEGINV2(2))}`);
-  w.push(`${R(LEGINV(3), 'E')}/${R(LEGINV2(3), 'E')}`, `${R(LEGINV2(3), 'F')}/${minusOf(LEGINV2(3))}`);
+  // (LEGINV2 — the hand-laid wide-fork copies — retired by the uniform
+  // step trees below: off-column reads come from the gated read pool)
   // narrow/wall mirrors on the WID slide (WIDM/WIDM2's sets feed PIECE)
   w.push(`${R(WIDM, 'E')}/${R(WIDM3, 'E')}`, `${R(WIDM3, 'F')}/${minusOf(WIDM3)}`);
   w.push(`${R(WIDM2, 'E')}/${R(WIDM4, 'E')}`, `${R(WIDM4, 'F')}/${minusOf(WIDM4)}`);
@@ -1541,208 +1559,180 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // so the tree shapes below stay EXACTLY as they were. Legacy slide-
   // staggered mode (STAG up, no ring state) keeps the old symmetric
   // checks, unchanged.
+  // the top-row occupancy reads LEGINVT(j) go PLAIN now (the old NOT-Z
+  // coil gates retired — the uniform trees gate the SAMPLE PATH through
+  // union contacts instead, so a dead union's NC passes the sample and
+  // the coil can stay honest occupancy). LEGINVT2 retired with them.
   for (let j = 0; j < cols; j++) {
-    const zg = ZG(Math.floor(j / 2));
-    const [zArm, zNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
-    w.push(`${legTTap(j)}/${R(zg, zArm)}`, `${R(zg, zNc)}/${R(LEGINVT(j), 'E')}`);
+    w.push(`${legTTap(j)}/${R(LEGINVT(j), 'E')}`);
     w.push(`${R(LEGINVT(j), 'F')}/${minusOf(LEGINVT(j))}`);
   }
-  w.push(`${legTTap(2)}/${R(SG(0), 'H')}`, `${R(SG(0), 'J')}/${R(LEGINVT2(2), 'E')}`, `${R(LEGINVT2(2), 'F')}/${minusOf(LEGINVT2(2))}`);
-  w.push(`${legTTap(3)}/${R(SG(0), 'L')}`, `${R(SG(0), 'N')}/${R(LEGINVT2(3), 'E')}`, `${R(LEGINVT2(3), 'F')}/${minusOf(LEGINVT2(3))}`);
-  // vmode mirrors for the tall forks (VMODE's own spare set can't serve
-  // six tap trees); coils daisy-chained through the coil jacks
-  // ...as the first allocator-managed bank (wider-well emitter 0 pilot):
-  // the bank mints the same chain lazily; requests below arrive in the
-  // hand-laid order, so the set map is unchanged (wire-multiset gate).
-  // NOTE the chain tail stays a splice point: the ring-state union
-  // enters at VMODEM(cols-1).E's free hole (the 3b-4a/4c splices).
-  const vmBank = new MirrorBank({
-    name: 'VMODEM', source: VMODE, base: VMODEM(0), capacity: cols, w, R, minusOf,
-  });
+  // the VMODEM chain stays WIRED (its contacts are unused since the
+  // uniform trees, but the coil net IS the tall compatibility-OR: the
+  // slide feeds VMODE.E and the ring-state tall union splices in at
+  // VMODEM(cols-1).E — see the 3b-4a/4c splices)
+  w.push(`${R(VMODE, 'E')}/${R(VMODEM(0), 'E')}`);
+  for (let p = 1; p < cols; p++) w.push(`${R(VMODEM(p - 1), 'E')}/${R(VMODEM(p), 'E')}`);
+  for (let p = 0; p < cols; p++) w.push(`${R(VMODEM(p), 'F')}/${minusOf(VMODEM(p))}`);
 
-  // the gated D-taps: every stage is a CHANGEOVER (blocked returns the
-  // sample to the current master — see the ring notes) and every OPTIONAL
-  // stage is a mode fork. RIGHT into c (c=1,2):
-  //   LEGINV(c) {occ->ret; free-> VMODEM {flat->X; tall-> LEGINVT(c)
-  //   {occ->ret; free->X}}}; X -> WIDM3 {narrow->step; wide-> LEGINV2(c+1)
-  //   {occ->ret; free-> VMODEM' {flat->step; tall-> LEGINVT2(c+1)
-  //   {occ->ret; free->step}}}}
-  // RIGHT into 3: LEGINV(3) -> tall fork -> WIDM4 {narrow->step;
-  // wide->ret} — the wall. LEFT into c (c=0,1,2): LEGINV(c) -> tall fork
-  // -> step (a wide piece's right cell moves into its own old column, so
-  // left needs no wide stage). Refusal returns collect on matrix groups
-  // (two chained for the both-direction positions) and re-latch the
-  // current master through its coil jack's spare hole.
-  // return groups grown in 3b-3b (the mode hops add refusal throws; the
-  // old hand-split 1/2/2 chains overflowed the moment they grew) and
-  // again in 3b-4b (the triple legs): a uniform tap allocator
-  const retNode = [takeGroups(3), takeGroups(5), takeGroups(4)];
-  for (const g of retNode) for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
-  const retUse = [{ n: 0 }, { n: 0 }, { n: 0 }];
-  const retTap = (p: number) => tap(retNode[p], retUse[p]);
-  w.push(`${retTap(0)}/${R(POSA(0), 'E')}`);
-  w.push(`${retTap(1)}/${R(POSA(1), 'E')}`);
-  w.push(`${retTap(2)}/${R(POSA(2), 'E')}`);
-  for (const c of [1, 2] as const) {
-    const tf = vmBank.request('changeover'); // the tall fork
-    const tw = vmBank.request('changeover'); // the tall-wide fork
-    const [wArm, wNc, wNo] = c === 1 ? ['H', 'J', 'G'] : ['L', 'N', 'K'];
-    if (c === 1) {
-      // 3b-4c: the OVR bypass — LEGINV(c) false-refuses L2/T2 (their
-      // target bottoms exclude column c), so the overhang states route
-      // AROUND the bottom check straight to the tall fork; their true
-      // bottom columns read as gated hops further down
-      w.push(`${R(POSM(0), 'K')}/${R(BCUTM, 'H')}`);
-      w.push(`${R(BCUTM, 'J')}/${R(LEGINV(1), 'H')}`);
-      w.push(`${R(BCUTM, 'G')}/${R(tf.relay, tf.arm)}`); // overhang: skip to the fork
-    } else {
-      w.push(`${R(POSM(c - 1), 'K')}/${R(LEGINV(c), 'H')}`); // the tap in
-    }
-    w.push(`${R(LEGINV(c), 'G')}/${retTap(c - 1)}`); // bottom-c occupied
-    w.push(`${R(LEGINV(c), 'J')}/${R(tf.relay, tf.arm)}`); // free: the tall fork
-    w.push(`${R(tf.relay, tf.no)}/${R(LEGINVT(c), 'H')}`); // tall: check top-c
-    w.push(`${R(LEGINVT(c), 'G')}/${retTap(c - 1)}`); // top-c occupied
-    // 3b-3b: S's extra top column (c-1) rides IN SERIES — under any other
-    // mode the LTS coil is dead and its NC passes through. For c=2 the Z
-    // BOUND follows: Z cannot enter pos 2, so ZG(3)'s NO (closed iff the
-    // Z state is up) returns the sample unconditionally.
-    if (c === 1) {
-      w.push(`${R(LEGINVT(1), 'J')}/${R(LTS(0), 'H')}`);
-      w.push(`${R(LTS(0), 'G')}/${retTap(0)}`); // S: top-0 occupied
-      // 3b-4b: J1's stem target (top col 3) and the triple bottom's
-      // entering column (bottom col 3) ride behind the S hop; T1's
-      // target (top col 2) is the existing point-2 check, for free
-      w.push(`${R(LTS(0), 'J')}/${R(LTJ(1), 'H')}`);
-      w.push(`${R(LTJ(1), 'G')}/${retTap(0)}`); // J1: top-3 occupied
-      w.push(`${R(LTJ(1), 'J')}/${R(LTB3, 'H')}`);
-      w.push(`${R(LTB3, 'G')}/${retTap(0)}`); // triple: bottom-3 occupied
-      // 3b-4c: the overhangs' entering top col 3 (TT-gated) and L2's
-      // entering bottom col 3 (T2's rides the wide fork's existing check)
-      w.push(`${R(LTB3, 'J')}/${R(LTOT, 'H')}`);
-      w.push(`${R(LTOT, 'G')}/${retTap(0)}`); // TT: top-3 occupied
-      w.push(`${R(LTOT, 'J')}/${R(LTOB(1), 'H')}`);
-      w.push(`${R(LTOB(1), 'G')}/${retTap(0)}`); // L2: bottom-3 occupied
-      w.push(`${R(LTOB(1), 'J')}/${R(tf.relay, tf.nc)}`); // free: join X
-    } else {
-      w.push(`${R(LEGINVT(2), 'J')}/${R(LTS(1), 'H')}`);
-      w.push(`${R(LTS(1), 'G')}/${retTap(1)}`); // S: top-1 occupied
-      w.push(`${R(LTS(1), 'J')}/${R(ZG(3), 'L')}`);
-      w.push(`${R(ZG(3), 'K')}/${retTap(1)}`); // the Z bound: refuse
-      // 3b-4b/4c: the triple bounds — neither a 3-wide bottom (TRP) nor
-      // a 3-wide top (TT) can enter pos 2
-      w.push(`${R(ZG(3), 'N')}/${R(TRPM(1), 'L')}`);
-      w.push(`${R(TRPM(1), 'K')}/${retTap(1)}`);
-      w.push(`${R(TRPM(1), 'N')}/${R(TTM(4), 'L')}`);
-      w.push(`${R(TTM(4), 'K')}/${retTap(1)}`);
-      w.push(`${R(TTM(4), 'N')}/${R(tf.relay, tf.nc)}`); // free: join X
-    }
-    w.push(`${R(tf.relay, tf.nc)}/${R(WIDM3, wArm)}`); // X: the wide fork
-    w.push(`${R(WIDM3, wNc)}/${comOf(POSA(c))}`); // narrow: step
-    w.push(`${R(WIDM3, wNo)}/${R(LEGINV2(c + 1), 'H')}`); // wide: bottom-c+1
-    w.push(`${R(LEGINV2(c + 1), 'G')}/${retTap(c - 1)}`); // occupied
-    w.push(`${R(LEGINV2(c + 1), 'J')}/${R(tw.relay, tw.arm)}`); // free: tall fork #2
-    w.push(`${R(tw.relay, tw.nc)}/${R(WIDM3, wNc)}`); // flat-wide: join the step wire
-    w.push(`${R(tw.relay, tw.no)}/${R(LEGINVT2(c + 1), 'H')}`); // tall-wide: top-c+1
-    w.push(`${R(LEGINVT2(c + 1), 'G')}/${retTap(c - 1)}`); // occupied
-    // 3b-3b: Z's extra top column (c+2) — only c=1 has one on the board
-    // (c=2's Z was already returned by the bound at point 1)
-    if (c === 1) {
-      w.push(`${R(LEGINVT2(2), 'J')}/${R(LTZ(2), 'H')}`);
-      w.push(`${R(LTZ(2), 'G')}/${retTap(0)}`); // Z: top-3 occupied
-      w.push(`${R(LTZ(2), 'J')}/${R(tw.relay, tw.nc)}`); // free: join
-    } else {
-      w.push(`${R(LEGINVT2(3), 'J')}/${R(tw.relay, tw.nc)}`); // free: join
-    }
-  }
-  const wallTf = vmBank.request('changeover'); // VMODEM(2).set1, hand order
-  w.push(`${R(POSM(2), 'K')}/${R(LEGINV(3), 'H')}`);
-  w.push(`${R(LEGINV(3), 'G')}/${retTap(2)}`); // bottom-3 occupied
-  w.push(`${R(LEGINV(3), 'J')}/${R(wallTf.relay, wallTf.arm)}`); // free: the tall fork
-  w.push(`${R(wallTf.relay, wallTf.no)}/${R(LEGINVT(3), 'H')}`); // tall: top-3
-  w.push(`${R(LEGINVT(3), 'G')}/${retTap(2)}`); // occupied
-  w.push(`${R(LEGINVT(3), 'J')}/${R(wallTf.relay, wallTf.nc)}`); // free: join
-  w.push(`${R(wallTf.relay, wallTf.nc)}/${R(WIDM4, 'H')}`); // the wall gate
-  w.push(`${R(WIDM4, 'J')}/${comOf(POSA(3))}`); // narrow: step
-  w.push(`${R(WIDM4, 'G')}/${retTap(2)}`); // wide: the wall, return
-  // left taps: the tall fork sets — requested in the hand-laid order
-  // (VMODEM(2).set2 into 0, then VMODEM(3)'s two sets into 1 and 2)
-  const leftFork = [
-    vmBank.request('changeover'), // into 0
-    vmBank.request('changeover'), // into 1
-    vmBank.request('changeover'), // into 2
+  // ---------- the step trees: uniform union-gated (wider-well C) ------
+  // "buttons request, contacts decide" as ever, but the trees are EMITTED
+  // now: every check is a rail read gated by a UNION of the states it
+  // applies to, wired in series — a dead union's NC passes the sample
+  // through, so each state feels exactly its own entering-cell checks
+  // (stepEntering) and nothing else. bound refusals come FIRST in each
+  // chain (width-invariant: the wall refuses {2wide,O,S}, the second-
+  // to-wall refuses {Z, triples, overhangs}, left-into-0 refuses S),
+  // reads outside the well CLIP (their members are bound-refused before
+  // them), and refusals return the sample into the current master's
+  // coil (the forced no-op step, as before). d0 reads reuse LEGINV /
+  // LEGINVT contacts path-gated by union contacts; off-column reads are
+  // pool relays coil-gated (rail AND union). the mode-fork optimization
+  // of the hand-laid trees is gone on purpose: uniformity is what makes
+  // the width a parameter.
+  // per-state mirror banks chain off each state's EXISTING mirror-chain
+  // TAIL (the slave coil jacks are full: com/E + the 3b chains); state 0
+  // never had mirrors, so its slave E has the one free hole
+  const mirrorTailOf = [
+    SHR(0, 2), I2WM, I2TM, OM, SM2, ZG(3),
+    L1M(1), J1M3, T1M2, L2M(2), J2M, T2M(2),
   ];
-  // 3b-3b: each left tree's tall path gains its mode hops in series after
-  // the (NOT-Z-gated) symmetric check: the S bound (left into 0 is out of
-  // S's fit range) or S's extra column c-1, then Z's true target columns
-  // c+1 / c+2 (dead coils pass through; left into 2 clips c+2 = 4).
-  for (const c of [0, 1, 2] as const) {
-    const { relay: vm, arm: vArm, nc: vNc, no: vNo } = leftFork[c];
-    if (c === 0) {
-      // 3b-4c: the OVR bypass (see the right tree) — L2/T2 skip the
-      // false bottom check; their true columns read further down
-      w.push(`${R(POSM(1), 'G')}/${R(BCUT, 'L')}`);
-      w.push(`${R(BCUT, 'N')}/${R(LEGINV(0), 'L')}`);
-      w.push(`${R(BCUT, 'K')}/${R(vm, vArm)}`); // overhang: skip to the fork
-    } else if (c === 1) {
-      w.push(`${R(POSM(2), 'G')}/${R(BCUTM, 'L')}`);
-      w.push(`${R(BCUTM, 'N')}/${R(LEGINV(1), 'L')}`);
-      w.push(`${R(BCUTM, 'K')}/${R(vm, vArm)}`); // overhang: skip to the fork
-    } else {
-      w.push(`${R(POSM(c + 1), 'G')}/${R(LEGINV(c), 'L')}`); // the tap in
+  const stBanks: MirrorBank[] = [];
+  {
+    // sets per state: memberships (width-invariant) + per-tree singles
+    // (S/J1 top reads, T2/L2 bottom reads + left-d0 bypasses)
+    // members are width-invariant; the per-tree spends (S/J1 top reads,
+    // T2/L2 bottom reads + every left tree's d0 bypass changeovers) grow
+    // with cols: L2 = 4 members + (cols-1) bypasses + (cols-3) reads,
+    // T2 = 4 + (cols-1) + (cols-1), S = 4 + (cols-2), J1 = 3 + (cols-2)
+    const caps = [1, 1, 2, 2, Math.ceil((cols + 2) / 2), 2, 2, Math.ceil((cols + 1) / 2), 2, cols + 1, 2, cols + 2];
+    let off = 0;
+    for (let i = 0; i < NSTATES; i++) {
+      stBanks.push(
+        new MirrorBank({ name: `STPM${i}`, source: mirrorTailOf[i], base: L.STPMIR + off, capacity: caps[i], w, R, minusOf })
+      );
+      off += caps[i];
     }
-    w.push(`${R(LEGINV(c), 'N')}/${R(vm, vArm)}`); // bottom free: tall fork
-    w.push(`${R(vm, vNc)}/${comOf(POSA(c))}`); // flat: step
-    w.push(`${R(vm, vNo)}/${R(LEGINVT(c), 'L')}`); // tall: top-c
-    if (c === 0) {
-      w.push(`${R(LEGINVT(0), 'N')}/${R(SM(3), 'L')}`);
-      w.push(`${R(SM(3), 'K')}/${retTap(1)}`); // the S bound: refuse
-      w.push(`${R(SM(3), 'N')}/${R(LTZ(0), 'H')}`);
-      w.push(`${R(LTZ(0), 'G')}/${retTap(1)}`); // Z: top-1 occupied
-      w.push(`${R(LTZ(0), 'J')}/${R(LTZ(1), 'H')}`);
-      w.push(`${R(LTZ(1), 'G')}/${retTap(1)}`); // Z: top-2 occupied
-      // 3b-4b: the triples' stem targets (T1 top-1, J1 top-2)
-      w.push(`${R(LTZ(1), 'J')}/${R(LTT(0), 'H')}`);
-      w.push(`${R(LTT(0), 'G')}/${retTap(1)}`); // T1: top-1 occupied
-      w.push(`${R(LTT(0), 'J')}/${R(LTJ(0), 'H')}`);
-      w.push(`${R(LTJ(0), 'G')}/${retTap(1)}`); // J1: top-2 occupied
-      // 3b-4c: the overhangs' true bottoms (T2 col 1, L2 col 2)
-      w.push(`${R(LTJ(0), 'J')}/${R(T2B(0), 'H')}`);
-      w.push(`${R(T2B(0), 'G')}/${retTap(1)}`); // T2: bottom-1 occupied
-      w.push(`${R(T2B(0), 'J')}/${R(LTOB(0), 'H')}`);
-      w.push(`${R(LTOB(0), 'G')}/${retTap(1)}`); // L2: bottom-2 occupied
-      w.push(`${R(LTOB(0), 'J')}/${R(vm, vNc)}`); // free: join the step wire
-    } else if (c === 1) {
-      w.push(`${R(LEGINVT(1), 'N')}/${R(LTS(0), 'L')}`);
-      w.push(`${R(LTS(0), 'K')}/${retTap(2)}`); // S: top-0 occupied
-      w.push(`${R(LTS(0), 'N')}/${R(LTZ(1), 'L')}`);
-      w.push(`${R(LTZ(1), 'K')}/${retTap(2)}`); // Z: top-2 occupied
-      w.push(`${R(LTZ(1), 'N')}/${R(LTZ(3), 'L')}`);
-      w.push(`${R(LTZ(3), 'K')}/${retTap(2)}`); // Z: top-3 occupied
-      // 3b-4b: the triples' stem targets (T1 top-2, J1 top-3)
-      w.push(`${R(LTZ(3), 'N')}/${R(LTT(1), 'L')}`);
-      w.push(`${R(LTT(1), 'K')}/${retTap(2)}`); // T1: top-2 occupied
-      w.push(`${R(LTT(1), 'N')}/${R(LTJ(1), 'L')}`);
-      w.push(`${R(LTJ(1), 'K')}/${retTap(2)}`); // J1: top-3 occupied
-      // 3b-4c: the overhangs' true bottoms (T2 col 2, L2 col 3)
-      w.push(`${R(LTJ(1), 'N')}/${R(T2B(1), 'L')}`);
-      w.push(`${R(T2B(1), 'K')}/${retTap(2)}`); // T2: bottom-2 occupied
-      w.push(`${R(T2B(1), 'N')}/${R(LTOB(1), 'L')}`);
-      w.push(`${R(LTOB(1), 'K')}/${retTap(2)}`); // L2: bottom-3 occupied
-      w.push(`${R(LTOB(1), 'N')}/${R(vm, vNc)}`); // free: join the step wire
-    } else {
-      w.push(`${R(LEGINVT(2), 'N')}/${R(LTS(1), 'L')}`);
-      w.push(`${R(LTS(1), 'N')}/${R(LTZ(3), 'H')}`);
-      w.push(`${R(LTZ(3), 'J')}/${R(vm, vNc)}`); // free: join the step wire
-      // position 3 has no return group: the refusals chain jack-to-jack
-      // into the master's coil (the LTS/LTZ NO throws join the chain)
-      w.push(`${R(LEGINV(2), 'K')}/${R(LEGINVT(2), 'K')}`);
-      w.push(`${R(LEGINVT(2), 'K')}/${R(LTS(1), 'K')}`);
-      w.push(`${R(LTS(1), 'K')}/${R(LTZ(3), 'G')}`);
-      w.push(`${R(LTZ(3), 'G')}/${R(POSA(3), 'E')}`);
+    if (off > L.STPMIR_CAP) throw new Error(`step mirrors overflow: ${off} > ${L.STPMIR_CAP}`);
+  }
+  // union rails: a wired-OR of one member contact each (outputs chain
+  // jack to jack, ONE wire enters the coil net — the LEGB trick)
+  let stpUnionN = 0;
+  let stpUGateOff = 0;
+  const mkUnion = (name: string, members: number[]) => {
+    if (stpUnionN >= L.STPUNION_CAP) throw new Error('union rails overflow');
+    const u = L.STPUNION + stpUnionN++;
+    let prev: string | null = null;
+    for (const s of members) {
+      const cs = stBanks[s].request('gate');
+      w.push(`${plusOf(cs.relay)}/${R(cs.relay, cs.arm)}`);
+      if (prev !== null) w.push(`${prev}/${R(cs.relay, cs.no)}`);
+      prev = R(cs.relay, cs.no);
     }
-    if (c !== 2) {
-      w.push(`${R(LEGINV(c), 'K')}/${retTap(c + 1)}`); // bottom occupied
-      w.push(`${R(LEGINVT(c), 'K')}/${retTap(c + 1)}`); // top occupied
+    w.push(`${prev}/${R(u, 'E')}`, `${R(u, 'F')}/${minusOf(u)}`);
+    const gateCap = Math.ceil((cols - 1) / 2) + 1;
+    if (stpUGateOff + gateCap > L.STPUGATE_CAP) throw new Error('union gate mirrors overflow');
+    const bank = new MirrorBank({ name: `${name}G`, source: u, base: L.STPUGATE + stpUGateOff, capacity: gateCap, w, R, minusOf });
+    stpUGateOff += gateCap;
+    return bank;
+  };
+  // state indices by ring order (SHAPES): 0 1x1, 1 2wide, 2 2tall, 3 O,
+  // 4 S, 5 Z, 6 L1, 7 J1, 8 T1, 9 L2, 10 J2, 11 T2
+  const uB0 = mkUnion('B0', [0, 2, 10]); // right bottom d0
+  const uB1 = mkUnion('B1', [1, 3, 4, 5, 11]); // right bottom d1
+  const uB2 = mkUnion('B2', [6, 7, 8, 9]); // right bottom d2
+  const uT0 = mkUnion('T0', [2, 4, 6]); // right top d0
+  const uT1 = mkUnion('T1', [3, 8]); // right top d1
+  const uT2 = mkUnion('T2', [5, 7, 9, 10, 11]); // right top d2
+  const uT0L = mkUnion('T0L', [2, 3, 6, 9, 10, 11]); // left top d0
+  const uT1L = mkUnion('T1L', [5, 8]); // left top d1
+  const uHIB = mkUnion('HIB', [5, 6, 7, 8, 9, 10, 11]); // max == cols-3
+  const uWALLB = mkUnion('WALLB', [1, 3, 4]); // max == cols-2
+  const stpPool = new GatedReadPool({ name: 'STPREAD', source: null, base: L.STPREAD, capacity: L.STPREAD_CAP, w, R, minusOf });
+  // refusal returns per SOURCE column, on matrix groups into the master
+  const retNode = Array.from({ length: cols }, () => takeGroups(4)); // ~15 refusal taps/source peak (width-invariant)
+  for (const g of retNode) for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
+  const retUse = Array.from({ length: cols }, () => ({ n: 0 }));
+  const retTap = (p: number) => tap(retNode[p], retUse[p]);
+  for (let s = 0; s < cols; s++) w.push(`${retTap(s)}/${R(POSA(s), 'E')}`);
+  // one tree per (direction, target column)
+  for (const dir of [1, -1] as const) {
+    for (let c = dir > 0 ? 1 : 0; dir > 0 ? c < cols : c < cols - 1; c++) {
+      const src = c - dir;
+      // the sample enters from the direction chain's POSM contact
+      let pending: string[] = [R(POSM(src), dir > 0 ? 'K' : 'G')];
+      const enter = (jack: string) => {
+        for (const p of pending) w.push(`${p}/${jack}`);
+      };
+      // a refusal hop: members up -> return the sample; else continue
+      const refuse = (cs: ContactSet) => {
+        enter(R(cs.relay, cs.arm));
+        w.push(`${R(cs.relay, cs.no)}/${retTap(src)}`);
+        pending = [R(cs.relay, cs.nc)];
+      };
+      // a coil-gated pool read: occupied AND relevant -> return
+      const poolHop = (col: number, gateBank: MirrorBank, top: boolean) => {
+        if (col < 0 || col >= cols) return; // clip: members are refused above
+        const g = gateBank.request('gate');
+        const rd = stpPool.read(top ? legTTap(col) : legTap(col), g);
+        enter(R(rd.relay, rd.set1.arm));
+        w.push(`${R(rd.relay, rd.set1.no)}/${retTap(src)}`);
+        pending = [R(rd.relay, rd.set1.nc)];
+      };
+      // a path-gated read on an EXISTING occupancy changeover (LEGINV /
+      // LEGINVT): gate NO -> the check; gate NC skips it; both continue
+      const gatedHop = (checkRelay: number, set: 1 | 2, gate: ContactSet) => {
+        const [arm, no, nc] = set === 1 ? ['H', 'G', 'J'] : ['L', 'K', 'N'];
+        enter(R(gate.relay, gate.arm));
+        w.push(`${R(gate.relay, gate.no)}/${R(checkRelay, arm)}`);
+        w.push(`${R(checkRelay, no)}/${retTap(src)}`);
+        pending = [R(gate.relay, gate.nc), R(checkRelay, nc)];
+      };
+      // bounds first
+      if (dir > 0 && c === cols - 1) refuse(uWALLB.request('changeover'));
+      if (dir > 0 && c === cols - 2) refuse(uHIB.request('changeover'));
+      if (dir < 0 && c === 0) refuse(stBanks[4].request('changeover')); // S: min 1
+      if (dir > 0) {
+        // right: bottom d0 (path-gated LEGINV set1), d1, d2; top d0
+        // (path-gated LEGINVT set1), d1, d2
+        gatedHop(LEGINV(c), 1, uB0.request('changeover'));
+        poolHop(c + 1, uB1, false);
+        poolHop(c + 2, uB2, false);
+        gatedHop(LEGINVT(c), 1, uT0.request('changeover'));
+        poolHop(c + 1, uT1, true);
+        poolHop(c + 2, uT2, true);
+      } else {
+        // left: bottom d0 = every state but T2 (d1) and L2 (d2) — their
+        // changeovers BYPASS the shared check (NO forward, NC continue)
+        const t2c = stBanks[11].request('changeover');
+        const l2c = stBanks[9].request('changeover');
+        enter(R(t2c.relay, t2c.arm));
+        w.push(`${R(t2c.relay, t2c.nc)}/${R(l2c.relay, l2c.arm)}`);
+        w.push(`${R(t2c.relay, t2c.no)}/${R(l2c.relay, l2c.no)}`); // bypasses tie
+        pending = [R(l2c.relay, l2c.no)];
+        {
+          // the d0 check itself (LEGINV set2), entered from L2's NC
+          const [arm, no, nc] = ['L', 'K', 'N'];
+          w.push(`${R(l2c.relay, l2c.nc)}/${R(LEGINV(c), arm)}`);
+          w.push(`${R(LEGINV(c), no)}/${retTap(src)}`);
+          pending.push(R(LEGINV(c), nc));
+        }
+        poolHop(c + 1, stBanks[11], false); // T2 bottom d1
+        poolHop(c + 2, stBanks[9], false); // L2 bottom d2
+        // top: d-1 (S), d0 (path-gated LEGINVT set2), d1, d2 (J1)
+        poolHop(c - 1, stBanks[4], true); // S top d-1
+        gatedHop(LEGINVT(c), 2, uT0L.request('changeover'));
+        poolHop(c + 1, uT1L, true);
+        poolHop(c + 2, stBanks[7], true); // J1 top d2
+      }
+      // the step: everything survived — coalesce the pending outputs
+      // (jack-to-jack ties) and enter the target master's com with ONE
+      // wire: the com budget is exactly coil + hold + self-loop + this
+      while (pending.length > 1) {
+        const a = pending.pop() as string;
+        w.push(`${a}/${pending[pending.length - 1]}`);
+      }
+      w.push(`${pending[0]}/${comOf(POSA(c))}`);
     }
   }
 
@@ -1869,12 +1859,11 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // can never read occupied at the token row. Branch pairs tie at the
   // LEGB output jacks to fit collideNode's hole budget; a backward walk
   // from the node dead-ends at + or an open contact in every state.
-  // occupied() feeds per column — a CLASS map: 0,1 read LEGINV directly,
-  // 2,3 the LEGINV2 parallel copies (LEGINV(2/3)'s sets are spent). phase
-  // C re-derives which columns need copies at a wider well.
-  const legbFeed = [R(LEGINV(0), 'E'), R(LEGINV(1), 'E'), R(LEGINV2(2), 'E'), R(LEGINV2(3), 'E')];
+  // occupied() feeds per column: the LEGB coils parallel the occupancy
+  // rails' own coil nets at LEGINV(j).E (2-hole budgets fit since the
+  // LEGINV2 copies retired — the coil jack carries rail tap + this)
   for (let j = 0; j < cols; j++) {
-    w.push(`${legbFeed[j]}/${R(LEGB(j), 'E')}`, `${R(LEGB(j), 'F')}/${minusOf(LEGB(j))}`);
+    w.push(`${R(LEGINV(j), 'E')}/${R(LEGB(j), 'E')}`, `${R(LEGB(j), 'F')}/${minusOf(LEGB(j))}`);
     w.push(`${plusOf(PIECET(j))}/${R(PIECET(j), 'L')}`, `${R(PIECET(j), 'K')}/${R(LEGB(j), 'H')}`);
   }
   // branch outputs chain jack-to-jack and enter at COLLIDE's com (its one
@@ -2010,16 +1999,10 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(SLJ, 'E')}/${R(SG(0), 'E')}`);
   w.push(`${R(ZM(3), 'E')}/${R(ZM2, 'E')}`, `${R(ZM2, 'E')}/${R(ZG(2), 'E')}`, `${R(ZG(2), 'E')}/${R(ZG(3), 'E')}`);
   w.push(`${R(ZJT, 'E')}/${R(ZG(0), 'E')}`, `${R(ZG(0), 'E')}/${R(ZG(1), 'E')}`);
-  for (const m of [SG(0), SG(1), ZG(0), ZG(1), ZG(2), ZG(3), LTS(0), LTS(1), LTZ(0), LTZ(1), LTZ(2), LTZ(3)])
+  for (const m of [SG(0), SG(1), ZG(0), ZG(1), ZG(2), ZG(3)])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
   // S-gated reads (coil = rail AND S): columns 0 and 1
-  w.push(`${legTTap(0)}/${R(SG(1), 'H')}`, `${R(SG(1), 'G')}/${R(LTS(0), 'E')}`);
-  w.push(`${legTTap(1)}/${R(SG(1), 'L')}`, `${R(SG(1), 'K')}/${R(LTS(1), 'E')}`);
   // Z-gated reads: column 1, column 2, column 3 (two relays for col 3)
-  w.push(`${legTTap(1)}/${R(ZG(2), 'H')}`, `${R(ZG(2), 'G')}/${R(LTZ(0), 'E')}`);
-  w.push(`${legTTap(2)}/${R(ZG(2), 'L')}`, `${R(ZG(2), 'K')}/${R(LTZ(1), 'E')}`);
-  w.push(`${legTTap(3)}/${R(ZG(3), 'H')}`, `${R(ZG(3), 'G')}/${R(LTZ(2), 'E')}`);
-  w.push(`${R(LTZ(2), 'E')}/${R(LTZ(3), 'E')}`);
 
   // ---------- 3b-3c: UP-transition legality (the last seam) ----------
   // The clock conducts ONLY through a legal transition's branch: the
@@ -2169,14 +2152,9 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(SM2)}/${R(SM2, 'H')}`, `${plusOf(L1M(1))}/${R(L1M(1), 'L')}`, `${plusOf(J1M2)}/${R(J1M2, 'H')}`);
   w.push(`${R(SM2, 'G')}/${R(L1M(1), 'K')}`, `${R(L1M(1), 'K')}/${R(J1M2, 'G')}`, `${R(J1M2, 'G')}/${R(SLJ, 'E')}`);
   // J1-only top reads (coil = rail AND J1): cols 2 and 3
-  w.push(`${legTTap(2)}/${R(J1M2, 'L')}`, `${R(J1M2, 'K')}/${R(LTJ(0), 'E')}`);
-  w.push(`${legTTap(3)}/${R(J1M3, 'H')}`, `${R(J1M3, 'G')}/${R(LTJ(1), 'E')}`);
   // T1-only top reads: cols 1 and 2
-  w.push(`${legTTap(1)}/${R(T1M2, 'H')}`, `${R(T1M2, 'G')}/${R(LTT(0), 'E')}`);
-  w.push(`${legTTap(2)}/${R(T1M2, 'L')}`, `${R(T1M2, 'K')}/${R(LTT(1), 'E')}`);
   // the triple-only bottom read of col 3 (TRP's spare set gates it)
-  w.push(`${legTap(3)}/${R(TRP, 'L')}`, `${R(TRP, 'K')}/${R(LTB3, 'E')}`);
-  for (const m of [ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2, LTJ(0), LTJ(1), LTT(0), LTT(1), LTB3])
+  for (const m of [ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
 
   // ---------- 3b-4c: the overhang trio's coils, rails and fans --------
@@ -2219,11 +2197,6 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(POSM5(7), 'E')}/${R(POSM6(3), 'E')}`, `${R(POSM6(3), 'E')}/${R(POSM6(4), 'E')}`, `${R(POSM6(4), 'E')}/${R(POSM6(5), 'E')}`);
   // the overhang reads: LTOT (TT top col3), LTOB (L2 bottoms), T2B (T2
   // bottoms), UTR3 (a parallel coil on the top col3 rail), LEGB3 mirrors
-  w.push(`${legTTap(3)}/${R(TTM(4), 'H')}`, `${R(TTM(4), 'G')}/${R(LTOT, 'E')}`);
-  w.push(`${legTap(2)}/${R(L2M(1), 'L')}`, `${R(L2M(1), 'K')}/${R(LTOB(0), 'E')}`);
-  w.push(`${legTap(3)}/${R(L2M(2), 'H')}`, `${R(L2M(2), 'G')}/${R(LTOB(1), 'E')}`);
-  w.push(`${legTap(1)}/${R(T2M(1), 'L')}`, `${R(T2M(1), 'K')}/${R(T2B(0), 'E')}`);
-  w.push(`${legTap(2)}/${R(T2M(2), 'H')}`, `${R(T2M(2), 'G')}/${R(T2B(1), 'E')}`);
   w.push(`${R(UTR(6), 'E')}/${R(UTR3, 'E')}`);
   w.push(`${R(LEGB2(0), 'E')}/${R(LEGB3(0), 'E')}`);
   w.push(`${R(LEGB2(1), 'E')}/${R(LEGB3(1), 'E')}`);
@@ -2247,7 +2220,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(UTR2(2), 'N')}/${R(UTR3, 'J')}`, `${R(UTR3, 'J')}/${R(LEGB(0), 'N')}`);
   w.push(`${R(LEGB(0), 'N')}/${R(LEGB2(0), 'N')}`, `${R(LEGB2(0), 'N')}/${R(LEGB3(0), 'J')}`);
   w.push(`${R(LEGB3(0), 'J')}/${R(LEGB3(1), 'J')}`, `${R(LEGB3(1), 'J')}/${R(LEGB3(2), 'J')}`);
-  for (const m of [MMIR3(9), MMIR3(10), MMIR3(11), TT, TTM(0), TTM(1), TTM(2), TTM(3), TTM(4), BCUT, BCUTM, L2M(0), L2M(1), L2M(2), J2M, T2M(0), T2M(1), T2M(2), LTOT, LTOB(0), LTOB(1), T2B(0), T2B(1), UTR3, LEGB3(0), LEGB3(1), LEGB3(2), POSM6(0), POSM6(1), POSM6(2), POSM6(3), POSM6(4), POSM6(5)])
+  for (const m of [MMIR3(9), MMIR3(10), MMIR3(11), TT, TTM(0), TTM(1), TTM(2), TTM(3), TTM(4), BCUT, BCUTM, L2M(0), L2M(1), L2M(2), J2M, T2M(0), T2M(1), T2M(2), UTR3, LEGB3(0), LEGB3(1), LEGB3(2), POSM6(0), POSM6(1), POSM6(2), POSM6(3), POSM6(4), POSM6(5)])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
 
   // ---------- 3b-5: the self-tick oscillator (see the constants) -------
