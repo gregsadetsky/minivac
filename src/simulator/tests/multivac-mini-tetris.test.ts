@@ -2114,20 +2114,38 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // the overhang falls PAST a stack: L2's bottom is one column, so
     // cells beside it never stop the fall, and turning back to L1 needs
     // exactly those cells.
+    // the L family refuses on the same physics, with one wrinkle worth
+    // recording: for a 3-wide top over a 1-wide bottom, EVERY cell that
+    // could block the turn also sits where the piece's own top would
+    // land one row down — so the piece is already resting (and written)
+    // by the time the turn is asked for. There is no "refused now,
+    // allowed a row later" for it; the isolated occupancy refusal with
+    // an escape is the overhang case above. So: blocked here, and the
+    // same geometry conducting on a clear field.
     g = makeGame();
-    g.operatorWrite(5, 0b0110); // the stack at (5,1) and (5,2)
+    g.operatorWrite(5, 0b0001); // the stack at (5,0)
     g.pressBtn(TETRIS_IO.right); // pos 1 (the chooser needs it past S)
     for (let k = 0; k < 9; k++) g.pressBtn(TETRIS_IO.up); // L2, pre-spawn
     expect(shapeAt6(g), 'chose the L flip before spawning').toBe(9);
+    g.pressBtn(TETRIS_IO.left); // back to pos 0
     g.pressStart();
-    for (let t = 0; t <= 5; t++) g.tick(); // token 5: the bottom column is clear
+    for (let t = 0; t <= 5; t++) g.tick(); // rests on the stack at row 5
     expect(g.tokenAt()).toEqual([5]);
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt6(g), 'turning back onto the stack beside it: refused').toBe(9);
-    expect(g.posAt(), 'the register held through the refusal').toBe(1);
-    g.tick(); // token 6: below the stack now
+    expect(shapeAt6(g), 'turning back over occupied cells: refused').toBe(9);
+    expect(g.posAt(), 'the register held through the refusal').toBe(0);
+    expect(g.m.getState().alerts).toEqual([]);
+
+    // the same turn, same columns, on a clear field: it conducts
+    g = makeGame();
+    g.pressBtn(TETRIS_IO.right);
+    for (let k = 0; k < 9; k++) g.pressBtn(TETRIS_IO.up); // L2
+    g.pressBtn(TETRIS_IO.left); // pos 0
+    g.pressStart();
+    for (let t = 0; t <= 3; t++) g.tick(); // still falling, nothing stored
+    expect(g.tokenAt()).toEqual([3]);
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt6(g), 'a row later the same turn conducts').toBe(6);
+    expect(shapeAt6(g), 'over empty cells the same turn conducts').toBe(6);
     expect(g.m.getState().alerts).toEqual([]);
   });
 
