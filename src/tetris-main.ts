@@ -95,6 +95,12 @@ function tokenRow(): number {
   return -1;
 }
 
+function rowCells(r: number): number {
+  let n = 0;
+  for (let j = 0; j < COLS; j++) if (relay(TETRIS_IO.cellRelay(r, j))) n++;
+  return n;
+}
+
 function render(note?: string) {
   const tok = tokenRow();
   const m = mask();
@@ -170,24 +176,32 @@ document.addEventListener('keydown', e => {
     // one tick — plus however many the machine owes itself afterwards: a
     // lock leaves the LOCKED slave up until the (vertical) phase-2 write
     // and the reset have run. Auto-running them keeps the keyboard from
-    // re-steering the piece between the bottom and top writes.
+    // re-steering the piece between the bottom and top writes. The tick is
+    // painted MID-PRESS too: a completed line is lit only while the tick
+    // slide is held (the flash — CLEARP drops the row on the release), and
+    // slamming press+release into one paint made every clear look like a
+    // row silently vanishing.
     if (busy) return;
     busy = true;
     status.textContent = 'tick — relays settling…';
+    const cellsBefore = Array.from({ length: ROWS }, (_, r) => rowCells(r));
     const step = (n: number) =>
       setTimeout(() => {
         const t = TETRIS_IO.tick;
         sim.setSlide(t.slide, 'right', t.machine);
-        sim.setSlide(t.slide, 'left', t.machine);
-        ticks++;
-        if (relay(TETRIS_IO.lockedRelay) && n < 3) {
-          render();
-          status.textContent = 'locked — the machine runs its bookkeeping ticks…';
-          step(n + 1);
-        } else {
-          busy = false;
-          render();
-        }
+        render('holding the tick…');
+        setTimeout(() => {
+          sim.setSlide(t.slide, 'left', t.machine);
+          ticks++;
+          if (relay(TETRIS_IO.lockedRelay) && n < 3) {
+            render('locked — the machine runs its bookkeeping ticks…');
+            step(n + 1);
+          } else {
+            busy = false;
+            const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
+            render(cleared ? `tick ${ticks} — line cleared! rows above stay put (collapse is the next rung)` : undefined);
+          }
+        }, 120);
       }, 15);
     step(0);
   } else if (e.key === 'Enter') {

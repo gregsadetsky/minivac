@@ -144,6 +144,22 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
 10. FIELD SCALING: 10x20 with row collapse after a line clear (rows above
    shift down = the stored-row shift machinery). this is where the rung-8a
    solver rewrite becomes necessary rather than nice.
+   design notes 2026-08-20 (from the live-play report + reading
+   baliika/fpga-tetris at the user's suggestion): collapse = top-down row
+   scan; on a full row, shift ALL rows above down one — the continuing scan
+   makes multi-line clears fall out of a single shift mechanism. on relays:
+   one transfer contact per cell (load-from-above) + a per-row shift
+   trigger, ~another W group per row. address-remapping instead of
+   shifting was considered and rejected: it would make the collision
+   network's row-below wiring dynamic (per-cell contacts again, worse).
+   also queued: game-over latch (spawn collision), score via the adder.
+   the live-play "a row disappears" report was reproduced and is NOT a
+   bug — it is the line clear with no collapse (rows above float); the
+   page now paints the mid-press line flash and says "line cleared! rows
+   above stay put" so it reads as gameplay instead of a glitch. permanent
+   tests added: steer-into-overlap (both engines; rows vanish only by
+   completion) + long random gameplay under FAST (the page's engine):
+   158 ticks / 40 locks / 19 vertical / 5 clears, zero model mismatches.
 
 ## display/input notes
 

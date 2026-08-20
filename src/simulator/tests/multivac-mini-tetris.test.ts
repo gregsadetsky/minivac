@@ -345,14 +345,17 @@ describe('Multivac: mini-tetris (28 machines)', () => {
   // ones, and whatever stack shapes the seed builds. The machine samples
   // tallness at the press (P2M latches) and the mask again at the phase-2
   // tick (the slides feed the rails live) — the model does exactly that.
-  it('random gameplay: seeded drops, steering, morphing shapes, vertical locks (sparse)', { timeout: 900000 }, () => {
-    setSolverEngine('sparse');
-    const lcg = (seed: number) => {
-      let s = seed >>> 0;
+  // Runs under BOTH gameplay engines: sparse (the suite default) and fast
+  // (what /tetris/ actually plays on — a live-play glitch report is exactly
+  // where an engine-specific divergence would hide).
+  function runRandomGameplay(engine: 'sparse' | 'fast', seed: number, drops: number) {
+    setSolverEngine(engine);
+    const lcg = (s0: number) => {
+      let s = s0 >>> 0;
       return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
     };
-    const rnd = lcg(20260819);
-    const DROPS = parseInt(env.MINIVAC_TETRIS_DROPS || '14', 10);
+    const rnd = lcg(seed);
+    const DROPS = drops;
 
     const g = makeGame();
     const model = Array(8).fill(0);
@@ -427,13 +430,22 @@ describe('Multivac: mini-tetris (28 machines)', () => {
       expect(g.tokenAt(), `tick ${ticks} token`).toEqual(token >= 0 ? [token] : []);
     }
     // the seed is fixed, so the run is deterministic; line-clear coverage
-    // also lives in the scripted tests above. raise MINIVAC_TETRIS_DROPS
-    // for longer random runs.
+    // also lives in the scripted tests above.
     console.log(
-      `random gameplay: ${ticks} ticks, ${locks} locks (${vlocks} vertical), ${clears} line clears`
+      `random gameplay [${engine}, seed ${seed}]: ${ticks} ticks, ${locks} locks (${vlocks} vertical), ${clears} line clears`
     );
     expect(locks).toBe(DROPS);
     expect(vlocks, 'the seed must actually exercise vertical locks').toBeGreaterThan(2);
+  }
+
+  it('random gameplay: seeded drops, steering, morphing shapes, vertical locks (sparse)', { timeout: 900000 }, () => {
+    runRandomGameplay('sparse', 20260819, parseInt(env.MINIVAC_TETRIS_DROPS || '14', 10));
+  });
+
+  // the fast engine plays ~16x quicker, so its run goes much longer — this
+  // is the closest thing to a long human session on the live page
+  it('random gameplay under the fast engine: long run, fresh seed', { timeout: 900000 }, () => {
+    runRandomGameplay('fast', 20260820, parseInt(env.MINIVAC_TETRIS_DROPS_FAST || '40', 10));
   });
 
   // rung 9b groundwork: the TOPW mirrors (one per row 1-7, a parallel coil
@@ -658,6 +670,52 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     dropVertical(g, 0b0010, model, 'fast vertical'); // rests at 2: rows 2+1
     expect(g.row(2)).toBe(0b0010);
     expect(g.row(1)).toBe(0b0010);
+  });
+
+  // the live-play report (2026-08-20): a piece steered sideways INTO an
+  // already-placed cell "seems to work", then later a whole row disappears.
+  // This reproduces that sequence under both gameplay engines. The overlap
+  // is real and benign: sideways collision does not exist (the token only
+  // senses the row BELOW it) and the lock write is an OR, so overlapping
+  // cells are absorbed. The only way a row vanishes is completing it — and
+  // with no row collapse in this rung the rows above stay floating, which
+  // is easy to read as a glitch on the page.
+  it('steer-into-overlap: absorbed by the OR-write, rows vanish only by completion (both engines)', { timeout: 900000 }, () => {
+    for (const engine of ['sparse', 'fast'] as const) {
+      setSolverEngine(engine);
+      const g = makeGame();
+      const model = Array(8).fill(0);
+      g.pressStart();
+      dropPiece(g, 0b0001, model, `${engine}: col 0 to the floor`);
+      dropPiece(g, 0b0001, model, `${engine}: col 0 stacks`);
+      // third piece falls in col 1, then steers LEFT into the stack's top
+      // cell at its own row — the reported move
+      g.setColumn(1);
+      g.tick(); // spawn
+      expect(g.tokenAt()).toEqual([0]);
+      for (let r = 1; r <= 6; r++) {
+        g.tick();
+        expect(g.tokenAt(), `${engine}: falling beside the stack`).toEqual([r]);
+      }
+      g.setColumn(0); // overlap cell(6,0); cell(7,0) below pre-arms collide
+      g.tick(); // pure lock at row 6: old | mask — the overlap is absorbed
+      expect(g.tokenAt(), `${engine}: locked at 6`).toEqual([6]);
+      expect(g.field(), `${engine}: overlap lock changed nothing`).toEqual(model);
+      g.tick(); // reset
+      expect(g.tokenAt()).toEqual([]);
+      // the game continues; nothing may vanish while no row completes
+      dropPiece(g, 0b0010, model, `${engine}: col 1`);
+      dropPiece(g, 0b0100, model, `${engine}: col 2`);
+      expect(g.row(7), `${engine}: floor row intact`).toBe(0b0111);
+      expect(g.row(6), `${engine}: stacked row intact`).toBe(0b0001);
+      // now complete row 6: fill it to one hole and drop into that hole
+      // (the piece collides at 6 because row 7 holds its column)
+      g.operatorWrite(6, 0b1100);
+      model[6] = 0b1101;
+      dropPiece(g, 0b0010, model, `${engine}: completes row 6`);
+      expect(g.row(6), `${engine}: row 6 vanished by completion`).toBe(0);
+      expect(g.row(7), `${engine}: floor row survives the clear above it`).toBe(0b0111);
+    }
   });
 
   const heavy = MASS ? it : it.skip;
