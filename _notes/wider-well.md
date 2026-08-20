@@ -109,6 +109,34 @@ reads at c+2 (and repeated reads per column) need parallel-coil rail
 copies where a relay's two contact sets run out — the LEGINV2 pattern,
 allocated per column by CONSUMER COUNT, not hand-laid.
 
+## phase C architecture (survey complete, 14:35Z)
+
+five emitters, in dependency order:
+1. the CONTACT ALLOCATOR (the deepest change): every source signal
+   (state, pos class, mode) has a consumer list; mirrors are minted at
+   ceil(consumers/2) and coil-jack chained; contact sets are assigned
+   by the allocator — replacing every hand-laid POSM3/4/5/6-style set
+   map (those doc comments ARE the hand allocator's ledger today).
+2. the STEP-TREE emitter: shared trunk + state-gated series hops from
+   the (db,dt) offset table + bound refusals at range edges; retNode
+   groups sized by COUNTED refusals (incl. the tree's own — the 3b-4c
+   lesson); rail COPIES (LEGINV2 pattern) minted by consumer count.
+3. the UP-TRANSITION emitter: per state pair s -> s+1 (+ wrap), per
+   pos p with clamped target q: delta sets B2(q)\B1(p), T2(q)\T1(p)
+   as gated rail reads in series behind the one-hot pos fan; join ->
+   clock com; no branch at out-of-range p = the bound refusal.
+4. the B/T FAN emitters: bottom = base {p} + WIDM {p+1} + WID3 {p+2}
+   with BCUT suppression for offset bottoms (L2/T2); top = per-state
+   private pairs (state AND pos -> column net) over the geometry.
+5. budgets: grown() gains a cols dimension per rail from counted
+   consumers; slide machines checked (operator data slides cap at 4 on
+   m1; PIECET top-mask slides fit 6/machine); M10/M11 groups + jack
+   capacities enforced by the existing asserts + claim registry.
+
+size estimate: a full rung arc (comparable to all of 3b). the gate per
+emitter: behavior at 4 (file + check + driver + the dense batch), then
+the width flip to 6 with new-edge tests.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
