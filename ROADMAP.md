@@ -262,8 +262,26 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    their relays on the bigger field where they have room to matter.
 
 11. FIELD SCALING: wider/taller grid = stamping proven patterns; the
-   solver budget is the real constraint. also queued: game-over latch
-   (spawn collision), score counter via the adder rung.
+   solver budget is the real constraint. also queued: score counter via
+   the adder rung.
+   GAME OVER LANDED 2026-08-20, same session: any LOCK AT ROW 0 is the
+   top-out (a row-0 clearing lock too — documented simplification).
+   3 appended relays: GOM ("token at row 0", chained off MIRC(0,1)'s coil
+   jack), the GAMEOVER latch, and LKM2 (a lock-master mirror giving the
+   set a +-fed lock-scoped arm). TWO wiring bugs caught by the failing
+   test before they shipped, both old lessons re-learned: (1) the first
+   set path tapped the breaker rail, and the held latch's com BACK-FED +
+   onto that rail through GOM's closed contact, re-firing row 0's
+   hold-break forever (a set path must dead-end at + or an open contact
+   in EVERY state); (2) blocking only the START button missed SPAWN's
+   AUTO-RE-ARM on every reset tick — both set paths now converge on
+   GAMEOVER's arm jack and enter through its one NC. the random-gameplay
+   model plays MULTIPLE GAMES per run now: both seeds were quietly
+   locking at row 0 all along, so a top-out power-cycles a fresh machine
+   and the coverage continues (seed 20260820: 4 games, 40 locks, 326
+   model-checked ticks). the page paints the stack rust-red and freezes
+   ("reload for a new game" — the latch is relay-held; only a power
+   cycle clears it).
    OPENING MOVE LANDED 2026-08-20 — the DEAD-HARDWARE TRIM (lever (c),
    displacing the planned lever (b)): measured first, +50 EMPTY machines
    tripled a tetris tick (237ms -> 666ms, same wires) because every

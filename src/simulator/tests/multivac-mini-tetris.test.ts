@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, TETRIS_IO } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, TETRIS_IO } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -448,8 +448,9 @@ describe('Multivac: mini-tetris (50 machines)', () => {
     const rnd = lcg(seed);
     const DROPS = drops;
 
-    const g = makeGame();
-    const model = Array(8).fill(0);
+    let g = makeGame();
+    let model = Array(8).fill(0);
+    let games = 1;
     let token = -1; // falling piece's row, -1 = none
     let mask = 0b0001;
     let wideNow = false; // the WID slide, as the model last set it
@@ -464,7 +465,9 @@ describe('Multivac: mini-tetris (50 machines)', () => {
 
     let clearedRow = -1; // a clearing lock queues 2*row collapse ticks
     let collapseLeft = 0;
+    let gameOver = false;
     const lockAt = (r: number) => {
+      if (r === 0) gameOver = true; // the top-out: GAMEOVER latches on this press
       model[r] |= mask;
       if (model[r] === 15) {
         model[r] = 0; // CLEARP zeroes the row as the press releases
@@ -558,11 +561,39 @@ describe('Multivac: mini-tetris (50 machines)', () => {
       }
       expect(g.field(), `tick ${ticks} field (mask ${mask.toString(2)})`).toEqual(model);
       expect(g.tokenAt(), `tick ${ticks} token`).toEqual(token >= 0 ? [token] : []);
+      if (gameOver) {
+        const go = g.m.getMachineState(Math.floor(GAMEOVER / 6)).relays[GAMEOVER % 6];
+        expect(go, 'the machine latched the top-out too').toBe(true);
+        g.tick(); // the pending bookkeeping (phase 2 if the lock was tall...)
+        g.tick(); // ...then the reset
+        g.pressStart();
+        g.tick();
+        expect(g.tokenAt(), 'no spawn after a random top-out').toEqual([]);
+        console.log(
+          `random gameplay [${engine}, seed ${seed}]: game ${games} topped out after ${locks} locks — power cycle`
+        );
+        // a power cycle is the machine's own new-game story: fresh build,
+        // fresh field, the model resets with it; the rnd stream continues
+        g = makeGame();
+        model = Array(8).fill(0);
+        games++;
+        token = -1;
+        mask = wideNow ? 0b0011 : 0b0001;
+        phase2Pending = false;
+        resetPending = false;
+        clearedRow = -1;
+        collapseLeft = 0;
+        gameOver = false;
+        g.m.setSlide(TETRIS_IO.wid.slide, wideNow ? 'right' : 'left', TETRIS_IO.wid.machine);
+        g.m.setSlide((VMODE % 6) + 1, vertical ? 'right' : 'left', Math.floor(VMODE / 6));
+        g.pressStart();
+        spawnArmed = true;
+      }
     }
     // the seed is fixed, so the run is deterministic; line-clear coverage
     // also lives in the scripted tests above.
     console.log(
-      `random gameplay [${engine}, seed ${seed}]: ${ticks} ticks, ${locks} locks (${vlocks} vertical), ${clears} line clears`
+      `random gameplay [${engine}, seed ${seed}]: ${ticks} ticks, ${locks} locks (${vlocks} vertical), ${clears} line clears, ${games} game(s)`
     );
     expect(locks).toBe(DROPS);
     expect(vlocks, 'the seed must actually exercise vertical locks').toBeGreaterThan(2);
@@ -774,11 +805,16 @@ describe('Multivac: mini-tetris (50 machines)', () => {
     expect(g.tokenAt()).toEqual([]);
     expect(g.field()).toEqual(model);
 
-    // and the machine still plays: a plain horizontal drop at col 3 rests
-    // on the full row 6, joining col 0 already stored at row 5
+    // a lock AT row 0 is the top-out (the game-over rung): the latch is
+    // up and no spawn can arm again — the clip case doubles as the
+    // vertical top-out receipt
+    const go = g.m.getMachineState(Math.floor(GAMEOVER / 6)).relays[GAMEOVER % 6];
+    expect(go, 'the clip lock topped the stack out').toBe(true);
     vmode(false);
-    dropPiece(g, 0b1000, model, 'game goes on');
-    expect(g.row(5)).toBe(0b1001);
+    g.pressStart();
+    g.tick();
+    expect(g.tokenAt(), 'no spawn after the vertical top-out').toEqual([]);
+    expect(g.field(), 'the frozen field').toEqual(model);
   });
 
   // THE rung-10 acceptance: content above a cleared line FALLS. Distinct
@@ -1311,6 +1347,37 @@ describe('Multivac: mini-tetris (50 machines)', () => {
   // game-writable only: the 3-bit op-write decoder covers rows 0-7), the
   // clear, the full 33-tick collapse (11 stages x alpha/beta/gamma), the
   // register's re-home and mid-well steering.
+  // the game-over latch: any LOCK AT ROW 0 means the stack topped out.
+  // GAMEOVER latches (set = the lock-press rail through GOM, a "token at
+  // row 0" mirror) and its NC sits in the START button's arm path, so no
+  // further spawn can ever arm — a power cycle starts the next game. The
+  // documented simplification: a row-0 CLEARING lock also tops out.
+  it('game over: a lock at row 0 latches and blocks every spawn (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const relayOn = (n: number) => (g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0);
+    const model = Array(8).fill(0);
+    for (let r = 1; r <= 7; r++) {
+      g.operatorWrite(r, 0b0001);
+      model[r] = 0b0001;
+    }
+    expect(relayOn(GAMEOVER), 'alive while the stack builds').toBe(0);
+    g.pressStart();
+    g.tick(); // merged spawn + lock AT ROW 0: the top-out
+    model[0] = 0b0001;
+    expect(g.field(), 'the topping lock still writes').toEqual(model);
+    expect(relayOn(GAMEOVER), 'the top-out latched').toBe(1);
+    g.tick(); // the ordinary reset still runs
+    expect(g.tokenAt()).toEqual([]);
+    // START can never arm again: the latch broke the button's path
+    g.pressStart();
+    g.tick();
+    expect(g.tokenAt(), 'no spawn after game over').toEqual([]);
+    expect(g.field(), 'the field is frozen history').toEqual(model);
+    expect(relayOn(GAMEOVER), 'latched for good').toBe(1);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
   function runTallWell(engine: 'fast' | 'cktsim') {
     setSolverEngine(engine);
     const ROWS = 12;

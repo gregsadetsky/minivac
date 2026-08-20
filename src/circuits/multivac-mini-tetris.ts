@@ -132,6 +132,10 @@ export const MIRCT = (r: number, h: number) => 273 + 2 * (r - 1) + h; // rows 1.
 export const LEGINVT = (j: number) => 285 + j; // "column j occupied one row ABOVE the token" (285..288)
 export const LEGINVT2 = (k: number) => 287 + k; // k=2,3: top second-reads for the 2x2's right edge (289,290)
 export const VMODEM = (p: number) => 291 + p; // vmode mirrors: the tall forks in the D-tap trees (291..294)
+// the game-over latch (appended: the tall-well layout below stays stable)
+export const GOM = 295; // "token at row 0" mirror (chained off MIRC(0,1)'s coil jack)
+export const GAMEOVER = 296; // latches on any lock at row 0; its NC blocks START forever
+export const LKM2 = 297; // lock-master mirror: the +-fed lock scope for GAMEOVER's set
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
@@ -192,6 +196,7 @@ export interface TetrisLayout {
   LEGINVT: (j: number) => number;
   LEGINVT2: (k: number) => number;
   VMODEM: (p: number) => number;
+  GOM: number; GAMEOVER: number; LKM2: number;
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
 }
@@ -248,6 +253,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const leginvtBase = take(cols);
   const leginvt2Base = take(2);
   const vmodemBase = take(cols);
+  const gomBase = take(3); // GOM, GAMEOVER, LKM2 — appended after the tall-well layout shipped
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -295,6 +301,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
     LEGINVT: j => leginvtBase + j,
     LEGINVT2: k => leginvt2Base + (k - 2),
     VMODEM: p => vmodemBase + p,
+    GOM: gomBase, GAMEOVER: gomBase + 1, LKM2: gomBase + 2,
     machines: Math.ceil(n / 6),
     relays: n - (rows - 3),
   };
@@ -354,6 +361,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   for (let j = 0; j < 4; j++) claim('LEGINVT', LEGINVT(j));
   claim('LEGINVT2', LEGINVT2(2), LEGINVT2(3));
   for (let p = 0; p < 4; p++) claim('VMODEM', VMODEM(p));
+  claim('GOM/GAMEOVER/LKM2', GOM, GAMEOVER, LKM2);
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -393,6 +401,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   for (let r = 1; r <= 6; r++) { eq('MIRCT0', L.MIRCT(r, 0), MIRCT(r, 0)); eq('MIRCT1', L.MIRCT(r, 1), MIRCT(r, 1)); }
   eq('LEGINV2(2)', L.LEGINV2(2), LEGINV2(2)); eq('LEGINV2(3)', L.LEGINV2(3), LEGINV2(3));
   eq('LEGINVT2(2)', L.LEGINVT2(2), LEGINVT2(2)); eq('LEGINVT2(3)', L.LEGINVT2(3), LEGINVT2(3));
+  eq('GOM', L.GOM, GOM); eq('GAMEOVER', L.GAMEOVER, GAMEOVER); eq('LKM2', L.LKM2, LKM2);
   eq('machines', L.machines, MACHINES);
 }
 export const LEFTBTN = { button: 3, machine: 40 }; // m40.3 button
@@ -419,7 +428,7 @@ export function tetrisCircuit(rows = 8): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, LEGINV2, WIDM3, WIDM4,
-    MIRCT, LEGINVT, LEGINVT2, VMODEM,
+    MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2,
   } = L;
   // buttons/slides are separate hardware from relays; the classic build
   // put them on m40 = machines - 10, kept as the general rule
@@ -781,13 +790,18 @@ export function tetrisCircuit(rows = 8): {
   // that rail, the latch would hold the gate closed and the gate would hold
   // the rail up — the same parasitic rail latch LKM's set had). Held through
   // SPAWNCLR's NC until the ring clock consumes it.
-  w.push(`${R(TICKM, 'G')}/${R(RSTM, 'L')}`, `${R(RSTM, 'K')}/${comOf(SPAWN)}`);
+  // BOTH set paths (the reset auto-re-arm here, the START button below)
+  // converge on GAMEOVER's arm jack and enter the com through its NC: one
+  // latch blocks every future spawn. The tie is legal — each feed's far
+  // side dead-ends at the other's open contact (the released button / the
+  // idle RSTM.K).
+  w.push(`${R(TICKM, 'G')}/${R(RSTM, 'L')}`, `${R(RSTM, 'K')}/${R(GAMEOVER, 'H')}`);
   w.push(`${comOf(SPAWN)}/${R(SPAWN, 'E')}`, `${R(SPAWN, 'F')}/${minusOf(SPAWN)}`);
   w.push(`${plusOf(SPAWNCLR)}/${R(SPAWNCLR, 'H')}`, `${R(SPAWNCLR, 'J')}/${R(SPAWN, 'L')}`, `${R(SPAWN, 'K')}/${comOf(SPAWN)}`);
   w.push(`${ringClkCom(rows - 2)}/${R(SPAWNCLR, 'E')}`, `${R(SPAWNCLR, 'F')}/${minusOf(SPAWNCLR)}`); // the LAST ring pair com has the spare hole
   // START arms SPAWN directly: a button IS a private contact, so it may
   // feed the com without a leak (unpressed = open = dead end for the latch)
-  w.push(`${plusOf(SPAWN)}/m1.6Y`, `m1.6X/${comOf(SPAWN)}`);
+  w.push(`${plusOf(SPAWN)}/m1.6Y`, `m1.6X/${R(GAMEOVER, 'H')}`, `${R(GAMEOVER, 'J')}/${comOf(SPAWN)}`);
 
   // ---------- vertical pieces (rung 9b): mode relay + TOPW mirror bank ----
   // TOPW(r) is one more parallel coil on slave r's mirror com (its spare 4th
@@ -1311,6 +1325,27 @@ export function tetrisCircuit(rows = 8): {
       w.push(`${R(LEGINVT(c), 'K')}/${retTap(c + 1)}`); // top occupied
     }
   }
+
+  // ---------- game over: the stack topped out ----------
+  // GAMEOVER latches on any LOCK AT ROW 0 (a row-0 clearing lock also
+  // tops out — documented simplification) and its NC sits in the START
+  // button's arm path above, so no spawn can ever arm again; a power
+  // cycle starts the next game. GOM = "token at row 0": one more coil
+  // chained off MIRC(0,1)'s jack (row 0 has no MIRCT chain there). The
+  // set is +-fed through LKM2 (a lock-master mirror: up from the lock
+  // press until the reset) so it DEAD-ENDS AT + while the latch holds —
+  // the first draft tapped the breaker rail instead, and the held latch's
+  // com back-fed + onto that rail through GOM's still-closed contact,
+  // re-firing row 0's hold-break forever (the fresh top-out write never
+  // latched; the failing test's field showed exactly rows 1-7 intact and
+  // row 0 empty). The tie-point law: a set path must dead-end at + or an
+  // open contact in EVERY state, not just the idle one.
+  w.push(`${R(MIRC(0, 1), 'E')}/${R(GOM, 'E')}`, `${R(GOM, 'F')}/${minusOf(GOM)}`);
+  w.push(`${R(LKM, 'E')}/${R(LKM2, 'E')}`, `${R(LKM2, 'F')}/${minusOf(LKM2)}`);
+  w.push(`${plusOf(LKM2)}/${R(LKM2, 'H')}`, `${R(LKM2, 'G')}/${R(GOM, 'H')}`);
+  w.push(`${R(GOM, 'G')}/${comOf(GAMEOVER)}`);
+  w.push(`${comOf(GAMEOVER)}/${R(GAMEOVER, 'E')}`, `${R(GAMEOVER, 'F')}/${minusOf(GAMEOVER)}`);
+  w.push(`${plusOf(GAMEOVER)}/${R(GAMEOVER, 'L')}`, `${R(GAMEOVER, 'K')}/${comOf(GAMEOVER)}`);
 
   return { wires: w, rails: dataRails, layout: L, btnMachine };
 }

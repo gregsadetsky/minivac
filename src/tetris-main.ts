@@ -46,6 +46,7 @@ const IO = {
   right: { button: 4, machine: btnMachine },
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
+  gameOverRelay: loc(L.GAMEOVER),
   posRelay: (j: number) => loc(L.POSS(j)),
   cellRelay: (r: number, j: number) => loc(L.CELL(r, j)),
   tokenRelay: (i: number) => loc(L.RING(i, 2)),
@@ -159,6 +160,15 @@ function wouldOverlap(nPos: number, nWidth: number, nTall: boolean): boolean {
 }
 
 function render(note?: string) {
+  if (relay(IO.gameOverRelay)) {
+    // the latch is relay-held: only a power cycle clears it
+    for (let r = 0; r < ROWS; r++)
+      for (let j = 0; j < COLS; j++)
+        if (relay(IO.cellRelay(r, j))) pixels[r][j].style.background = '#8a4a3a';
+    status.textContent = 'game over — the stack topped out (reload for a new game)';
+    busy = true; // freeze the keyboard; the machine won\'t spawn anyway
+    return;
+  }
   const tok = tokenRow();
   const m = mask();
   for (let r = 0; r < ROWS; r++) {
