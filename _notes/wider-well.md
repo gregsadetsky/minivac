@@ -232,7 +232,8 @@ bounds and transitions all derive from the SHAPES tuple; the allocator
 owns every resource map. that closes the phase C design — remaining
 work is implementation.
 
-## prerequisite before the emitters: flip the constant direction
+## prerequisite before the emitters: flip the constant direction — DONE
+## (6a4a507: 151 exports derive from L8, eq block deleted, gates green)
 
 the C emitters change bank SIZES at cols=4 (minimal checks drop the
 belt-and-braces relays), which shifts every baked constant after the
