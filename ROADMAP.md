@@ -653,9 +653,31 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    alpha is an electrical first: one hold contact feeding three
    parallel coils), driver end to end incl. the double-clear scenario.
    ~14 relays.
-   NEXT: deploy the gravity correction + wider-well prep + the double
-   clear on the sweep receipt; then cols=6 (the MIRB collision-mirror
-   bank is the known blocker) and the rotation-group rung.
+   THE WIDER WELL LANDED 2026-08-20 (the marathon session's close): the
+   page plays 12x6 — cols joined rows as a generator parameter, with
+   the three emitters compiling every column-class site from SHAPES.
+   the bring-up found SEVEN collision classes, every one an annotated
+   growth point that read past its 4-col bank: the per-row contact-set
+   fans (MIRBX/MIRCX/MIRCTX/CUTX minted), a composite take's baked
+   offsets (PIECET/LEGB), a hand splice at a chain's old tail (VMODEM),
+   the topmask slides overflowing onto the WID slide's section (a slide
+   T jack is a permanent tie — state mirrors leaked into the T fan as
+   ghost columns), POSRST's re-home NCs indexing into TWIN (slaves 4-5
+   survived resets -> multi-hot register, all-column pieces, mid-air
+   locks), and the collapse beta trigger firing W(.,2) — breaker-0 at
+   4 cols, a GATE at 6 (the cleared row's source never broke). every
+   fix kept the (8,4) netlist BYTE-IDENTICAL. receipts: the six-wide
+   suite test (fans/overhangs/bounds vs the geometry + the piece-built
+   clear with one-hot asserts after every drop), the driver at 12x6
+   end to end incl. the three-square double clear and the step-exact
+   script. KNOWN DEBT: ~11 jack-capacity violations at 6 (physical
+   buildability only — trigger entries at full jacks + over-tapped
+   rail groups; the sim doesn't feel them). the buildability pass +
+   the capacity audit in the six-wide test is the next unit.
+   NEXT: the buildability pass at 6; then rotation groups on the ring
+   (UP steps within the current piece's orientations), random dealing,
+   pivot-order reuse in the fast engine (the 7s cascade is solve-bound),
+   and the 3-row piece engine toward the I piece and verticals.
 
 ## display/input notes
 
