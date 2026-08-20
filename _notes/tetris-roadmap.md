@@ -358,6 +358,177 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    completion) + long random gameplay under FAST (the page's engine):
    158 ticks / 40 locks / 19 vertical / 5 clears, zero model mismatches.
 
+GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
+   GAMEOVER (GOM mirrors token-at-0, LKM2 gives the set a lock-scoped
+   arm) and the latch blocks every spawn — both set paths (START and the
+   reset tick's auto-re-arm, which the first draft missed) enter through
+   the latch's one NC contact. the first draft's rail-tapped set ALSO
+   back-fed + through the held latch into row 0's hold-break (the tie-
+   point law again: a set path must dead-end at + or an open contact in
+   EVERY state, not just idle). receipts: the game-over test (top-out,
+   latch held, spawn refused, steering dead) + the random-gameplay runs
+   now play MULTIPLE GAMES per run — a top-out power-cycles a fresh
+   machine (seed 20260820: 4 games / 40 locks / 326 ticks); the page
+   freezes rust-red with the score and a reload note.
+   THE SCORE RING LANDED 2026-08-20, same session: one decimal digit
+   (0-9, wraps) stepped once per line clear — the token-ring
+   master/slave/clock pattern re-used verbatim with CLEARP as the clock
+   plus SCBOOT power-on seed pulse-fed off CLEARPM's spare K (feeding the
+   seed from the clock chain would latch the ring clocks high forever). a
+   binary counter was designed first and killed on paper: its done-track
+   leaked + into below-toggle masters through bidirectional contacts
+   (three redesigns, each needing another mirror bank — the ring is
+   cheaper AND the pattern was already proven). buttons/WID moved to a
+   dedicated relay-free machine (layout.btnMachine) after two anchor
+   schemes drifted with rows; the registry asserts the geometry. receipt:
+   eleven scored clears including the 9-to-0 wrap, green first run; the
+   page shows the score live.
+   STAGGERED PIECES (shapes 3b-1) LANDED 2026-08-20, same session: S and
+   Z. a shape on this machine is a (bottomMask, topMask) pair — the
+   phase-2 top write now samples a TOPMASK slide bank (PIECET) behind
+   STAGM's changeover when the STAG slide is up. the T fan conducts ONLY
+   during a staggered phase 2 (normally-open cuts CUTC5/6), the B fan and
+   its collision taps are severed for that window (CUTB1-4), and ALL six
+   cuts ride one delay hop (CUTBD): the release trace caught a clean
+   mid-press write growing a phantom cell when the fresh top row's
+   readback re-fed the data rails one relaxation wave after raw-rail cuts
+   dropped — cuts must die depth-aligned with what they race. a
+   press-scoped tap gate was tried and REVERTED: it severed the bottom
+   collision's between-ticks pre-arm running through the same taps
+   (pieces fell straight through blocks; the idle + on the taps is
+   audited benign — LINEDLY keeps the LINE chain unpowered).
+   TOP COLLISION (3b-2) LANDED same session: a staggered notch rests ON
+   stored content — PIECET+LEGB series branches pre-arm COLLIDE at its
+   com (the collide node was at capacity; entering through the com's one
+   spare hole is the same trick as GAMEOVER's NC entry), scoped by STAGM2
+   after a hostile-TOPMASK regression caught the ungated term resting a
+   symmetric piece mid-air. receipts: S/Z write tests + notch-rests-on-
+   content + a hostile symmetric regression (STAG off + TOPMASK 0b1111
+   ignored), all green under fast.
+   THE PAGE PLAYS S AND Z, same session: the shape cycle grew the
+   staggered pair; arrow steps re-sync the absolute TOPMASK columns,
+   entering a staggered shape auto-clamps the register into its fit
+   bounds (again after every reset re-home, as pre-spawn operator steps —
+   exactly what a human at the slides would do), the preview paints the
+   shifted top pair. the JS guard now covers exactly TWO seams until the
+   shape ring (3b-3): the reshape slide flip and the staggered top
+   column the legality trees can't see (they read the top row per the
+   BOTTOM mask's columns; the machine may also falsely refuse — both
+   directions of that seam die when the ring re-gates the trees).
+   playwright receipt: the driver cycles through all six shapes, drops an
+   S onto a stack, and reads the staggered zigzag out of the pixels.
+   THE SHAPE RING LANDED 2026-08-20, same session (3b-3a): the shape
+   itself is machine state — a 6-state one-hot ring (1x1, 2wide, 2tall,
+   O, S, Z) stepped by the UP button, the score-ring pattern verbatim
+   with UPM as the clock mirror and SHBOOT seeding 1x1 at power-on. the
+   ring DERIVES the mode rails INTO THE SAME COIL NETS the operator
+   slides feed (compatibility-OR: every inactive branch dead-ends at an
+   open contact; slide+ring disagreement unions, which is what the
+   hardware would do) — so every slide-driven test stayed green
+   untouched, and the slides remain as service switches. the T fan
+   computes PIECET from state x live position through PRIVATE series
+   pairs (a shared state rail would backfeed through dead rails into
+   sibling coils — the first counter's trap); S/Z states imply their
+   wide bottoms so the fan gates on pos mirrors directly. the capacity
+   auditor caught one full jack mid-build (STAGM.E: slide + STAGM2
+   chain; the rail enters at STAGM2.E). the page reads the shape back
+   from the ring slaves like it reads position — applyShape DIED, the
+   page touches no slides at all. receipts: a six-state walk asserting
+   every rail and T-bank value per state x pos; a Z and an S locked
+   with zero slides; playwright end to end.
+   STAGGERED STEERING IN CONTACTS (3b-3b), same session: the legality
+   trees now read the TRUE target top columns. the key observation that
+   kept the trees' shape intact: every existing LEGINVT check is correct
+   for symmetric AND S (S's target top set {c-1,c} contains c) and false
+   only for Z; every LEGINVT2 wide check is correct for symmetric AND Z
+   and false only for S. so the coils got MODE GATES at their feeds
+   (NOT-Z / NOT-S contacts — a dead check relay passes the sample
+   through its NC) and the missing columns ride as series hops: LTS =
+   S-gated reads of c-1, LTZ = Z-gated reads of c+1/c+2, private per
+   tree. the fit bounds refuse in contacts too (state-mirror NOs: S
+   cannot enter pos 0, Z cannot enter pos 2). the return groups grew to
+   a uniform tap allocator (the hand-split 1/2/2 chains overflowed the
+   moment they took five more refusal throws). the page's staggered
+   steering guard is DELETED — steering has no JS seam left. receipts:
+   the old false symmetric refusal died (a Z steps under a tower that
+   would have blocked it), S's shifted column and Z's far column refuse,
+   both bounds refuse, and the symmetric legality regressions passed
+   untouched. test-scenario lessons paid twice on paper: towers must
+   sit BESIDE the fall path (a stored cell in the fall columns is
+   unreachable state), and operator writes must happen at 1x1 — a
+   ring-wide state defeats operatorWrite's slide-narrowing via the
+   union and would bridge driven rails through the piece gates.
+   RESHAPE LEGALITY IN CONTACTS (3b-3c) LANDED same session — the LAST
+   SEAM: the ring's clock feed conducts through a transition-check
+   network instead of a plain wire. the energized MASTER (one-hot: the
+   current state's successor, sampled while the clock is low) names the
+   target state; each transition is one master-mirror contact fanning to
+   one-hot pos branches whose series NC hops read the target footprint's
+   NEW cells off the occupancy rails (covered cells can't be stored, so
+   the delta suffices). a refusal needs NO return path — the clock never
+   rises and the ring holds; invalid positions simply have no branch,
+   which is the fit-bounds refusal for free. the page's wouldOverlap
+   DIED: the page holds no game model — steering, reshaping, collision,
+   bounds, scoring and game-over all refuse or decide in relays; the one
+   guard left is Enter's double-spawn interlock (the 1961 operator's
+   discipline, documented). the expensive lesson: POSM(3)'s "spare" set
+   was never spare — its L arm IS the right-press sample bus and its K
+   the edge self-loop; tying a check node there let a join backfeed fire
+   the D-tap trees mid-press and wipe the register to [1,1,1,1] (the
+   ring-walk trace caught it; pos 3 got a real mirror). a borrowed
+   contact set is free only if BOTH its arm and its throws are unwired.
+   receipts: five occupancy transitions each blocked then allowed a row
+   later; fit-range refusals; the register held through refusals; the
+   whole file + check + playwright green. 414 relays / 71 machines.
+   L, J AND T LANDED 2026-08-20, same session (3b-4a): the ring grew to
+   NINE states — the upright triples (3-wide bottoms, one-cell stems at
+   left/right/center) append after Z. one TRP rail feeds their five
+   IDENTICAL memberships (WIDM, VMODE, STAG — which now means "phase 2
+   reads the T fan" — the new WID3 third-column taps, and the steering
+   cut); the B fan is CUMULATIVE (base column + WIDM adds p+1 + WID3
+   adds p+2), the T fan gained six stem branches, and the transition
+   network grew branches into each triple reading its delta cells (the
+   T1-to-1x1 wrap is free: fully covered). steering a triple is CUT AT
+   THE BUTTON MIRRORS until 4b re-classes the legality trees — position
+   first, then shape; the cut sits at the mirrors and NOT the sample bus
+   because a sampleless press still runs TWIN's release window and would
+   wipe the register (the increment-2 hazard, nearly repeated on paper).
+   the page's SHAPES became (bottomWidth, topOffset, topWidth) geometry
+   tuples; the playwright driver caught a page bug (shapeRelay mapped
+   the triples through the 6-state accessor into unrelated relays — the
+   machine stepped, the page read garbage). receipts: the 9-state walk
+   asserting rails and both fans per state, an L-J-T tower with all
+   three stems, a mid-fall triple entry refused on a stored delta cell,
+   whole file + check + driver green. 449 relays / 76 machines.
+   TRIPLE STEERING (3b-4b) LANDED same session — the NS cut died after
+   ONE increment: the legality trees re-classed per top geometry. the
+   generalization that kept them small: a check is correct wherever the
+   TARGET top set CONTAINS the checked column, so LEGINVT's gate widened
+   from NOT-Z to NOT-(Z|J1|T1) (correct for sym, S, L1) and LEGINVT2's
+   from NOT-S to NOT-(S|L1|J1) (correct for sym-wide, Z — and T1, whose
+   right-step stem lands exactly on the point-2 column: that check came
+   FREE). the triple legs ride as state-gated series hops — LTJ reads
+   J1's shifted stem, LTB3 the 3-wide bottom's entering column 3 — plus
+   the pos-2 triple bound. several stem checks are PROVABLY unreachable
+   in play (the piece's own body just vacated those cells: a J1/T1 stem
+   column is always inside the bottom's fall path) and stand as belt and
+   braces. receipts: steering scenarios refused-then-allowed one row
+   apart for the third column, J1's stem, and L1's stem via point-1;
+   the whole file, check and playwright green. 460 relays / 78 machines.
+   DEPLOY + RECEIPTS RESTRUCTURED, same session: the dense-oracle 12-row
+   game crossed its 2-hour test timeout mid-solve (vitest cannot preempt
+   the synchronous solver; the test never completed — NO mismatch, the
+   zero-disagreement record stands) while the dense 8-ROW scenario
+   passed on the same circuit. the deploy gate is now the dense 8-row
+   scenario + the 5000-circuit oracle sweep; the full dense tall-well
+   ladder becomes an occasional overnight receipt. 335fb7f (game over +
+   score ring + staggered pieces + page S/Z) deployed to main on the
+   green scenario receipt.
+   NEXT: 3b-4c — the overhang trio (L2/J2/T2: 3-wide TOPS, offset single
+   bottoms — BCUT suppresses the base column, a TT rail drives triple
+   tops, their transitions and legality classes). design in
+   _notes/shapes-design.md.
+
 ## display/input notes
 
 - the canvas viewer reads relay states directly as pixels — the playfield does
