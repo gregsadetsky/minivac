@@ -8,9 +8,9 @@
  * ring steps (edge presses self-loop); this page no longer knows where
  * the piece is, it asks. Everything the game decides (falling, landing,
  * stacking, line clears, the two-row vertical write, the row collapse
- * that walks the stack down after a clear) happens inside the 267-relay
+ * that walks the stack down after a clear) happens inside the 289-relay
  * circuit; the page only works the tick/shape slides, the LEFT/RIGHT
- * buttons and START — exactly what a human at 46 real Minivacs would do.
+ * buttons and START — exactly what a human at 50 real Minivacs would do.
  * After a lock the machine owes itself bookkeeping ticks (the vertical
  * phase-2 write, then the reset, which also re-homes the register); the
  * page runs those automatically while the LOCKED slave is up, which also
@@ -41,7 +41,7 @@ root.innerHTML = `
   <div style="text-align:center;padding:24px">
     <h1 style="font-size:16px;font-weight:600;letter-spacing:.06em;color:#e8e2d0;margin:0 0 4px">
       multivac tetris</h1>
-    <div style="color:#7a828c;margin-bottom:18px">267 relays / ${MACHINES} minivacs — pure wiring</div>
+    <div style="color:#7a828c;margin-bottom:18px">289 relays / ${MACHINES} minivacs — pure wiring</div>
     <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center;margin-bottom:6px"></div>
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
@@ -121,15 +121,14 @@ function rowCells(r: number): number {
   return n;
 }
 
-// lateral legality lives IN THE CONTACTS now: the step's D-tap runs
-// through a LEGINV changeover reading "target column occupied at the
-// token row", so the machine itself refuses sideways moves into stored
-// cells (the page just presses the button and reads back whether the
-// register stepped). This JS check remains for exactly two seams: the
-// ArrowUp RESHAPE (changing width/tallness isn't a machine step — the
-// slides can't be electrically refused) and a TALL piece's TOP cell
-// (the legality network reads the token's own row only; the top row's
-// check arrives with increment 3's full piece register).
+// lateral legality lives IN THE CONTACTS: every D-tap runs through
+// LEGINV/LEGINVT changeovers reading "target column occupied at the
+// token row / one row above it", so the machine itself refuses sideways
+// moves into stored cells — bottom AND top cell of a tall piece, wide
+// edges included (the page just presses the button and reads back
+// whether the register stepped). This JS check remains for exactly ONE
+// seam: the ArrowUp RESHAPE — changing width/tallness is a slide, and a
+// slide cannot be electrically refused.
 function wouldOverlap(nPos: number, nWidth: number, nTall: boolean): boolean {
   const tok = tokenRow();
   if (tok < 0) return false;
@@ -190,22 +189,12 @@ document.addEventListener('keydown', e => {
     const p = posAt();
     if (p < 0) return;
     const dir = e.key === 'ArrowRight' ? 1 : -1;
-    // the machine decides: the wall and stored cells refuse in contacts
-    // (the ring self-loops at the edges; wide-into-the-wall is the WIDM4
-    // gate). The page skips only the obvious no-ops, checks the tall-top
-    // seam, then presses and reads back whether the register stepped.
+    // the machine decides everything here: stored cells (bottom and top
+    // rows), the wide edges, and the wall all refuse in contacts. The
+    // page skips only the obvious edge no-ops, then presses and reads
+    // back whether the register stepped.
     const next = Math.min(COLS - width, Math.max(0, p + dir));
     if (next === p) return;
-    const tok = tokenRow();
-    if (tall && tok > 0) {
-      const m = (width === 2 ? 0b11 : 0b1) << next;
-      for (let j = 0; j < COLS; j++) {
-        if (((m >> j) & 1) === 1 && relay(TETRIS_IO.cellRelay(tok - 1, j))) {
-          render('blocked — the stack is in the way (top row)');
-          return;
-        }
-      }
-    }
     act(`column ${next}`, () => {
       press(dir > 0 ? TETRIS_IO.right : TETRIS_IO.left);
       if (posAt() === p) return 'blocked — the contacts refused the step';

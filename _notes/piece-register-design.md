@@ -131,6 +131,37 @@ what shipped differs from the sketch in two places worth remembering:
    with OR-absorption coverage moved to the reshape seam (a slide cannot
    be electrically refused — the page guards it).
 
+## increment 3a — BUILT 2026-08-20: the tall TOP row refuses too
+
+- second occupancy read, one row up: MIRCT(r) = "token at r" reading row
+  r-1. the cell coms are 4/4 since increment 2, so the MIRCT arms tie to
+  the SAME com nodes through the MIRC(r-1) ARM JACKS' spare holes (an arm
+  jack is a tie point like any other — this time it worked FOR us).
+  MIRCT coils chain off MIRC(r,1).E; rows 1..6 only (row 0 has no row
+  above — the write clips there too; row 7 is post-lock). dark rails =
+  no top constraint: flat pieces and no-token steering never feel it.
+- every D-tap tree gains a VMODEM fork (4 mirror relays off VMODE.E —
+  VMODE's one spare set can't serve six trees): flat skips the top check,
+  tall runs LEGINVT(c) as one more changeover (occupied -> return). the
+  2x2's wide branch gets a SECOND fork for the right edge's top
+  (LEGINVT2(c+1)). the full right-into-c tree is now 4 checks deep with a
+  return exit at every stage; the step wire joins collect on the WIDM3
+  nc-jacks and VMODEM nc-jacks (2 holes each, exactly enough).
+- refusal returns outgrew single matrix groups on the both-direction
+  positions: ret(1)/ret(2) are two chained groups; position 3's two left
+  refusals tie jack-to-jack and enter POSA(3).E as one wire.
+- scoping decision, recorded: the FULL piece register (per-column row
+  offsets, L/S/T, rotation) moves BEHIND field scaling — the tall-top
+  seam is closed here, "lateral collision in relays" holds for every
+  current shape with only the reshape slide as a page guard, and the
+  bigger field is where new shapes earn their relays.
+- the wiring passed its trace test on the first run (as did increment
+  2's): the changeover-tree discipline + jack-budget audits on paper
+  before pushing wires seem to be the difference vs increment 1's four
+  traced bugs. the failing-first runs both failed for SCENARIO bugs
+  (a top-block cell also blocking the bottom at another row; the model
+  forgetting a stacked cell), which the traces caught immediately.
+
 ## increment 2 audit notes (2026-08-20, post-increment-1)
 
 - gate placement: series-gate EACH D-tap, not the direction chain. LEGINV(c)

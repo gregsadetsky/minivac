@@ -1,7 +1,7 @@
 /**
  * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b + 10 + the
  * piece register): 4x8 field, gravity + stacking + line clear + row
- * collapse in pure relay wiring — 267 relays across 46 machines. The
+ * collapse in pure relay wiring — 289 relays across 50 machines. The
  * piece's COLUMN is machine state: a one-hot relay ring stepped by
  * momentary LEFT/RIGHT buttons (sample-on-press, commit-on-release; edges
  * self-loop; every reset re-homes it), 1 or 2 wide via the WID slide, and
@@ -126,13 +126,18 @@ export const POSM2 = (j: number) => 248 + j; // 3 more slave mirrors: the wide t
 export const MIRC = (r: number, h: number) => 251 + 2 * r + h; // rows 0..6 x2: token-row gates for the occupancy taps
 export const LEGINV = (j: number) => 265 + j; // "column j occupied at the token row" (rail coil); its changeover routes the step
 export const LEGINV2 = (k: number) => 267 + k; // k=2,3: second reads of columns 2,3 for the wide right-edge checks
-export const WIDM3 = 271, WIDM4 = 272; // wide-mode mirrors: the narrow bypasses + the wall gate
+export const WIDM3 = 271, WIDM4 = 272; // wide-mode mirrors: the wide forks + the wall gate
+// increment 3a — the tall piece's TOP row refuses too:
+export const MIRCT = (r: number, h: number) => 273 + 2 * (r - 1) + h; // rows 1..6 x2: "token at r" reading row r-1 (273..284)
+export const LEGINVT = (j: number) => 285 + j; // "column j occupied one row ABOVE the token" (285..288)
+export const LEGINVT2 = (k: number) => 287 + k; // k=2,3: top second-reads for the 2x2's right edge (289,290)
+export const VMODEM = (p: number) => 291 + p; // vmode mirrors: the tall forks in the D-tap trees (291..294)
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 export const LEFTBTN = { button: 3, machine: 40 }; // m40.3 button
 export const RIGHTBTN = { button: 4, machine: 40 }; // m40.4 button
 export const WIDSLIDE = { slide: 5, machine: 40 }; // m40.5 slide -> WIDM coils
-export const MACHINES = 46; // relays through m45.3; m36's coms serve as the junctions
+export const MACHINES = 50; // relays through m49.1; m36's coms serve as the junctions
 
 export function tetrisCircuit(): {
   wires: string[];
@@ -906,40 +911,114 @@ export function tetrisCircuit(): {
   w.push(`${R(WIDM, 'E')}/${R(WIDM3, 'E')}`, `${R(WIDM3, 'F')}/${minusOf(WIDM3)}`);
   w.push(`${R(WIDM2, 'E')}/${R(WIDM4, 'E')}`, `${R(WIDM4, 'F')}/${minusOf(WIDM4)}`);
 
-  // the gated D-taps. RIGHT into c (c=1,2): LEGINV(c) changeover, then
-  // the legal side runs the wide-edge tree — WIDM3 {narrow -> com;
-  // wide -> LEGINV2(c+1) {free -> com; occupied -> return}}. RIGHT into 3:
-  // WIDM4 {narrow -> com; wide -> return} — the wall lives in contacts
-  // now. LEFT into c (c=0,1,2): LEGINV(c)'s second set, changeover only
-  // (a wide piece's right cell moves into the piece's own old column —
-  // gravity guarantees piece cells never coincide with stored cells, so
-  // left needs no second check). Refusal returns collect on one matrix
-  // group per position and re-latch the current master through its coil
-  // jack's spare hole.
-  const retNode = [takeGroups(1)[0], takeGroups(1)[0], takeGroups(1)[0]];
-  w.push(`${retNode[0]}/${R(POSA(0), 'E')}`);
-  w.push(`${retNode[1]}/${R(POSA(1), 'E')}`);
-  w.push(`${retNode[2]}/${R(POSA(2), 'E')}`);
+  // ------- increment 3a: the TOP row's occupancy (tall legality) -------
+  // a second read of the SAME cell-com nodes, one row up: MIRCT(r) =
+  // "token at r" reading row r-1, its arms tied to the cell coms THROUGH
+  // the MIRC(r-1) arm jacks' spare holes (the coms themselves are 4/4).
+  // rows 1..6 only: row 0 has no row above (the write clips there too)
+  // and row 7 is post-lock. dark rails = no top constraint, so flat
+  // pieces, no-token steering and the power-on ring never feel this bank.
+  const legTRails = [takeGroups(2), takeGroups(2), takeGroups(2), takeGroups(2)];
+  for (const lg of legTRails) w.push(`${lg[0]}/${lg[1]}`);
+  const legTUse = [0, 0, 0, 0];
+  const legTTap = (j: number) => legTRails[j][legTUse[j]++ >= 5 ? 1 : 0];
+  for (let r = 1; r <= 6; r++) {
+    w.push(`${R(MIRC(r, 1), 'E')}/${R(MIRCT(r, 0), 'E')}`, `${R(MIRCT(r, 0), 'E')}/${R(MIRCT(r, 1), 'E')}`);
+    w.push(`${R(MIRCT(r, 0), 'F')}/${minusOf(MIRCT(r, 0))}`, `${R(MIRCT(r, 1), 'F')}/${minusOf(MIRCT(r, 1))}`);
+    for (let j = 0; j < 4; j++) {
+      const armPrev = j % 2 === 0 ? 'H' : 'L';
+      const mt = MIRCT(r, j < 2 ? 0 : 1);
+      const [arm, no] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
+      w.push(`${R(MIRC(r - 1, j < 2 ? 0 : 1), armPrev)}/${R(mt, arm)}`, `${R(mt, no)}/${legTTap(j)}`);
+    }
+  }
+  for (let j = 0; j < 4; j++) {
+    w.push(`${legTTap(j)}/${R(LEGINVT(j), 'E')}`, `${R(LEGINVT(j), 'F')}/${minusOf(LEGINVT(j))}`);
+  }
+  w.push(`${R(LEGINVT(2), 'E')}/${R(LEGINVT2(2), 'E')}`, `${R(LEGINVT2(2), 'F')}/${minusOf(LEGINVT2(2))}`);
+  w.push(`${R(LEGINVT(3), 'E')}/${R(LEGINVT2(3), 'E')}`, `${R(LEGINVT2(3), 'F')}/${minusOf(LEGINVT2(3))}`);
+  // vmode mirrors for the tall forks (VMODE's own spare set can't serve
+  // six tap trees); coils daisy-chained through the coil jacks
+  w.push(`${R(VMODE, 'E')}/${R(VMODEM(0), 'E')}`);
+  for (let p = 1; p < 4; p++) w.push(`${R(VMODEM(p - 1), 'E')}/${R(VMODEM(p), 'E')}`);
+  for (let p = 0; p < 4; p++) w.push(`${R(VMODEM(p), 'F')}/${minusOf(VMODEM(p))}`);
+
+  // the gated D-taps: every stage is a CHANGEOVER (blocked returns the
+  // sample to the current master — see the ring notes) and every OPTIONAL
+  // stage is a mode fork. RIGHT into c (c=1,2):
+  //   LEGINV(c) {occ->ret; free-> VMODEM {flat->X; tall-> LEGINVT(c)
+  //   {occ->ret; free->X}}}; X -> WIDM3 {narrow->step; wide-> LEGINV2(c+1)
+  //   {occ->ret; free-> VMODEM' {flat->step; tall-> LEGINVT2(c+1)
+  //   {occ->ret; free->step}}}}
+  // RIGHT into 3: LEGINV(3) -> tall fork -> WIDM4 {narrow->step;
+  // wide->ret} — the wall. LEFT into c (c=0,1,2): LEGINV(c) -> tall fork
+  // -> step (a wide piece's right cell moves into its own old column, so
+  // left needs no wide stage). Refusal returns collect on matrix groups
+  // (two chained for the both-direction positions) and re-latch the
+  // current master through its coil jack's spare hole.
+  const retNode = [
+    takeGroups(1)[0],
+    takeGroups(2),
+    takeGroups(2),
+  ] as const;
+  w.push(`${retNode[1][0]}/${retNode[1][1]}`, `${retNode[2][0]}/${retNode[2][1]}`);
+  const ret = (p: number, k: number) =>
+    p === 0 ? (retNode[0] as string) : (retNode[p] as string[])[k >= 3 ? 1 : 0];
+  const retUse = [0, 0, 0];
+  const retTap = (p: number) => ret(p, retUse[p]++);
+  w.push(`${retTap(0)}/${R(POSA(0), 'E')}`);
+  w.push(`${retTap(1)}/${R(POSA(1), 'E')}`);
+  w.push(`${retTap(2)}/${R(POSA(2), 'E')}`);
   for (const c of [1, 2] as const) {
+    const vm = VMODEM(c - 1);
     const [wArm, wNc, wNo] = c === 1 ? ['H', 'J', 'G'] : ['L', 'N', 'K'];
-    w.push(`${R(POSM(c - 1), 'K')}/${R(LEGINV(c), 'H')}`); // the tap into the changeover
-    w.push(`${R(LEGINV(c), 'G')}/${retNode[c - 1]}`); // blocked: return
-    w.push(`${R(LEGINV(c), 'J')}/${R(WIDM3, wArm)}`); // legal: the wide-edge tree
+    w.push(`${R(POSM(c - 1), 'K')}/${R(LEGINV(c), 'H')}`); // the tap in
+    w.push(`${R(LEGINV(c), 'G')}/${retTap(c - 1)}`); // bottom-c occupied
+    w.push(`${R(LEGINV(c), 'J')}/${R(vm, 'H')}`); // free: the tall fork
+    w.push(`${R(vm, 'G')}/${R(LEGINVT(c), 'H')}`); // tall: check top-c
+    w.push(`${R(LEGINVT(c), 'G')}/${retTap(c - 1)}`); // top-c occupied
+    w.push(`${R(LEGINVT(c), 'J')}/${R(vm, 'J')}`); // top-c free: join X
+    w.push(`${R(vm, 'J')}/${R(WIDM3, wArm)}`); // X: the wide fork
     w.push(`${R(WIDM3, wNc)}/${comOf(POSA(c))}`); // narrow: step
-    w.push(`${R(WIDM3, wNo)}/${R(LEGINV2(c + 1), 'H')}`); // wide: check the right edge
-    w.push(`${R(LEGINV2(c + 1), 'J')}/${R(WIDM3, wNc)}`); // free: join the step wire
-    w.push(`${R(LEGINV2(c + 1), 'G')}/${retNode[c - 1]}`); // occupied: return
+    w.push(`${R(WIDM3, wNo)}/${R(LEGINV2(c + 1), 'H')}`); // wide: bottom-c+1
+    w.push(`${R(LEGINV2(c + 1), 'G')}/${retTap(c - 1)}`); // occupied
+    w.push(`${R(LEGINV2(c + 1), 'J')}/${R(vm, 'L')}`); // free: tall fork #2
+    w.push(`${R(vm, 'N')}/${R(WIDM3, wNc)}`); // flat-wide: join the step wire
+    w.push(`${R(vm, 'K')}/${R(LEGINVT2(c + 1), 'H')}`); // tall-wide: top-c+1
+    w.push(`${R(LEGINVT2(c + 1), 'J')}/${R(vm, 'N')}`); // free: join
+    w.push(`${R(LEGINVT2(c + 1), 'G')}/${retTap(c - 1)}`); // occupied
   }
   w.push(`${R(POSM(2), 'K')}/${R(LEGINV(3), 'H')}`);
-  w.push(`${R(LEGINV(3), 'G')}/${retNode[2]}`); // blocked: return
-  w.push(`${R(LEGINV(3), 'J')}/${R(WIDM4, 'H')}`); // legal: the wall gate
+  w.push(`${R(LEGINV(3), 'G')}/${retTap(2)}`); // bottom-3 occupied
+  w.push(`${R(LEGINV(3), 'J')}/${R(VMODEM(2), 'H')}`); // free: the tall fork
+  w.push(`${R(VMODEM(2), 'G')}/${R(LEGINVT(3), 'H')}`); // tall: top-3
+  w.push(`${R(LEGINVT(3), 'G')}/${retTap(2)}`); // occupied
+  w.push(`${R(LEGINVT(3), 'J')}/${R(VMODEM(2), 'J')}`); // free: join
+  w.push(`${R(VMODEM(2), 'J')}/${R(WIDM4, 'H')}`); // the wall gate
   w.push(`${R(WIDM4, 'J')}/${comOf(POSA(3))}`); // narrow: step
-  w.push(`${R(WIDM4, 'G')}/${retNode[2]}`); // wide: the wall, return
+  w.push(`${R(WIDM4, 'G')}/${retTap(2)}`); // wide: the wall, return
+  // left taps: the tall fork sets — VMODEM(2).set2 serves left-into-0,
+  // VMODEM(3)'s two sets serve left-into-1 and left-into-2
+  const leftFork: Array<[number, string, string, string]> = [
+    [VMODEM(2), 'L', 'N', 'K'], // into 0
+    [VMODEM(3), 'H', 'J', 'G'], // into 1
+    [VMODEM(3), 'L', 'N', 'K'], // into 2
+  ];
   for (const c of [0, 1, 2] as const) {
-    w.push(`${R(POSM(c + 1), 'G')}/${R(LEGINV(c), 'L')}`); // the left tap
-    w.push(`${R(LEGINV(c), 'N')}/${comOf(POSA(c))}`); // free: step
-    if (c === 2) w.push(`${R(LEGINV(c), 'K')}/${R(POSA(3), 'E')}`); // blocked: return (direct — POSA(3) has no group)
-    else w.push(`${R(LEGINV(c), 'K')}/${retNode[c + 1]}`); // blocked: return
+    const [vm, vArm, vNc, vNo] = leftFork[c];
+    w.push(`${R(POSM(c + 1), 'G')}/${R(LEGINV(c), 'L')}`); // the tap in
+    w.push(`${R(LEGINV(c), 'N')}/${R(vm, vArm)}`); // bottom free: tall fork
+    w.push(`${R(vm, vNc)}/${comOf(POSA(c))}`); // flat: step
+    w.push(`${R(vm, vNo)}/${R(LEGINVT(c), 'L')}`); // tall: top-c
+    w.push(`${R(LEGINVT(c), 'N')}/${R(vm, vNc)}`); // free: join the step wire
+    if (c === 2) {
+      // position 3 has no return group: tie both left refusals, one wire
+      w.push(`${R(LEGINV(2), 'K')}/${R(LEGINVT(2), 'K')}`);
+      w.push(`${R(LEGINVT(2), 'K')}/${R(POSA(3), 'E')}`);
+    } else {
+      w.push(`${R(LEGINV(c), 'K')}/${retTap(c + 1)}`); // bottom occupied
+      w.push(`${R(LEGINVT(c), 'K')}/${retTap(c + 1)}`); // top occupied
+    }
   }
 
   return { wires: w, rails: dataRails };

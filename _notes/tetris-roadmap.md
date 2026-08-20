@@ -243,8 +243,23 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    random-gameplay runs green with refusals exercised (114/219 ticks,
    model-checked every tick); full tetris file green under fast;
    playwright page flow with the machine (not JS) refusing the steer.
-   NEXT, increment 3: the full piece register (per-column row offsets,
-   L/S/T, rotation as register rewiring) — closes the tall-top seam.
+   increment 3a LANDED 2026-08-20, same day: the TALL piece's TOP row
+   refuses too. A second occupancy read one row up (MIRCT gates tied to
+   the same cell-com nodes through the MIRC arm jacks' spare holes — the
+   coms were full; an arm jack is a tie point, this time working for us)
+   feeds LEGINVT/LEGINVT2 coils, and every D-tap tree gains VMODEM forks:
+   flat skips the top stage, tall runs it as one more changeover, the
+   2x2's wide branch checks the right edge's top as well. Right-into-c is
+   now a 4-check tree with a return exit at every stage. Row 0 has no top
+   row (the write clips there too) and dark rails default legal, so
+   no-token/flat steering never feels the bank. 289 relays / 50 machines.
+   The page's JS guard is down to exactly ONE seam: the ArrowUp RESHAPE —
+   a slide cannot be electrically refused. Lateral collision is otherwise
+   fully in the relays for every current shape.
+   SCOPE DECISION, recorded: the full piece register (per-column row
+   offsets, L/S/T, rotation as register rewiring) moves BEHIND field
+   scaling — the seam it was meant to close is closed; new shapes earn
+   their relays on the bigger field where they have room to matter.
 
 11. FIELD SCALING: wider/taller grid = stamping proven patterns; the
    solver budget is the real constraint (lever (b) pivot-order reuse

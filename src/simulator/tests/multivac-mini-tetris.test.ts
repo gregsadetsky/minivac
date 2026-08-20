@@ -3,7 +3,7 @@
  * 4-wide x 8-tall field, gravity + stacking + line clear WITH row
  * collapse, and the piece's column held IN THE MACHINE (a one-hot ring
  * stepped by LEFT/RIGHT buttons). Pure wiring — every game decision is
- * made by relay contacts. 267 relays across 46 machines (the width is the
+ * made by relay contacts. 289 relays across 50 machines (the width is the
  * price of tie-point-safe private contacts — see the notes below). The
  * piece is whatever COLUMN MASK the slides raise — singles, dominoes,
  * wider, with zero circuit changes (rung 9) — and with the VMODE slide up
@@ -355,7 +355,7 @@ function dropVertical(
   collapseTicks(g, cleared, model, label);
 }
 
-describe('Multivac: mini-tetris (46 machines)', () => {
+describe('Multivac: mini-tetris (50 machines)', () => {
   it('gravity, stacking, and a line clear (fast)', { timeout: 1500000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
@@ -1084,6 +1084,98 @@ describe('Multivac: mini-tetris (46 machines)', () => {
   // cells are absorbed. The only way a row vanishes is completing it — and
   // with no row collapse in this rung the rows above stay floating, which
   // is easy to read as a glitch on the page.
+  // increment 3a: the TALL piece's TOP cell refuses too. A second
+  // occupancy read (MIRCT gates riding the same cell-com nodes through
+  // the MIRC arm jacks' spare holes, "token at r" reading row r-1) feeds
+  // LEGINVT coils, and every D-tap tree gains a VMODEM-forked tall stage:
+  // flat skips it, tall checks the top target (and the 2x2's wide branch
+  // checks the top of the right edge via LEGINVT2). Token at row 0 has no
+  // top row (the write clips there too) and row 7/no-token stay unmapped:
+  // dark rails default legal, as ever.
+  it('tall legality: the top row refuses too (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const quiet = () => expect(g.m.getState().alerts).toEqual([]);
+    const vmode = (on: boolean) =>
+      g.m.setSlide(TETRIS_IO.vmode.slide, on ? 'right' : 'left', TETRIS_IO.vmode.machine);
+    const wid = (on: boolean) =>
+      g.m.setSlide(TETRIS_IO.wid.slide, on ? 'right' : 'left', TETRIS_IO.wid.machine);
+
+    const model = Array(8).fill(0);
+    g.operatorWrite(1, 0b1000); // the 2x2's top-right-edge block at (1,3)
+    model[1] = 0b1000;
+    g.operatorWrite(4, 0b0101); // tall-top blocks: (4,0) left, (4,2) right
+    model[4] = 0b0101;
+
+    g.pressStart();
+    g.tick(); // spawn at row 0, home column
+    g.pressBtn(TETRIS_IO.right); // descend in column 1
+    expect(g.posAt()).toBe(1);
+    // steering AT row 0 with vmode up: there is no top row — must be legal
+    vmode(true);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'tall at row 0: no top row, the step is legal').toBe(0);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt()).toBe(1);
+    quiet();
+
+    g.tick();
+    g.tick(); // token at row 2
+    expect(g.tokenAt()).toEqual([2]);
+    // 2x2 right-step: bottoms (2,2),(2,3) free; top-right (1,3) stored —
+    // only the LEGINVT2 branch (top of the right edge) can refuse this
+    wid(true);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), '2x2 into a stored top-right edge refused').toBe(1);
+    quiet();
+    vmode(false); // wide but flat: the same step is legal
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'flat wide pair steps once the top check is off').toBe(2);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt()).toBe(1);
+    wid(false);
+    vmode(true);
+    quiet();
+
+    g.tick();
+    g.tick();
+    g.tick(); // token at row 5
+    expect(g.tokenAt()).toEqual([5]);
+    // tall right-step: bottom (5,2) free, top (4,2) stored
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'tall step under a stored overhang refused').toBe(1);
+    // tall left-step: bottom (5,0) free, top (4,0) stored
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'tall left step under the other overhang refused').toBe(1);
+    quiet();
+    vmode(false);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'flat, the same step is legal — the top check did it').toBe(2);
+    g.pressBtn(TETRIS_IO.left);
+    vmode(true);
+    quiet();
+
+    g.tick(); // token at row 6: the overhang is two rows up now
+    expect(g.tokenAt()).toEqual([6]);
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'tall step is legal once the top row cleared it').toBe(2);
+    quiet();
+
+    g.tick(); // merged landing + lock at the floor (tall: rows 7 and 6, col 2)
+    model[7] = 0b0100;
+    g.tick(); // phase 2: the top write
+    model[6] = 0b0100;
+    expect(g.field(), 'the tall survivor locked where steered').toEqual(model);
+    g.tick(); // reset
+    expect(g.tokenAt()).toEqual([]);
+    expect(g.posAt(), 'reset re-homed').toBe(0);
+    // no token + vmode up: steps stay free (dark rails default legal)
+    g.pressBtn(TETRIS_IO.right);
+    expect(g.posAt(), 'no-token steering unaffected by vmode').toBe(1);
+    vmode(false);
+    quiet();
+  });
+
   // the live-play report (2026-08-20) was a piece steered sideways INTO an
   // already-placed cell, absorbed by the OR-write. That exact move is now
   // REFUSED BY THE CONTACTS (the increment-2 legality changeovers) — the
