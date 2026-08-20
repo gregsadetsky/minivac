@@ -355,7 +355,7 @@ function dropVertical(
   collapseTicks(g, cleared, model, label);
 }
 
-describe('Multivac: mini-tetris (50 machines)', () => {
+describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
   it('gravity, stacking, and a line clear (fast)', { timeout: 1500000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();

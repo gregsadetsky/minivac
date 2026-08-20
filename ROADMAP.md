@@ -417,11 +417,55 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    directions of that seam die when the ring re-gates the trees).
    playwright receipt: the driver cycles through all six shapes, drops an
    S onto a stack, and reads the staggered zigzag out of the pixels.
-   NEXT (3b-3, the shape ring): one-hot shape x orientation ring stepped
-   by the UP button (the score-ring pattern), two mask fans from pos
-   (POSM2/WIDM generalized to per-state offsets), phase-2 T bank + VMODE
-   from ring contacts, legality trees re-gated per T-mask column, the
-   page guard deleted. L/J/T need it (3-wide bottoms). design in
+   THE SHAPE RING LANDED 2026-08-20, same session (3b-3a): the shape
+   itself is machine state — a 6-state one-hot ring (1x1, 2wide, 2tall,
+   O, S, Z) stepped by the UP button, the score-ring pattern verbatim
+   with UPM as the clock mirror and SHBOOT seeding 1x1 at power-on. the
+   ring DERIVES the mode rails INTO THE SAME COIL NETS the operator
+   slides feed (compatibility-OR: every inactive branch dead-ends at an
+   open contact; slide+ring disagreement unions, which is what the
+   hardware would do) — so every slide-driven test stayed green
+   untouched, and the slides remain as service switches. the T fan
+   computes PIECET from state x live position through PRIVATE series
+   pairs (a shared state rail would backfeed through dead rails into
+   sibling coils — the first counter's trap); S/Z states imply their
+   wide bottoms so the fan gates on pos mirrors directly. the capacity
+   auditor caught one full jack mid-build (STAGM.E: slide + STAGM2
+   chain; the rail enters at STAGM2.E). the page reads the shape back
+   from the ring slaves like it reads position — applyShape DIED, the
+   page touches no slides at all. receipts: a six-state walk asserting
+   every rail and T-bank value per state x pos; a Z and an S locked
+   with zero slides; playwright end to end.
+   STAGGERED STEERING IN CONTACTS (3b-3b), same session: the legality
+   trees now read the TRUE target top columns. the key observation that
+   kept the trees' shape intact: every existing LEGINVT check is correct
+   for symmetric AND S (S's target top set {c-1,c} contains c) and false
+   only for Z; every LEGINVT2 wide check is correct for symmetric AND Z
+   and false only for S. so the coils got MODE GATES at their feeds
+   (NOT-Z / NOT-S contacts — a dead check relay passes the sample
+   through its NC) and the missing columns ride as series hops: LTS =
+   S-gated reads of c-1, LTZ = Z-gated reads of c+1/c+2, private per
+   tree. the fit bounds refuse in contacts too (state-mirror NOs: S
+   cannot enter pos 0, Z cannot enter pos 2). the return groups grew to
+   a uniform tap allocator (the hand-split 1/2/2 chains overflowed the
+   moment they took five more refusal throws). the page's staggered
+   steering guard is DELETED — steering has no JS seam left. receipts:
+   the old false symmetric refusal died (a Z steps under a tower that
+   would have blocked it), S's shifted column and Z's far column refuse,
+   both bounds refuse, and the symmetric legality regressions passed
+   untouched. test-scenario lessons paid twice on paper: towers must
+   sit BESIDE the fall path (a stored cell in the fall columns is
+   unreachable state), and operator writes must happen at 1x1 — a
+   ring-wide state defeats operatorWrite's slide-narrowing via the
+   union and would bridge driven rails through the piece gates.
+   NEXT (3b-3c, the last seam): UP-transition legality — the ring's
+   clock feed gates through a check network (energized next-master
+   identifies the target state; refusal = the clock never rises, no
+   return path needed, the ring simply holds). per-transition checks
+   from the footprint DELTA at the current pos via LEGB second sets +
+   new top-rail mirror reads + bounds. then the reshape guard dies and
+   the page is a pure operator. after that: 3b-4 grows the ring to the
+   full 2-row-box family (L/J/T x2 orientations). design in
    _notes/shapes-design.md; MASS at the rung close.
 
 ## display/input notes
