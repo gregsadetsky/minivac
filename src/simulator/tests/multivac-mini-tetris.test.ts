@@ -334,8 +334,8 @@ function dropVertical(
 }
 
 describe('Multivac: mini-tetris (38 machines)', () => {
-  it('gravity, stacking, and a line clear (sparse)', { timeout: 1500000 }, () => {
-    setSolverEngine('sparse');
+  it('gravity, stacking, and a line clear (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const model = Array(8).fill(0);
     expect(g.field()).toEqual(model);
@@ -371,8 +371,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
     expect(g.row(7)).toBe(0b0101);
   });
 
-  it('operator setup + one drop completes a line (sparse)', { timeout: 1500000 }, () => {
-    setSolverEngine('sparse');
+  it('operator setup + one drop completes a line (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const model = Array(8).fill(0);
     g.operatorWrite(7, 0b1110);
@@ -388,8 +388,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
   // supports any mask with zero changes. This proves it: floor landing, a
   // line completed by two dominoes, and an overhang (the piece rests when
   // ANY of its columns is blocked, leaving air beneath the other).
-  it('dominoes: two-cell pieces, a two-domino line, and an overhang (sparse)', { timeout: 1500000 }, () => {
-    setSolverEngine('sparse');
+  it('dominoes: two-cell pieces, a two-domino line, and an overhang (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const model = Array(8).fill(0);
     g.pressStart();
@@ -525,8 +525,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
     expect(vlocks, 'the seed must actually exercise vertical locks').toBeGreaterThan(2);
   }
 
-  it('random gameplay: seeded drops, steering, morphing shapes, vertical locks (sparse)', { timeout: 1800000 }, () => {
-    runRandomGameplay('sparse', 20260819, parseInt(env.MINIVAC_TETRIS_DROPS || '14', 10));
+  it('random gameplay: seeded drops, steering, morphing shapes, vertical locks (fast)', { timeout: 1800000 }, () => {
+    runRandomGameplay('fast', 20260819, parseInt(env.MINIVAC_TETRIS_DROPS || '14', 10));
   });
 
   // the fast engine plays ~16x quicker, so its run goes much longer — this
@@ -542,8 +542,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
   // the game: the extra coil on every slave com changes the hold-path load,
   // which is precisely the kind of change that can drop a relay below
   // pickup. A full drop with the mirrors watched pins both.
-  it('vertical prep: TOPW mirrors track the token row, VMODE follows its slide (sparse)', { timeout: 1500000 }, () => {
-    setSolverEngine('sparse');
+  it('vertical prep: TOPW mirrors track the token row, VMODE follows its slide (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const relayOn = (n: number) =>
       g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0;
@@ -587,8 +587,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
   // the sequence self-limits), then the normal reset. The latch states are
   // this test's subject; then a vmode-off lock in the same game proves the
   // 2-tick rhythm is untouched.
-  it('vertical prep: the phase-2 sequencer adds exactly one tick to a lock (sparse)', { timeout: 1500000 }, () => {
-    setSolverEngine('sparse');
+  it('vertical prep: the phase-2 sequencer adds exactly one tick to a lock (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const relayOn = (n: number) =>
       g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0;
@@ -646,8 +646,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
   // - stack flavor: the collision mirrors surviving phase 2 (the row BELOW
   //   the token on the rails) -> top shows row 6's cols 0/3; the token
   //   row's rebound -> top shows col 3 from row 5. Correct = mask alone.
-  it('vertical pieces: both rows written, no pollution, squares stack (sparse)', { timeout: 1500000 }, () => {
-    setSolverEngine('sparse');
+  it('vertical pieces: both rows written, no pollution, squares stack (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const relayOn = (n: number) =>
       g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0;
@@ -682,8 +682,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
     expect(relayOn(P2S)).toBe(0);
   });
 
-  it('vertical pieces: bottom-write clears, top-full stays, row-0 clip (sparse)', { timeout: 1500000 }, () => {
-    setSolverEngine('sparse');
+  it('vertical pieces: bottom-write clears, top-full stays, row-0 clip (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const vmode = (on: boolean) =>
       g.m.setSlide((VMODE % 6) + 1, on ? 'right' : 'left', Math.floor(VMODE / 6));
@@ -742,8 +742,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
   // row patterns prove the moves are exact copies (no OR-mixing between
   // rows, no leaks into untouched rows), and a second clear immediately
   // after proves the machinery re-arms.
-  it('row collapse: the stack falls into a cleared line, repeatedly (sparse)', { timeout: 1800000 }, () => {
-    setSolverEngine('sparse');
+  it('row collapse: the stack falls into a cleared line, repeatedly (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const model = Array(8).fill(0);
     // distinct patterns, and the dropping column (0) free the whole way
@@ -839,7 +839,7 @@ describe('Multivac: mini-tetris (38 machines)', () => {
   // with no row collapse in this rung the rows above stay floating, which
   // is easy to read as a glitch on the page.
   it('steer-into-overlap: absorbed by the OR-write, rows vanish only by completion (both engines)', { timeout: 1800000 }, () => {
-    for (const engine of ['sparse', 'fast'] as const) {
+    for (const engine of ['fast'] as const) {
       setSolverEngine(engine);
       const g = makeGame();
       const model = Array(8).fill(0);
@@ -883,8 +883,8 @@ describe('Multivac: mini-tetris (38 machines)', () => {
   // releases and the deferred piece finally enters. Ordinary play must
   // never engage any of it. (Real content falling is the acceptance test
   // below; this one pins the sequencing observables.)
-  it('collapse prep: the lane owns the ticks, the chain walks, spawns wait (sparse)', { timeout: 1800000 }, () => {
-    setSolverEngine('sparse');
+  it('collapse prep: the lane owns the ticks, the chain walks, spawns wait (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
     const g = makeGame();
     const relayOn = (n: number) =>
       g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0;

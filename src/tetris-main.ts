@@ -102,6 +102,23 @@ function rowCells(r: number): number {
   return n;
 }
 
+// the circuit has NO sideways collision — the token only senses the row
+// below it, and a slide cannot be electrically refused — so moving or
+// reshaping into stored cells would overlap them (benign for the data:
+// the lock is an OR-write; wrong as tetris). Like the Enter guard below,
+// the page plays the disciplined 1961 operator and refuses the keypress.
+function wouldOverlap(nPos: number, nWidth: number, nTall: boolean): boolean {
+  const tok = tokenRow();
+  if (tok < 0) return false;
+  const m = (nWidth === 2 ? 0b11 : 0b1) << nPos;
+  for (let j = 0; j < COLS; j++) {
+    if (((m >> j) & 1) === 0) continue;
+    if (relay(TETRIS_IO.cellRelay(tok, j))) return true;
+    if (nTall && tok > 0 && relay(TETRIS_IO.cellRelay(tok - 1, j))) return true;
+  }
+  return false;
+}
+
 function render(note?: string) {
   const tok = tokenRow();
   const m = mask();
@@ -151,6 +168,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const next = Math.min(COLS - width, Math.max(0, pos + (e.key === 'ArrowRight' ? 1 : -1)));
     if (next === pos) return;
+    if (!busy && wouldOverlap(next, width, tall)) {
+      render('blocked — the stack is in the way');
+      return;
+    }
     act(`column ${next}`, () => {
       pos = next;
       applyShape();
@@ -158,19 +179,26 @@ document.addEventListener('keydown', e => {
   } else if (e.key === 'ArrowUp') {
     // cycle 1x1 -> 2 wide -> 2 tall -> 2x2 (tall = the VMODE slide: the
     // machine writes the row above the token on the phase-2 tick)
+    let nWidth = width;
+    let nTall = tall;
+    if (!tall && width === 1) nWidth = 2;
+    else if (!tall) {
+      nTall = true;
+      nWidth = 1;
+    } else if (width === 1) nWidth = 2;
+    else {
+      nTall = false;
+      nWidth = 1;
+    }
+    const nPos = Math.min(pos, COLS - nWidth);
+    if (!busy && wouldOverlap(nPos, nWidth, nTall)) {
+      render('blocked — no room for that shape here');
+      return;
+    }
     act('shape', () => {
-      if (!tall && width === 1) {
-        width = 2;
-      } else if (!tall) {
-        tall = true;
-        width = 1;
-      } else if (width === 1) {
-        width = 2;
-      } else {
-        tall = false;
-        width = 1;
-      }
-      pos = Math.min(pos, COLS - width);
+      width = nWidth;
+      tall = nTall;
+      pos = nPos;
       applyShape();
     });
   } else if (e.key === 'ArrowDown' || e.key === ' ') {
