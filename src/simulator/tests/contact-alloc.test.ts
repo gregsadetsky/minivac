@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MirrorBank } from '../../circuits/contact-alloc';
+import { GatedReadPool, MirrorBank } from '../../circuits/contact-alloc';
 
 // jack-name helpers mirroring the circuit file's conventions
 const R = (n: number, jack: string) => `m${Math.floor(n / 6)}.${(n % 6) + 1}${jack}`;
@@ -32,6 +32,24 @@ describe('the contact allocator (wider-well emitter 0)', () => {
     const bank = new MirrorBank({ name: 'TESTM', source: 0, base: 6, capacity: 2, w, R, minusOf });
     for (let i = 0; i < 4; i++) bank.request('gate');
     expect(() => bank.request('gate')).toThrowError(/TESTM: bank exhausted \(2 mirrors \/ 4 sets; request #5\)/);
+  });
+
+  it('gated reads: rail through the gate contact into the coil; extend chains', () => {
+    const w: string[] = [];
+    const pool = new GatedReadPool({ name: 'LTX', source: null, base: 40, capacity: 2, w, R, minusOf });
+    const gate = { relay: 12, set: 1 as const, arm: 'H', no: 'G', nc: 'J' };
+    const rd = pool.read('m9.M10', gate);
+    expect(rd.relay).toBe(40);
+    expect(w).toEqual([
+      `m9.M10/${R(12, 'H')}`,
+      `${R(12, 'G')}/${R(40, 'E')}`,
+      `${R(40, 'F')}/${minusOf(40)}`,
+    ]);
+    const more = pool.extend(rd);
+    expect(more.relay).toBe(41);
+    expect(w.slice(3)).toEqual([`${R(40, 'E')}/${R(41, 'E')}`, `${R(41, 'F')}/${minusOf(41)}`]);
+    expect(pool.spent()).toBe(2);
+    expect(() => pool.read('m9.M11', gate)).toThrowError(/LTX: pool exhausted/);
   });
 
   it('source: null banks leave the first coil feed to the caller', () => {

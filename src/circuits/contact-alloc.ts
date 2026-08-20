@@ -78,3 +78,61 @@ export class MirrorBank {
     return { relays: this.minted, sets: this.setsSpent, kinds: this.kinds };
   }
 }
+
+/** a gated rail read: a relay whose coil is fed from a rail tap THROUGH
+ *  a state-gate contact (coil = rail AND state) — dead in every other
+ *  mode, so its NC contacts pass tree samples through untouched (the
+ *  LTS/LTZ pattern). Each read() wires one such relay and returns both
+ *  its contact sets; the caller owns reuse (two trees sharing the same
+ *  state x column read take one set each of one read relay). */
+export interface GatedRead {
+  relay: number;
+  set1: ContactSet;
+  set2: ContactSet;
+}
+
+export class GatedReadPool {
+  private used = 0;
+  private readonly o: MirrorBankOpts; // source is unused (null by contract)
+  constructor(o: MirrorBankOpts) {
+    this.o = o;
+  }
+
+  /** wire a new gated read: railTap -> gate.arm, gate.no -> coil E, F ->
+   *  minus. the gate contact set comes from a state mirror bank. */
+  read(railTap: string, gate: ContactSet): GatedRead {
+    if (this.used >= this.o.capacity)
+      throw new Error(`${this.o.name}: pool exhausted (${this.o.capacity} reads; request #${this.used + 1})`);
+    const n = this.o.base + this.used++;
+    const { w, R, minusOf } = this.o;
+    w.push(`${railTap}/${R(gate.relay, gate.arm)}`);
+    w.push(`${R(gate.relay, gate.no)}/${R(n, 'E')}`);
+    w.push(`${R(n, 'F')}/${minusOf(n)}`);
+    return {
+      relay: n,
+      set1: { relay: n, set: 1, arm: 'H', no: 'G', nc: 'J' },
+      set2: { relay: n, set: 2, arm: 'L', no: 'K', nc: 'N' },
+    };
+  }
+
+  /** one more relay on an EXISTING read's gated feed (parallel coil,
+   *  chained at the coil jacks — the LTZ(2)/LTZ(3) pattern) for reads
+   *  that need more than two contact sets. */
+  extend(of: GatedRead): GatedRead {
+    if (this.used >= this.o.capacity)
+      throw new Error(`${this.o.name}: pool exhausted (${this.o.capacity} reads; request #${this.used + 1})`);
+    const n = this.o.base + this.used++;
+    const { w, R, minusOf } = this.o;
+    w.push(`${R(of.relay, 'E')}/${R(n, 'E')}`);
+    w.push(`${R(n, 'F')}/${minusOf(n)}`);
+    return {
+      relay: n,
+      set1: { relay: n, set: 1, arm: 'H', no: 'G', nc: 'J' },
+      set2: { relay: n, set: 2, arm: 'L', no: 'K', nc: 'N' },
+    };
+  }
+
+  spent(): number {
+    return this.used;
+  }
+}
