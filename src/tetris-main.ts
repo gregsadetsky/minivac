@@ -297,6 +297,7 @@ function act(label: string, fn: () => string | void) {
     const note = fn();
     busy = false;
     render(note ?? undefined);
+    drainKeys();
   }, 15);
 }
 
@@ -367,6 +368,7 @@ function runTick() {
           busy = false;
           const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
           render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
+          drainKeys();
         }
       }, n === 0 ? 120 : 16);
     }, n === 0 ? 15 : 0);
@@ -397,8 +399,30 @@ function setAuto(on: boolean) {
   }
 }
 
+// keys pressed while a solve is in flight used to be DROPPED (every
+// branch guards on busy) — at 6 columns the solves are longer and the
+// travel is wider, so real inputs vanished mid-play. now game keys
+// queue (small FIFO) and drain in order whenever the machine settles.
+const keyQueue: string[] = [];
+const GAME_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'];
+function drainKeys() {
+  if (busy || keyQueue.length === 0) return;
+  if (relay(IO.gameOverRelay)) {
+    keyQueue.length = 0;
+    return;
+  }
+  handleKey(keyQueue.shift() as string);
+}
 document.addEventListener('keydown', e => {
-  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
+  if (GAME_KEYS.includes(e.key)) e.preventDefault();
+  handleKey(e.key);
+});
+function handleKey(key: string) {
+  const e = { key };
+  if (busy && GAME_KEYS.includes(key) && !relay(IO.gameOverRelay)) {
+    if (keyQueue.length < 4) keyQueue.push(key);
+    return;
+  }
   if (e.key === 'm' || e.key === 'M') {
     soundOn = !soundOn;
     if (!busy) render(soundOn ? 'relay clatter on' : 'relay clatter off');
@@ -478,7 +502,7 @@ document.addEventListener('keydown', e => {
       sim.releaseButton(b.button, b.machine);
     });
   }
-});
+}
 
 // boot: build + settle the machine off the main paint
 setTimeout(() => {

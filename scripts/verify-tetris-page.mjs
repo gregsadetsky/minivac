@@ -540,5 +540,29 @@ try {
   console.log('KNOWN BUG (double clear rung pending): ' + e.message.split('\n')[0]);
 }
 
+// LAST: the key queue — three ArrowDowns fired back-to-back with NO
+// settle wait between them must ALL land (dropped keys were the 6-wide
+// complaint: presses during a solve vanished). the piece must fall at
+// least 2 rows past its pre-burst row (3 exactly, unless it locks).
+{
+  let st = await status();
+  if (!/at row/.test(st)) {
+    await page.keyboard.press('Enter');
+    await waitIdle('burst spawn');
+    await page.keyboard.press('ArrowDown');
+    await waitIdle('burst first tick');
+    st = await status();
+  }
+  const r0 = Number((st.match(/at row (\d+)/) || [0, '0'])[1]);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  const after = await waitIdle('burst settle');
+  const m2 = after.match(/at row (\d+)/);
+  const r1 = m2 ? Number(m2[1]) : 99; // locked counts as fully advanced
+  if (r1 < r0 + 2) throw new Error(`key queue dropped presses: row ${r0} -> ${after}`);
+  console.log(`key queue verified: row ${r0} -> ${m2 ? 'row ' + r1 : 'locked'} on a 3-press burst`);
+}
+
 console.log(doubleClearOk ? 'PAGE VERIFICATION PASSED (incl. double clear)' : 'PAGE VERIFICATION PASSED (double clear still open)');
 await browser.close();
