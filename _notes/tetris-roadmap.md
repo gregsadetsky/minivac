@@ -595,14 +595,35 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    five-part oscillator-gaps machine test, guarded spawn + hands-off
    fall + breathing wall + post-drain manual play all asserted by the
    driver, file/check green. no circuit changes (page + tests only).
-   NEXT: deploy the pending arcs as receipts land (4a0aa1e = the
-   overhang trio, DEPLOYED this session; 3b-5/3b-6 ride the next
-   batch); then column scaling (a wider well) — IN PROGRESS: phases
-   A+B landed (cols threaded, netlist byte-identical at 4), phase C
-   fully scoped in _notes/wider-well.md (five emitters; check tables
-   verified against three hand-laid trees; contact-allocator API +
-   the extracted set-spend ledger). next session: implement the
-   allocator, then the step-tree emitter.
+   GRAVITY CORRECTED 2026-08-20 (user report: 4-5 row skips, phantom
+   shapes): the oscillator-as-game-clock was WRONG under the sim's
+   relaxation semantics. established by experiment (a follower relay
+   and a two-cap cross-coupled astable both reproduced the identical
+   trail): a self-oscillating pair's transition relaxations flutter —
+   the cap companion is a soft resistor at game dt — and EVERY
+   flutter cycle reaches the ring as a real tick edge, 3-4 rows in
+   one solve; no relay topology escapes, because the quasi-static
+   solver compresses the transition dynamics into one solve. the
+   "phantom shapes" were the machine's own respawn re-arm doing its
+   job at burst speed. fix: auto-gravity now cycles the TICK SLIDE
+   on a timer (operator cadence, 700ms) — the exact single-step path
+   manual play uses; the oscillator stays as a parity-exact physics
+   demo, and the page's tick-low spawn guard + drain dance died with
+   it. NEW RECEIPTS, user-shaped: the driver asserts NO fall ever
+   advances more than one row between samples, and a STEP-EXACT
+   scripted game checks the full 12x4 pixel grid against a rules
+   model after EVERY keypress — three pieces, steering, a line
+   clear, the collapse, the post-clear respawn. the harness caught
+   the merged land+lock semantics on its first run. deploy-gate
+   policy (user call): fast suite + the 5000-circuit dense-vs-fast
+   sweep per deploy; the 47-min dense scenario becomes an occasional
+   overnight receipt (zero engine disagreements ever, ~1e-10 mA max).
+   WIDER WELL in progress: A+B landed byte-identical; the allocator,
+   the step-tree emitter and the FAN emitters landed behaviorally
+   green at 4 (file 32); the UP-transition emitter remains, then the
+   cols=6 flip.
+   NEXT: deploy gravity + wider-well prep on the sweep receipt; then
+   the UP-transition emitter and cols=6.
 
 ## display/input notes
 

@@ -1809,8 +1809,12 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // so the tap banks mirror THROUGH a retired fork contact instead of
   // parallel-coiling: + -> WIDM4.set1 (freed by the tree emitter) -> the
   // bank's coil chain; same signal, one freed contact set each
+  // WIDM4 set1 belongs to the T1 union's legacy triple (VMODEM(1).G
+  // feeds the H arm) — feeding + into the same arm would delete the
+  // VMODE term (found the hard way: a flat wide pair read the top).
+  // set2 is genuinely free.
   const widmBank = new MirrorBank({ name: 'FANWIDM', source: null, base: L.FANMIR, capacity: Math.ceil(cols / 2), w, R, minusOf });
-  w.push(`${plusOf(WIDM4)}/${R(WIDM4, 'H')}`, `${R(WIDM4, 'G')}/${R(L.FANMIR, 'E')}`);
+  w.push(`${plusOf(WIDM4)}/${R(WIDM4, 'L')}`, `${R(WIDM4, 'K')}/${R(L.FANMIR, 'E')}`);
   const wid3Bank = new MirrorBank({ name: 'FANWID3', source: null, base: L.FANMIR + Math.ceil(cols / 2), capacity: Math.ceil(cols / 2), w, R, minusOf });
   w.push(`${plusOf(WID3M)}/${R(WID3M, 'H')}`, `${R(WID3M, 'G')}/${R(L.FANMIR + Math.ceil(cols / 2), 'E')}`);
   for (let j = 1; j < cols; j++) {

@@ -7,6 +7,11 @@ minivac.greg.technology (push to main = deploy via github pages action).
 ## commands
 
 - `npm run check` = lint + typecheck + full test suite. run it as the gate.
+- deploy gate (2026-08-20, user-blessed): fast suite green + the 5000-circuit
+  dense-vs-fast sweep (`MINIVAC_MASS=1 npx vitest --run
+  src/simulator/tests/sparse-mass-validation.test.ts`, ~5-10 min). the 47-min
+  dense game scenario is an OCCASIONAL overnight receipt, not per-deploy —
+  zero engine disagreements ever recorded (max diff ~1e-10 mA).
 - `MINIVAC_SOLVER=dense npm run test -- --run` = whole suite under the dense
   oracle engine (do this after touching anything numerical).
 - `MINIVAC_MASS=1 npx vitest --run src/simulator/tests/sparse-mass-validation.test.ts`
@@ -62,7 +67,13 @@ M10/M11 — multivac tests enforce via assertJackCapacity().
   the book IV flip-flop, which toggles through the buzz).
 - capacitors: real (500uF sections 1-5, 1000uF section 6, jack notation
   `1cap`..`6cap`), backward-euler companions; time advances only via
-  stepTime(ms) — nothing in the browser calls it yet.
+  stepTime(ms). KNOWN LIMIT: a self-oscillating relay circuit's transition
+  relaxations FLUTTER under stepTime (the companion is a soft resistor at
+  game dt), and every flutter cycle reaches downstream relays as a real
+  edge — 3-4 game ticks in one solve; reproduced identically with a
+  follower relay and a two-cap astable. so the oscillator is a physics
+  demo (engine-parity-exact), NOT the game clock: the page's auto-gravity
+  cycles the tick slide on a timer (operator cadence, proven single-step).
 - multivac: machineCount ctor arg; canonical wire prefix `m12.3G` (numeric,
   0-based, unbounded), letters a.-h. are legacy aliases for m0-m7; per-machine
   supplies; negative rails common; machine 0 unprefixed internally.

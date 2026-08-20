@@ -280,7 +280,7 @@ function render(note?: string) {
   // under AUTO the oscillator's transition solve BUZZES by design (a
   // real relay oscillator buzzes; chatter pins de-energized) — that one
   // alert is expected physics, not a fault, so it stays off the status
-  const alerts = sim.getState().alerts.filter(a => !(autoOn && /OSCILLATION/i.test(a)));
+  const alerts = sim.getState().alerts;
   status.textContent =
     note ??
     `tick ${ticks}${autoOn ? ' (auto)' : ''} — score ${scoreAt()} — ${shapeLabel()}${tok >= 0 ? ` at row ${tok}` : ' (enter to spawn)'}` +
@@ -318,56 +318,71 @@ function resyncPiece() {
   }
 }
 
-// 3b-5 auto-gravity: the AUTO slide feeds a real two-relay capacitor
-// oscillator inside the machine; the page's only job is to let TIME pass
-// (stepTime with the wall-clock delta) — the oscillator does the ticking,
-// bookkeeping runs included. The interval skips beats while a manual
-// interaction settles or after game over freezes the keyboard.
-let autoOn = false;
-let spawnWait = false;
-let autoTimer: ReturnType<typeof setInterval> | undefined;
-let lastStep = 0;
-function setAuto(on: boolean) {
-  const a = IO.auto;
-  if (on) {
-    autoOn = true;
-    sim.setSlide(a.slide, 'right', a.machine);
-    if (autoTimer === undefined) {
-      lastStep = performance.now();
-      autoTimer = setInterval(() => {
-        if (busy) {
-          lastStep = performance.now();
-          return;
-        }
-        const now = performance.now();
-        const dt = Math.min(250, Math.max(80, now - lastStep));
-        lastStep = now;
-        sim.stepTime(dt);
+// one tick — plus however many the machine owes itself afterwards: a
+// lock leaves the LOCKED slave up until the (vertical) phase-2 write
+// and the reset have run. Auto-running them keeps the keyboard from
+// re-steering the piece between the bottom and top writes. The tick is
+// painted MID-PRESS too: a completed line is lit only while the tick
+// slide is held (the flash — CLEARP drops the row on the release), and
+// slamming press+release into one paint made every clear look like a
+// row silently vanishing.
+function runTick() {
+  busy = true;
+  status.textContent = 'tick — relays settling…';
+  const cellsBefore = Array.from({ length: ROWS }, (_, r) => rowCells(r));
+  const step = (n: number) =>
+    setTimeout(() => {
+      const t = IO.tick;
+      sim.setSlide(t.slide, 'right', t.machine);
+      render('holding the tick…');
+      setTimeout(() => {
+        sim.setSlide(t.slide, 'left', t.machine);
         ticks++;
-        render();
-      }, 130);
-    }
-    return;
-  }
-  // taking the slide back is NOT instant: through most of each cycle the
-  // cap holds the relay pair up (slow release) with the tick line HIGH,
-  // and freezing time there wedges the line — manual ticks and STARTs
-  // are all dead against it (see the 'oscillator gaps' machine test).
-  // Cut the feed first, then keep time flowing until the driver relay
-  // has genuinely dropped (the cap drains through the coil in a couple
-  // of beats), and only then stop the clock.
-  sim.setSlide(a.slide, 'left', a.machine);
-  let low = 0;
-  for (let i = 0; i < 20 && low < 2; i++) {
-    sim.stepTime(65);
-    ticks++;
-    low = relay(IO.oscRelay) ? 0 : low + 1;
-  }
-  if (autoTimer !== undefined) {
+        // the machine owes itself ticks while LOCKED (phase 2 / reset)
+        // or while a collapse walks the stack down (up to 21 more)
+        if ((relay(IO.lockedRelay) || relay(IO.collapseRelay)) && n < 3 * ROWS + 6) {
+          render(
+            relay(IO.collapseRelay)
+              ? 'line cleared — the stack falls…'
+              : 'locked — the machine runs its bookkeeping ticks…'
+          );
+          step(n + 1);
+        } else {
+          // n>0 means a lock's bookkeeping ran, i.e. the register was
+          // re-homed — shapes whose range excludes the home column need
+          // their bounds back (resync no-ops when already in range)
+          if (n > 0 && !relay(IO.gameOverRelay)) resyncPiece();
+          busy = false;
+          const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
+          render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
+        }
+      }, 120);
+    }, 15);
+  step(0);
+}
+
+// auto-gravity: a timer cycles the TICK SLIDE at operator cadence — the
+// same single-step path as ArrowDown, proven one row per tick. (The
+// in-machine capacitor oscillator from 3b-5 still exists and oscillates
+// — engine-parity-exact — but under the quasi-static solver its
+// transition relaxations FLUTTER and each flutter cycle reaches the
+// ring as a full tick edge: 3-4 rows per solve, reproduced identically
+// with a follower relay and a two-cap astable. The compressed-transient
+// artifact is fundamental to the relaxation semantics, so the page
+// clocks the game like a 1961 operator would: rhythmically, by hand.)
+let autoOn = false;
+let autoTimer: ReturnType<typeof setInterval> | undefined;
+function setAuto(on: boolean) {
+  autoOn = on;
+  if (on && autoTimer === undefined) {
+    autoTimer = setInterval(() => {
+      if (busy || relay(IO.gameOverRelay)) return;
+      runTick();
+    }, 700);
+  } else if (!on && autoTimer !== undefined) {
     clearInterval(autoTimer);
     autoTimer = undefined;
   }
-  autoOn = false;
 }
 
 document.addEventListener('keydown', e => {
@@ -382,7 +397,7 @@ document.addEventListener('keydown', e => {
     // must stay reachable, or gravity could never be stopped again
     if (busy && !relay(IO.gameOverRelay)) return;
     setAuto(!autoOn);
-    render(autoOn ? 'auto-gravity: the capacitor oscillator ticks the machine' : 'auto-gravity off');
+    render(autoOn ? 'auto-gravity on — the tick slide runs at operator cadence' : 'auto-gravity off');
     return;
   }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -432,51 +447,8 @@ document.addEventListener('keydown', e => {
       if (shapeAt() !== nIx) return 'blocked — the contacts refused the reshape';
     });
   } else if (e.key === 'ArrowDown' || e.key === ' ') {
-    // one tick — plus however many the machine owes itself afterwards: a
-    // lock leaves the LOCKED slave up until the (vertical) phase-2 write
-    // and the reset have run. Auto-running them keeps the keyboard from
-    // re-steering the piece between the bottom and top writes. The tick is
-    // painted MID-PRESS too: a completed line is lit only while the tick
-    // slide is held (the flash — CLEARP drops the row on the release), and
-    // slamming press+release into one paint made every clear look like a
-    // row silently vanishing.
     if (busy) return;
-    if (autoOn) {
-      render('gravity is running — press a to take the tick slide back');
-      return;
-    }
-    busy = true;
-    status.textContent = 'tick — relays settling…';
-    const cellsBefore = Array.from({ length: ROWS }, (_, r) => rowCells(r));
-    const step = (n: number) =>
-      setTimeout(() => {
-        const t = IO.tick;
-        sim.setSlide(t.slide, 'right', t.machine);
-        render('holding the tick…');
-        setTimeout(() => {
-          sim.setSlide(t.slide, 'left', t.machine);
-          ticks++;
-          // the machine owes itself ticks while LOCKED (phase 2 / reset)
-          // or while a collapse walks the stack down (up to 21 more)
-          if ((relay(IO.lockedRelay) || relay(IO.collapseRelay)) && n < 3 * ROWS + 6) {
-            render(
-              relay(IO.collapseRelay)
-                ? 'line cleared — the stack falls…'
-                : 'locked — the machine runs its bookkeeping ticks…'
-            );
-            step(n + 1);
-          } else {
-            // n>0 means a lock's bookkeeping ran, i.e. the register was
-            // re-homed — shapes whose range excludes the home column need
-            // their bounds back (resync no-ops when already in range)
-            if (n > 0 && !relay(IO.gameOverRelay)) resyncPiece();
-            busy = false;
-            const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
-            render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
-          }
-        }, 120);
-      }, 15);
-    step(0);
+    runTick();
   } else if (e.key === 'Enter') {
     // the machine has no interlock here: START arms the SPAWN latch
     // unconditionally, and pressing it mid-fall would make the next ring
@@ -487,47 +459,7 @@ document.addEventListener('keydown', e => {
       render('a piece is already falling');
       return;
     }
-    if (autoOn) {
-      // under auto the oscillator holds the tick line high through most
-      // of every cycle, and a START pressed into the high line dissipates
-      // — the arm needs a low line to survive to the next rising edge
-      // (same physics as pressing START while holding the tick slide;
-      // see the 'oscillator gaps' machine test). Wait for a beat that
-      // settled with the driver relay down, press there, and press again
-      // if the machine still swallowed it.
-      if (spawnWait) return;
-      spawnWait = true;
-      let tries = 0;
-      const tryStart = () => {
-        if (!autoOn || tokenRow() >= 0) {
-          spawnWait = false;
-          return;
-        }
-        if (busy || relay(IO.oscRelay)) {
-          setTimeout(tryStart, 45);
-          return;
-        }
-        const b = IO.start;
-        sim.pressButton(b.button, b.machine);
-        sim.releaseButton(b.button, b.machine);
-        tries++;
-        let waited = 0;
-        const check = () => {
-          if (!autoOn || tokenRow() >= 0 || tries >= 4) {
-            spawnWait = false;
-            return;
-          }
-          if (waited++ < 8) {
-            setTimeout(check, 130);
-            return;
-          }
-          setTimeout(tryStart, 45);
-        };
-        setTimeout(check, 130);
-      };
-      tryStart();
-      return;
-    }
+    if (busy) return;
     act('start', () => {
       const b = IO.start;
       sim.pressButton(b.button, b.machine);
