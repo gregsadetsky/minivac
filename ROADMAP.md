@@ -500,12 +500,34 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    asserting rails and both fans per state, an L-J-T tower with all
    three stems, a mid-fall triple entry refused on a stored delta cell,
    whole file + check + driver green. 449 relays / 76 machines.
-   NEXT: 3b-4b — the overhang trio (L2/J2/T2: 3-wide TOPS, offset single
+   TRIPLE STEERING (3b-4b) LANDED same session — the NS cut died after
+   ONE increment: the legality trees re-classed per top geometry. the
+   generalization that kept them small: a check is correct wherever the
+   TARGET top set CONTAINS the checked column, so LEGINVT's gate widened
+   from NOT-Z to NOT-(Z|J1|T1) (correct for sym, S, L1) and LEGINVT2's
+   from NOT-S to NOT-(S|L1|J1) (correct for sym-wide, Z — and T1, whose
+   right-step stem lands exactly on the point-2 column: that check came
+   FREE). the triple legs ride as state-gated series hops — LTJ reads
+   J1's shifted stem, LTB3 the 3-wide bottom's entering column 3 — plus
+   the pos-2 triple bound. several stem checks are PROVABLY unreachable
+   in play (the piece's own body just vacated those cells: a J1/T1 stem
+   column is always inside the bottom's fall path) and stand as belt and
+   braces. receipts: steering scenarios refused-then-allowed one row
+   apart for the third column, J1's stem, and L1's stem via point-1;
+   the whole file, check and playwright green. 460 relays / 78 machines.
+   DEPLOY + RECEIPTS RESTRUCTURED, same session: the dense-oracle 12-row
+   game crossed its 2-hour test timeout mid-solve (vitest cannot preempt
+   the synchronous solver; the test never completed — NO mismatch, the
+   zero-disagreement record stands) while the dense 8-ROW scenario
+   passed on the same circuit. the deploy gate is now the dense 8-row
+   scenario + the 5000-circuit oracle sweep; the full dense tall-well
+   ladder becomes an occasional overnight receipt. 335fb7f (game over +
+   score ring + staggered pieces + page S/Z) deployed to main on the
+   green scenario receipt.
+   NEXT: 3b-4c — the overhang trio (L2/J2/T2: 3-wide TOPS, offset single
    bottoms — BCUT suppresses the base column, a TT rail drives triple
-   tops) and/or the legality re-classing that frees triple steering and
-   kills the NS cut. design in _notes/shapes-design.md; MASS receipts
-   are being restructured (the dense 12-row game crossed 2h — the sweep
-   + a short dense scenario will carry the gate).
+   tops, their transitions and legality classes). design in
+   _notes/shapes-design.md.
 
 ## display/input notes
 
