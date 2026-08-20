@@ -211,21 +211,43 @@ export class MinivacSimulator {
         : new (loadSimulator().Circuit)();
     const builder = new CircuitBuilder(ckt);
 
-    // Power supplies: one ideal source behind measured internal resistance PER MACHINE
-    // (negative rails are common — see the parser note on Power_Negative)
+    // DEAD-HARDWARE TRIM (exact, all engines see the same netlist): hardware
+    // whose every jack is untouched by user wiring is a floating island — it
+    // carries zero current and solves to zero — so emitting it only inflates
+    // the MNA system (each PROBE is a whole extra unknown). At 50 built
+    // machines a tetris tick spent most of its matrix on never-wired lights,
+    // indicator lamps, idle button/slide contacts and empty supplies
+    // (measured: +50 empty machines tripled the solve). Every state reader
+    // already defaults a missing probe to 0 (`|| 0`), which is exactly the
+    // island's answer. The capacitor block below has trimmed this way since
+    // it landed; this extends the same wiredNodes rule to the rest.
     const gnd = ckt.gnd_node();
+    const wiredNodes = new Set(this.wires.flat().concat(this.externalResistors.flatMap(r => [r[0], r[1]])));
+    const touched = (...nodes: string[]) => nodes.some(n => wiredNodes.has(n));
+
+    // Power supplies: one ideal source behind measured internal resistance PER
+    // MACHINE (negative rails are common — see the parser note on
+    // Power_Negative). A machine whose + rail is never wired feeds nothing:
+    // its source + internal R would island (the − side is the common node,
+    // but with no + path there is no loop). Machine 0's supply is ALWAYS
+    // emitted: with no user wires at all the netlist would otherwise be
+    // EMPTY, and the dense oracle's matrix code crashes on zero unknowns
+    // where sparse/fast return an empty solution — and physically the
+    // supply is live the moment the machine is switched on.
     for (let m = 0; m < this.machineCount; m++) {
       const p = m === 0 ? '' : `m${m}.`;
+      if (m > 0 && !touched(`${p}Power_Positive`)) continue;
       const vsrcNode = builder.getNode(`${p}Power_Source_Internal`);
       ckt.v(vsrcNode, gnd, SUPPLY_VOLTAGE.toString(), `${p}V_POWER`);
       builder.addResistor(`${p}Power_Source_Internal`, `${p}Power_Positive`, SUPPLY_INTERNAL_RESISTANCE, `${p}V_POWER_INTERNAL_R`);
     }
 
-    // Add all lights
+    // Add the wired lights
     for (let i = 1; i <= this.sectionCount; i++) {
       const { p, sec } = this._loc(i);
       const lightA = `${p}Light${sec}_A`;
       const lightB = `${p}Light${sec}_B`;
+      if (!touched(lightA, lightB)) continue;
       const probeNode = `${p}Light${sec}_Probe`;
       builder.addCurrentProbe(lightA, probeNode, `${p}LIGHT${sec}_PROBE`);
       builder.addResistor(probeNode, lightB, this.bulbResistances[`${p}LIGHT${sec}`], `${p}LIGHT${sec}`);
@@ -240,10 +262,20 @@ export class MinivacSimulator {
       const coilOutput = `${p}Relay${sec}_Coil_Output`;
       const coilProbeNode = `${p}Relay${sec}_CoilProbe`;
 
-      builder.addCurrentProbe(lampInput, lampProbeNode, `${p}RELAY${sec}_INDICATOR_LAMP_PROBE`);
-      builder.addResistor(lampProbeNode, coilInput, this.bulbResistances[`${p}LAMP${sec}`], `${p}RELAY${sec}_INDICATOR_LAMP`);
-      builder.addCurrentProbe(coilInput, coilProbeNode, `${p}RELAY${sec}_COIL_PROBE`);
-      builder.addResistor(coilProbeNode, coilOutput, RELAY_COIL_RESISTANCE, `${p}RELAY${sec}_COIL`);
+      // the indicator lamp is a SERIES feed from its own jack into the coil
+      // input: with the lamp jack unwired it can never conduct, wired or not
+      // coil — so the lamp (and its probe unknown) is emitted only when its
+      // jack is touched; the coil block whenever any of the three coil-path
+      // jacks is (a lamp-only wiring still conducts THROUGH the coil).
+      const lampWired = touched(lampInput);
+      if (lampWired) {
+        builder.addCurrentProbe(lampInput, lampProbeNode, `${p}RELAY${sec}_INDICATOR_LAMP_PROBE`);
+        builder.addResistor(lampProbeNode, coilInput, this.bulbResistances[`${p}LAMP${sec}`], `${p}RELAY${sec}_INDICATOR_LAMP`);
+      }
+      if (lampWired || touched(coilInput, coilOutput)) {
+        builder.addCurrentProbe(coilInput, coilProbeNode, `${p}RELAY${sec}_COIL_PROBE`);
+        builder.addResistor(coilProbeNode, coilOutput, RELAY_COIL_RESISTANCE, `${p}RELAY${sec}_COIL`);
+      }
 
       const h1 = `${p}Relay${sec}_Contact1_Common`;
       const g1 = `${p}Relay${sec}_Contact1_NO`;
@@ -254,29 +286,34 @@ export class MinivacSimulator {
         ? this.relayOverrides[i - 1]
         : this.relayStates[i - 1];
 
-      if (effectiveRelayState) {
-        builder.addWire(h1, g1, `${p}RELAY${sec}_CONTACT1_NO_CLOSED`);
-      } else {
-        builder.addWire(h1, j1, `${p}RELAY${sec}_CONTACT1_NC_CLOSED`);
+      if (touched(h1, g1, j1)) {
+        if (effectiveRelayState) {
+          builder.addWire(h1, g1, `${p}RELAY${sec}_CONTACT1_NO_CLOSED`);
+        } else {
+          builder.addWire(h1, j1, `${p}RELAY${sec}_CONTACT1_NC_CLOSED`);
+        }
       }
 
       const l2 = `${p}Relay${sec}_Contact2_Common`;
       const k2 = `${p}Relay${sec}_Contact2_NO`;
       const n2 = `${p}Relay${sec}_Contact2_NC`;
 
-      if (effectiveRelayState) {
-        builder.addWire(l2, k2, `${p}RELAY${sec}_CONTACT2_NO_CLOSED`);
-      } else {
-        builder.addWire(l2, n2, `${p}RELAY${sec}_CONTACT2_NC_CLOSED`);
+      if (touched(l2, k2, n2)) {
+        if (effectiveRelayState) {
+          builder.addWire(l2, k2, `${p}RELAY${sec}_CONTACT2_NO_CLOSED`);
+        } else {
+          builder.addWire(l2, n2, `${p}RELAY${sec}_CONTACT2_NC_CLOSED`);
+        }
       }
     }
 
-    // Add all pushbuttons
+    // Add the wired pushbuttons
     for (let i = 1; i <= this.sectionCount; i++) {
       const { p, sec } = this._loc(i);
       const y = `${p}Button${sec}_Common`;
       const x = `${p}Button${sec}_NormallyOpen`;
       const z = `${p}Button${sec}_NormallyClosed`;
+      if (!touched(y, x, z)) continue;
 
       if (this.buttonStates[i - 1]) {
         builder.addWire(y, x, `${p}BUTTON${sec}_NO_CLOSED`);
@@ -285,7 +322,7 @@ export class MinivacSimulator {
       }
     }
 
-    // Add all slide switches
+    // Add the wired slide switches (each set trims independently)
     for (let i = 1; i <= this.sectionCount; i++) {
       const { p, sec } = this._loc(i);
       const s = `${p}Slide${sec}_Common1`;
@@ -295,38 +332,39 @@ export class MinivacSimulator {
       const u = `${p}Slide${sec}_Left2`;
       const w = `${p}Slide${sec}_Right2`;
 
-      if (this.slideStates[i - 1]) {
-        builder.addWire(s, t, `${p}SLIDE${sec}_SET1_RIGHT`);
-        builder.addWire(v, w, `${p}SLIDE${sec}_SET2_RIGHT`);
-      } else {
-        builder.addWire(s, r, `${p}SLIDE${sec}_SET1_LEFT`);
-        builder.addWire(v, u, `${p}SLIDE${sec}_SET2_LEFT`);
+      if (touched(s, r, t)) {
+        builder.addWire(s, this.slideStates[i - 1] ? t : r, `${p}SLIDE${sec}_SET1_${this.slideStates[i - 1] ? 'RIGHT' : 'LEFT'}`);
+      }
+      if (touched(v, u, w)) {
+        builder.addWire(v, this.slideStates[i - 1] ? w : u, `${p}SLIDE${sec}_SET2_${this.slideStates[i - 1] ? 'RIGHT' : 'LEFT'}`);
       }
     }
 
-    // Add motor circuit
-    const d17 = 'Motor_D17';
-    const d18 = 'Motor_D18';
-    const d19 = 'Motor_D19';
-    const junction = 'Motor_Junction';
-    const motorProbe = 'Motor_Probe';
-    const r1Probe = 'Motor_R1_Probe';
-    const r2Probe = 'Motor_R2_Probe';
+    // Add the motor circuit when any of its jacks is wired
+    if (touched('Motor_D16', 'Motor_D17', 'Motor_D18', 'Motor_D19')) {
+      const d17 = 'Motor_D17';
+      const d18 = 'Motor_D18';
+      const d19 = 'Motor_D19';
+      const junction = 'Motor_Junction';
+      const motorProbe = 'Motor_Probe';
+      const r1Probe = 'Motor_R1_Probe';
+      const r2Probe = 'Motor_R2_Probe';
 
-    builder.addCurrentProbe(d17, r1Probe, 'MOTOR_R1_PROBE');
-    builder.addResistor(r1Probe, junction, MOTOR_R1, 'MOTOR_R1');
-    builder.addWire(junction, d19, 'MOTOR_JUNCTION_TO_D19');
-    builder.addCurrentProbe(junction, r2Probe, 'MOTOR_R2_PROBE');
-    builder.addResistor(r2Probe, d18, MOTOR_R2, 'MOTOR_R2');
-    builder.addCurrentProbe(junction, motorProbe, 'MOTOR_PROBE');
-    builder.addResistor(motorProbe, d18, MOTOR_RESISTANCE, 'MOTOR');
+      builder.addCurrentProbe(d17, r1Probe, 'MOTOR_R1_PROBE');
+      builder.addResistor(r1Probe, junction, MOTOR_R1, 'MOTOR_R1');
+      builder.addWire(junction, d19, 'MOTOR_JUNCTION_TO_D19');
+      builder.addCurrentProbe(junction, r2Probe, 'MOTOR_R2_PROBE');
+      builder.addResistor(r2Probe, d18, MOTOR_R2, 'MOTOR_R2');
+      builder.addCurrentProbe(junction, motorProbe, 'MOTOR_PROBE');
+      builder.addResistor(motorProbe, d18, MOTOR_RESISTANCE, 'MOTOR');
 
-    // Motor rotary selector (with break-before-make)
-    // Only connect when motor arm is making contact (not in dead zone)
-    if (this._isMotorMakingContact()) {
-      const d16 = 'Motor_D16';
-      const currentContact = `Motor_D${this.motorPosition}`;
-      builder.addWire(d16, currentContact, 'MOTOR_SELECTOR_ARM');
+      // Motor rotary selector (with break-before-make)
+      // Only connect when motor arm is making contact (not in dead zone)
+      if (this._isMotorMakingContact()) {
+        const d16 = 'Motor_D16';
+        const currentContact = `Motor_D${this.motorPosition}`;
+        builder.addWire(d16, currentContact, 'MOTOR_SELECTOR_ARM');
+      }
     }
 
     // Add user-defined wires
@@ -343,7 +381,7 @@ export class MinivacSimulator {
 
     // Internal capacitors, one per section that is actually wired to.
     // Backward-Euler companion: stored-voltage source in series with dt/C.
-    const wiredNodes = new Set(this.wires.flat().concat(this.externalResistors.flatMap(r => [r[0], r[1]])));
+    // (wiredNodes is hoisted above — the whole builder trims by it now)
     for (let i = 1; i <= this.sectionCount; i++) {
       const { p, sec } = this._loc(i);
       const capNode = `${p}Capacitor_${sec}`;

@@ -262,9 +262,26 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    their relays on the bigger field where they have room to matter.
 
 11. FIELD SCALING: wider/taller grid = stamping proven patterns; the
-   solver budget is the real constraint (lever (b) pivot-order reuse
-   before 10x20). also queued: game-over latch (spawn collision), score
-   counter via the adder rung, the piece-register rung above.
+   solver budget is the real constraint. also queued: game-over latch
+   (spawn collision), score counter via the adder rung.
+   OPENING MOVE LANDED 2026-08-20 — the DEAD-HARDWARE TRIM (lever (c),
+   displacing the planned lever (b)): measured first, +50 EMPTY machines
+   tripled a tetris tick (237ms -> 666ms, same wires) because every
+   built-in probe is an extra MNA unknown (18/machine) — and pivot-order
+   reuse can't cross a contact flip anyway (contacts change the TOPOLOGY,
+   not values; an 11-orders value change would fail any threshold check).
+   the fix extends the capacitor block's wiredNodes rule to ALL built-in
+   hardware: lights, indicator lamps (split from coils — a series lamp
+   with its jack unwired can never conduct, so coil-only relays drop the
+   lamp probe), coils, contact wires, buttons, slides, supplies, the
+   motor. floating islands solve to exactly zero and every reader already
+   defaults a missing probe to zero, so the trim is exact, and all three
+   engines see the same netlist. machine 0's supply is always emitted:
+   an all-empty netlist crashes the dense oracle's matrix code (caught by
+   the dense suite — sparse/fast tolerate zero unknowns).
+   measured after: tick 237ms -> 71ms (3.3x), press 402ms -> 117ms, and
+   machine count is FREE (100 built machines = 50). npm run check itself
+   dropped 341s -> 111s. field scaling no longer pays the machine tax.
    design notes 2026-08-20 (from the live-play report + reading
    baliika/fpga-tetris at the user's suggestion): collapse = top-down row
    scan; on a full row, shift ALL rows above down one — the continuing scan
