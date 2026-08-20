@@ -17,6 +17,8 @@
  * list is the compiled output.
  */
 
+import { MirrorBank } from './contact-alloc';
+
 // ---- relay allocation: relay n lives at machine floor(n/6), section n%6+1
 export const R = (n: number, jack: string) => `m${Math.floor(n / 6)}.${(n % 6) + 1}${jack}`;
 export const comOf = (n: number) => `m${Math.floor(n / 6)}.${(n % 6) + 1}com`;
@@ -1619,9 +1621,14 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${legTTap(3)}/${R(SG(0), 'L')}`, `${R(SG(0), 'N')}/${R(LEGINVT2(3), 'E')}`, `${R(LEGINVT2(3), 'F')}/${minusOf(LEGINVT2(3))}`);
   // vmode mirrors for the tall forks (VMODE's own spare set can't serve
   // six tap trees); coils daisy-chained through the coil jacks
-  w.push(`${R(VMODE, 'E')}/${R(VMODEM(0), 'E')}`);
-  for (let p = 1; p < cols; p++) w.push(`${R(VMODEM(p - 1), 'E')}/${R(VMODEM(p), 'E')}`);
-  for (let p = 0; p < cols; p++) w.push(`${R(VMODEM(p), 'F')}/${minusOf(VMODEM(p))}`);
+  // ...as the first allocator-managed bank (wider-well emitter 0 pilot):
+  // the bank mints the same chain lazily; requests below arrive in the
+  // hand-laid order, so the set map is unchanged (wire-multiset gate).
+  // NOTE the chain tail stays a splice point: the ring-state union
+  // enters at VMODEM(cols-1).E's free hole (the 3b-4a/4c splices).
+  const vmBank = new MirrorBank({
+    name: 'VMODEM', source: VMODE, base: VMODEM(0), capacity: cols, w, R, minusOf,
+  });
 
   // the gated D-taps: every stage is a CHANGEOVER (blocked returns the
   // sample to the current master — see the ring notes) and every OPTIONAL
@@ -1647,7 +1654,8 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${retTap(1)}/${R(POSA(1), 'E')}`);
   w.push(`${retTap(2)}/${R(POSA(2), 'E')}`);
   for (const c of [1, 2] as const) {
-    const vm = VMODEM(c - 1);
+    const tf = vmBank.request('changeover'); // the tall fork
+    const tw = vmBank.request('changeover'); // the tall-wide fork
     const [wArm, wNc, wNo] = c === 1 ? ['H', 'J', 'G'] : ['L', 'N', 'K'];
     if (c === 1) {
       // 3b-4c: the OVR bypass — LEGINV(c) false-refuses L2/T2 (their
@@ -1656,13 +1664,13 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       // bottom columns read as gated hops further down
       w.push(`${R(POSM(0), 'K')}/${R(BCUTM, 'H')}`);
       w.push(`${R(BCUTM, 'J')}/${R(LEGINV(1), 'H')}`);
-      w.push(`${R(BCUTM, 'G')}/${R(vm, 'H')}`); // overhang: skip to the fork
+      w.push(`${R(BCUTM, 'G')}/${R(tf.relay, tf.arm)}`); // overhang: skip to the fork
     } else {
       w.push(`${R(POSM(c - 1), 'K')}/${R(LEGINV(c), 'H')}`); // the tap in
     }
     w.push(`${R(LEGINV(c), 'G')}/${retTap(c - 1)}`); // bottom-c occupied
-    w.push(`${R(LEGINV(c), 'J')}/${R(vm, 'H')}`); // free: the tall fork
-    w.push(`${R(vm, 'G')}/${R(LEGINVT(c), 'H')}`); // tall: check top-c
+    w.push(`${R(LEGINV(c), 'J')}/${R(tf.relay, tf.arm)}`); // free: the tall fork
+    w.push(`${R(tf.relay, tf.no)}/${R(LEGINVT(c), 'H')}`); // tall: check top-c
     w.push(`${R(LEGINVT(c), 'G')}/${retTap(c - 1)}`); // top-c occupied
     // 3b-3b: S's extra top column (c-1) rides IN SERIES — under any other
     // mode the LTS coil is dead and its NC passes through. For c=2 the Z
@@ -1684,7 +1692,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       w.push(`${R(LTOT, 'G')}/${retTap(0)}`); // TT: top-3 occupied
       w.push(`${R(LTOT, 'J')}/${R(LTOB(1), 'H')}`);
       w.push(`${R(LTOB(1), 'G')}/${retTap(0)}`); // L2: bottom-3 occupied
-      w.push(`${R(LTOB(1), 'J')}/${R(vm, 'J')}`); // free: join X
+      w.push(`${R(LTOB(1), 'J')}/${R(tf.relay, tf.nc)}`); // free: join X
     } else {
       w.push(`${R(LEGINVT(2), 'J')}/${R(LTS(1), 'H')}`);
       w.push(`${R(LTS(1), 'G')}/${retTap(1)}`); // S: top-1 occupied
@@ -1696,48 +1704,49 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       w.push(`${R(TRPM(1), 'K')}/${retTap(1)}`);
       w.push(`${R(TRPM(1), 'N')}/${R(TTM(4), 'L')}`);
       w.push(`${R(TTM(4), 'K')}/${retTap(1)}`);
-      w.push(`${R(TTM(4), 'N')}/${R(vm, 'J')}`); // free: join X
+      w.push(`${R(TTM(4), 'N')}/${R(tf.relay, tf.nc)}`); // free: join X
     }
-    w.push(`${R(vm, 'J')}/${R(WIDM3, wArm)}`); // X: the wide fork
+    w.push(`${R(tf.relay, tf.nc)}/${R(WIDM3, wArm)}`); // X: the wide fork
     w.push(`${R(WIDM3, wNc)}/${comOf(POSA(c))}`); // narrow: step
     w.push(`${R(WIDM3, wNo)}/${R(LEGINV2(c + 1), 'H')}`); // wide: bottom-c+1
     w.push(`${R(LEGINV2(c + 1), 'G')}/${retTap(c - 1)}`); // occupied
-    w.push(`${R(LEGINV2(c + 1), 'J')}/${R(vm, 'L')}`); // free: tall fork #2
-    w.push(`${R(vm, 'N')}/${R(WIDM3, wNc)}`); // flat-wide: join the step wire
-    w.push(`${R(vm, 'K')}/${R(LEGINVT2(c + 1), 'H')}`); // tall-wide: top-c+1
+    w.push(`${R(LEGINV2(c + 1), 'J')}/${R(tw.relay, tw.arm)}`); // free: tall fork #2
+    w.push(`${R(tw.relay, tw.nc)}/${R(WIDM3, wNc)}`); // flat-wide: join the step wire
+    w.push(`${R(tw.relay, tw.no)}/${R(LEGINVT2(c + 1), 'H')}`); // tall-wide: top-c+1
     w.push(`${R(LEGINVT2(c + 1), 'G')}/${retTap(c - 1)}`); // occupied
     // 3b-3b: Z's extra top column (c+2) — only c=1 has one on the board
     // (c=2's Z was already returned by the bound at point 1)
     if (c === 1) {
       w.push(`${R(LEGINVT2(2), 'J')}/${R(LTZ(2), 'H')}`);
       w.push(`${R(LTZ(2), 'G')}/${retTap(0)}`); // Z: top-3 occupied
-      w.push(`${R(LTZ(2), 'J')}/${R(vm, 'N')}`); // free: join
+      w.push(`${R(LTZ(2), 'J')}/${R(tw.relay, tw.nc)}`); // free: join
     } else {
-      w.push(`${R(LEGINVT2(3), 'J')}/${R(vm, 'N')}`); // free: join
+      w.push(`${R(LEGINVT2(3), 'J')}/${R(tw.relay, tw.nc)}`); // free: join
     }
   }
+  const wallTf = vmBank.request('changeover'); // VMODEM(2).set1, hand order
   w.push(`${R(POSM(2), 'K')}/${R(LEGINV(3), 'H')}`);
   w.push(`${R(LEGINV(3), 'G')}/${retTap(2)}`); // bottom-3 occupied
-  w.push(`${R(LEGINV(3), 'J')}/${R(VMODEM(2), 'H')}`); // free: the tall fork
-  w.push(`${R(VMODEM(2), 'G')}/${R(LEGINVT(3), 'H')}`); // tall: top-3
+  w.push(`${R(LEGINV(3), 'J')}/${R(wallTf.relay, wallTf.arm)}`); // free: the tall fork
+  w.push(`${R(wallTf.relay, wallTf.no)}/${R(LEGINVT(3), 'H')}`); // tall: top-3
   w.push(`${R(LEGINVT(3), 'G')}/${retTap(2)}`); // occupied
-  w.push(`${R(LEGINVT(3), 'J')}/${R(VMODEM(2), 'J')}`); // free: join
-  w.push(`${R(VMODEM(2), 'J')}/${R(WIDM4, 'H')}`); // the wall gate
+  w.push(`${R(LEGINVT(3), 'J')}/${R(wallTf.relay, wallTf.nc)}`); // free: join
+  w.push(`${R(wallTf.relay, wallTf.nc)}/${R(WIDM4, 'H')}`); // the wall gate
   w.push(`${R(WIDM4, 'J')}/${comOf(POSA(3))}`); // narrow: step
   w.push(`${R(WIDM4, 'G')}/${retTap(2)}`); // wide: the wall, return
-  // left taps: the tall fork sets — VMODEM(2).set2 serves left-into-0,
-  // VMODEM(3)'s two sets serve left-into-1 and left-into-2
-  const leftFork: Array<[number, string, string, string]> = [
-    [VMODEM(2), 'L', 'N', 'K'], // into 0
-    [VMODEM(3), 'H', 'J', 'G'], // into 1
-    [VMODEM(3), 'L', 'N', 'K'], // into 2
+  // left taps: the tall fork sets — requested in the hand-laid order
+  // (VMODEM(2).set2 into 0, then VMODEM(3)'s two sets into 1 and 2)
+  const leftFork = [
+    vmBank.request('changeover'), // into 0
+    vmBank.request('changeover'), // into 1
+    vmBank.request('changeover'), // into 2
   ];
   // 3b-3b: each left tree's tall path gains its mode hops in series after
   // the (NOT-Z-gated) symmetric check: the S bound (left into 0 is out of
   // S's fit range) or S's extra column c-1, then Z's true target columns
   // c+1 / c+2 (dead coils pass through; left into 2 clips c+2 = 4).
   for (const c of [0, 1, 2] as const) {
-    const [vm, vArm, vNc, vNo] = leftFork[c];
+    const { relay: vm, arm: vArm, nc: vNc, no: vNo } = leftFork[c];
     if (c === 0) {
       // 3b-4c: the OVR bypass (see the right tree) — L2/T2 skip the
       // false bottom check; their true columns read further down
