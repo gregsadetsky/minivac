@@ -87,6 +87,32 @@ value-memoized. no live blur filters on animated elements (GPU stalls). the
 future multivac viewer is planned as canvas, browser-side notes in _notes/
 (gitignored, local).
 
+## session conventions (the resurrection kit — a fresh context starts here)
+
+- state lives in the REPO, not the session: ROADMAP.md (every rung +
+  receipts + NEXT), _notes/wider-well.md (the cols work), CLAUDE.md
+  (this file). scratchpads and task lists are ephemeral; anything worth
+  keeping gets committed the moment it proves itself.
+- the page's end-to-end receipt: `scripts/verify-tetris-page.mjs`
+  (playwright vs `npx vite preview --port 4189` after `npm run build`).
+  it includes a STEP-EXACT scripted game checked against a rules model
+  after every keypress — treat it as a gate; it has caught bugs the
+  suite missed (the auto-off wedge, the score race).
+- deploys: fast-forward push a GATED sha to main (`git push origin
+  <sha>:main`), never the branch ref; verify the Pages run concluded
+  success. gate = fast suite + driver + the 5000-circuit sweep (see the
+  commands section). receipts logs go to the scratchpad as
+  mass-/sweep-<sha>-*.txt with exit codes APPENDED inside (piped tails
+  eat exit codes — capture `$?` explicitly, twice bitten).
+- working cadence: autonomous, hourly-or-more self check-ins (send_later
+  when the remote MCP is up, session cron otherwise), each check-in
+  re-arms the next; commit+push at every green checkpoint (the stop
+  hook enforces it).
+- design walls: a clean-context review agent before wiring a risky
+  design paid for itself the first time used (the double clear — 3/4 of
+  the draft refuted with line-verified corrections). trace-test paper
+  claims in the sim BEFORE wiring them.
+
 ## misc
 
 - tests that wait on the wall-clock motor need generous timeouts (parallel
