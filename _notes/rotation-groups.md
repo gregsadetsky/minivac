@@ -106,3 +106,47 @@ test derives; grep for literal ring indices before assuming).
 - DEALER (random pieces) comes LATER on top: a free-running ring
   sampled at START replaces manual selection under auto; selection
   stays for operator play.
+
+
+## CROSS-REVIEW VERDICT (22:20Z): build WITH CHANGES — no reorder
+
+the reviewer confirmed the central premise (the successor map IS the
+slave.K -> master-com wires; the UP network is only the clock path)
+and REFUTED three parts:
+
+1. THE REORDER IS NOT FREE — killed. states 6..11's support spine is
+   hand-laid by index (mirrorTailOf, caps, union memberships, SHR2/3
+   bank pairings, TRP/TT/BCUT/SLJ/ZJT rails) plus ~20 sites in tests,
+   page and driver. keep the CURRENT order; the rotation map is
+   {0,3,4,5} self, 1<->2, and i<->i+3 within 6..11, via SEVEN D-feed
+   changeovers (slaves 2,6,7,8,9,10,11): splice each slave.K wire
+   through a NOTOK-mirror changeover — K -> mux arm; NO -> the normal
+   next master's com; NC -> the rotation partner's com. master coms
+   land at EXACTLY 4/4 (re-audit mechanically).
+2. NOTOK MISSES ROW 0 — SEEDM exists only t>=1 but tokens spawn at
+   row 0. add a parallel mirror on RING(0,2).E's free hole; the chain
+   is rows NC contacts (contacts are ideal wires in the engine; the
+   3-coil misprediction does not apply).
+3. ROOT GATING AS WRITTEN KILLS ITS OWN FLIPS — 2->1 shares MMIR(1)
+   with 0->1, and 9->6 shares MMIR(6) with 5->6. minimal correct set:
+   plain NOTOK contacts at MMIR(4).G and MMIR(5).G only; NOTOK-OR-
+   source-state at MMIR(1).G (the free I2TM set2) and MMIR(6).G (free
+   L2M(1)/L2M(2) sets); every other cross root's SOURCE is a muxed
+   group-last state and is unreachable mid-fall.
+
+also from the review:
+- FIRST delete the four dead pre-emitter stub wire groups (generator
+  ~2485/2486/2491/2495 — POSM3/LEGB fragments, electrically
+  unreachable) — they hold the last free holes on MMIR(1).G/MMIR(5).G.
+- reshapeEntering EXISTS ONLY ON PAPER: the emitter and
+  upResourceCounts carry copy-paste twin inline delta math with the
+  +1 successor hardcoded. parameterize the edge list in ONE shared
+  place; shared branches emit the ROTATION pair's deltas (pre-spawn
+  rails are dark so they serve both contexts) — with an ASSERT that
+  each shared branch's pre-spawn pos range equals its rotation range.
+- restage the 6-col PIECET-fan test (it walks the ring AFTER spawning
+  — correct row-0 NOTOK refuses that); the driver model's mid-fall
+  morph becomes rot-with-refusals + add a rotation probe.
+- new tests: UP held through a spawn tick and a lock tick (the mux
+  flips under both clock phases).
+- budget ~7 relays: NOTOK + ~5 mirrors + the row-0 mirror.
