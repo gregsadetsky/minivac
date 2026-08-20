@@ -13,6 +13,7 @@
 import { chromium } from 'playwright-core';
 
 const BASE = process.env.BASE || 'http://localhost:4189';
+const PCOLS = 6; // the page's well width (bumped with the wider-well rung)
 import { tmpdir } from 'node:os';
 const SHOT_DIR = process.env.SHOT_DIR || tmpdir();
 const SHOT = (n) => `${SHOT_DIR}/shot-${n}.png`;
@@ -51,7 +52,7 @@ const gridState = () =>
   });
 const rows = async () => {
   const g = await gridState();
-  return Array.from({ length: 12 }, (_, r) => g.slice(4 * r, 4 * r + 4).join(''));
+  return Array.from({ length: 12 }, (_, r) => g.slice(PCOLS * r, PCOLS * r + PCOLS).join(''));
 };
 
 await page.goto(`${BASE}/tetris/`);
@@ -94,7 +95,7 @@ const r1 = await rows();
 console.log('field:\n' + r1.join('\n'));
 await page.screenshot({ path: SHOT('vertical-landed') });
 // col 0 rows 6+7 must be amber, nothing else
-if (r1[11] !== 'O...' || r1[10] !== 'O...') throw new Error('vertical write wrong: ' + JSON.stringify(r1));
+if (r1[11] !== 'O.....' || r1[10] !== 'O.....') throw new Error('vertical write wrong: ' + JSON.stringify(r1));
 if (!sawBookkeeping) throw new Error('auto-bookkeeping note never appeared');
 
 // now a 2x2 square: one more ArrowUp (2 tall -> 2x2), move right, drop
@@ -114,14 +115,33 @@ const r2 = await rows();
 console.log('field after 2x2:\n' + r2.join('\n'));
 await page.screenshot({ path: SHOT('square-landed') });
 // square at cols 1-2, rows 6+7, on top of nothing; col 0 keeps its stack
-if (r2[11] !== 'OOO.' || r2[10] !== 'OOO.') throw new Error('2x2 write wrong: ' + JSON.stringify(r2));
+if (r2[11] !== 'OOO...' || r2[10] !== 'OOO...') throw new Error('2x2 write wrong: ' + JSON.stringify(r2));
 
-// third: complete row 7 with a 1x1 at col 3 — the flash must paint while
-// the tick is held, the status must announce the clear, and the COLLAPSE
-// must walk the 2x2 square's rows down into the hole (rung 10)
-// the cycle now passes the staggered pair AND the triples: 2x2 -> S ->
-// Z -> L -> J -> T -> 1x1. entering S auto-steps the register 0 -> 1
-// (S's top pair needs pos>=1); the triples ride through at pos 1.
+// third (6 wide): a SECOND 2x2 at cols 4-5 first, then complete row 11
+// with a 1x1 at col 3 — the flash must paint while the tick is held, the
+// status must announce the clear, and the COLLAPSE must walk the stacked
+// rows down into the hole (rung 10)
+await page.keyboard.press('ArrowRight');
+await waitIdle('sq2a');
+await page.keyboard.press('ArrowRight');
+await waitIdle('sq2b');
+await page.keyboard.press('ArrowRight');
+await waitIdle('sq2c');
+await page.keyboard.press('ArrowRight');
+await waitIdle('sq2d'); // pos 4: bottom cols 4-5
+await page.keyboard.press('Enter');
+await waitIdle('spawnSq2');
+for (let i = 0; i < 16; i++) {
+  await page.keyboard.press('ArrowDown');
+  await waitIdle('tickSq2');
+  if (/enter to spawn/.test(await status())) break;
+}
+const rSq2 = await rows();
+if (rSq2[11] !== 'OOO.OO' || rSq2[10] !== 'OOO.OO')
+  throw new Error('second square wrong: ' + JSON.stringify(rSq2));
+// the cycle passes the staggered pair AND the triples: 2x2 -> S ->
+// Z -> L -> J -> T -> flips -> 1x1; the operator clamps re-position
+// the register per shape along the way.
 await page.keyboard.press('ArrowUp');
 const sS = await waitIdle('shapeS');
 if (!/\bS\b/.test(sS)) throw new Error('expected S, got: ' + sS);
@@ -136,8 +156,12 @@ for (const want of [/\bL\b/, /\bJ\b/, /\bT\b/, /L flip/, /J flip/, /T flip/]) {
 await page.keyboard.press('ArrowUp');
 const s4 = await waitIdle('shape4');
 if (!s4.includes('1x1')) throw new Error('expected 1x1, got: ' + s4);
-// the register sits at col 1 after the S transit: 3 rights still land col 3
-// (the third is a page no-op at the wall)
+// re-home deterministically (the cycle's clamps left the register at a
+// shape-dependent column), then 3 rights = col 3 exactly
+for (let i = 0; i < 5; i++) {
+  await page.keyboard.press('ArrowLeft');
+  await waitIdle('rehome');
+}
 await page.keyboard.press('ArrowRight');
 await waitIdle('move2');
 await page.keyboard.press('ArrowRight');
@@ -147,18 +171,21 @@ await waitIdle('move3b');
 await page.keyboard.press('Enter');
 await waitIdle('spawn3');
 let sawFlash = false;
+let sawCleared = false;
 let finalNote = '';
 for (let i = 0; i < 20; i++) {
   await page.keyboard.press('ArrowDown');
   const t0 = Date.now();
   for (;;) {
     const s = await page.locator('#status').textContent();
-    if (/holding/.test(s)) {
+    if (/line cleared/.test(s)) sawCleared = true;
+    // the token row paints the mask column PIECE-cyan over the fresh
+    // write, so a full row mid-press reads e.g. 'OOOPOO' — and a full
+    // row 11 is visible ONLY during the clear flash, so sample every
+    // poll (the 'holding' status gate raced the shorter native ticks)
+    if (!sawFlash) {
       const rr = await rows();
-      // the token row paints the mask column PIECE-cyan over the fresh
-      // write, so a full row mid-press reads e.g. 'OOOP' — full = no dark
-      // pixel in the row, either color counts
-      if (/^[OP]{4}$/.test(rr[11])) {
+      if (/^[OP]{6}$/.test(rr[11])) {
         sawFlash = true;
         await page.screenshot({ path: SHOT('line-flash') });
       }
@@ -170,16 +197,16 @@ for (let i = 0; i < 20; i++) {
     if (Date.now() - t0 > 30000) throw new Error('clear-phase tick never settled');
     await page.waitForTimeout(25);
   }
-  if (/line cleared|enter to spawn/.test(finalNote)) break;
+  if (sawCleared || /enter to spawn/.test(finalNote)) break;
 }
 console.log('clear-phase final status:', finalNote);
-console.log('saw the full-row flash mid-press:', sawFlash);
+console.log('saw the full-row flash mid-press:', sawFlash, '| cleared note:', sawCleared);
 const r3 = await rows();
 console.log('field after the clear:\n' + r3.join('\n'));
 await page.screenshot({ path: SHOT('after-clear') });
-if (!/line cleared/.test(finalNote)) throw new Error('cleared note missing: ' + finalNote);
+if (!sawCleared) throw new Error('cleared note never seen: ' + finalNote);
 if (!sawFlash) throw new Error('the full-row flash was never painted');
-if (r3[11] !== 'OOO.' || r3[10] !== '....') throw new Error('post-collapse field wrong: ' + JSON.stringify(r3));
+if (r3[11] !== 'OOO.OO' || r3[10] !== '......') throw new Error('post-collapse field wrong: ' + JSON.stringify(r3));
 
 // fourth: the sideways-overlap guard. Landing and locking are one merged
 // tick, so a piece never parks at its rest row — the steerable moments are
@@ -198,7 +225,7 @@ for (let i = 0; i < 14; i++) {
   if (/enter to spawn/.test(await status())) break;
 }
 const mid = await rows();
-if (mid[10] !== '..O.') throw new Error('probe setup wrong (want row10 col2): ' + JSON.stringify(mid));
+if (mid[10] !== '..O...') throw new Error('probe setup wrong (want row10 col2): ' + JSON.stringify(mid));
 await page.keyboard.press('ArrowRight'); // re-homed: col 3 = 3 rights
 await waitIdle('move5a');
 await page.keyboard.press('ArrowRight');
@@ -236,7 +263,7 @@ for (let i = 0; i < 20; i++) {
 }
 const r5 = await rows();
 console.log('field after the second clear:\n' + r5.join('\n'));
-if (r5[11] !== '..O.' || r5[10] !== '....') throw new Error('second collapse wrong: ' + JSON.stringify(r5));
+if (r5[11] !== '..O...' || r5[10] !== '......') throw new Error('second collapse wrong: ' + JSON.stringify(r5));
 
 // FIFTH: the staggered S itself (shapes rung 3b on the page). Cycle
 // 1x1 -> ... -> S (4 ups), spawn at pos 1 (bottom cols 1-2, top cols 0-1),
@@ -256,9 +283,9 @@ await waitIdle('tickS1');
 await page.keyboard.press('ArrowDown');
 await waitIdle('tickS2');
 const rS = await rows();
-const tokRow = rS.findIndex((r) => r === '.PP.');
+const tokRow = rS.findIndex((r) => r === '.PP...');
 console.log('mid-fall S preview:\n' + rS.slice(0, 4).join('\n'));
-if (tokRow < 1 || rS[tokRow - 1] !== 'PP..')
+if (tokRow < 1 || rS[tokRow - 1] !== 'PP....')
   throw new Error('staggered preview wrong: ' + JSON.stringify(rS));
 await page.screenshot({ path: SHOT('s-midfall') });
 for (let i = 0; i < 16; i++) {
@@ -269,7 +296,7 @@ for (let i = 0; i < 16; i++) {
 const r6 = await rows();
 console.log('field after the S locks:\n' + r6.join('\n'));
 await page.screenshot({ path: SHOT('s-landed') });
-if (r6[11] !== '..O.' || r6[10] !== '.OO.' || r6[9] !== 'OO..')
+if (r6[11] !== '..O...' || r6[10] !== '.OO...' || r6[9] !== 'OO....')
   throw new Error('staggered S write wrong: ' + JSON.stringify(r6));
 
 // SIXTH: auto-gravity — a timer cycles the tick slide at operator
@@ -365,7 +392,7 @@ console.log('post-auto manual play verified: the grid moved on a manual tick');
 // cell falling in, and the next spawn after the clear.
 await page.goto(`${BASE}/tetris/`);
 await waitIdle('boot2', 60000);
-const NR = 12, NC = 4;
+const NR = 12, NC = PCOLS;
 const model = {
   field: Array.from({ length: NR }, () => Array(NC).fill(false)),
   piece: null, // {ix, pos, row}
@@ -445,12 +472,16 @@ const expectGrid = async (stepLabel) => {
   if (got.join('|') !== want.join('|'))
     throw new Error(`step-exact mismatch at ${stepLabel}:\n got ${got.join('|')}\nwant ${want.join('|')}`);
 };
-// the script: 1x1 to col3; 2wide to cols1-2; 2tall at col0 clears row 11
+// the script (6 wide): 1x1 to col5; 2wide at 3-4, then 1-2; the 2tall
+// at col0 completes row 11 -> clears (its top survives at row 10)
 const script = [
-  'Enter', 'ArrowDown', 'ArrowRight', 'ArrowRight', 'ArrowRight',
-  ...Array(11).fill('ArrowDown'), // 10 falls + the merged land+lock
+  'Enter', 'ArrowDown', ...Array(5).fill('ArrowRight'),
+  ...Array(11).fill('ArrowDown'), // falls + the merged land+lock at (11,5)
   'ArrowUp', // ring -> 2wide (pre-spawn)
   'ArrowDown', // spawn
+  ...Array(3).fill('ArrowRight'), // pos 3 (bottom 3,4)
+  ...Array(11).fill('ArrowDown'),
+  'ArrowDown', // spawn (still 2wide)
   'ArrowRight', // pos 1 (bottom 1,2)
   ...Array(11).fill('ArrowDown'),
   'ArrowUp', // -> 2tall
@@ -481,10 +512,13 @@ try {
   model.piece = null; model.armed = false; model.shapeIx = 0;
   const dc = [
     'ArrowUp', 'ArrowUp', 'ArrowUp', // -> O
-    'Enter', 'ArrowDown', ...Array(11).fill('ArrowDown'), // square 1 floor left
+    'Enter', 'ArrowDown', ...Array(11).fill('ArrowDown'), // square 1 at 0-1
     'ArrowDown', // spawn 2
     'ArrowRight', 'ArrowRight',
-    ...Array(11).fill('ArrowDown'), // square 2: completes BOTH rows
+    ...Array(11).fill('ArrowDown'), // square 2 at 2-3
+    'ArrowDown', // spawn 3
+    ...Array(4).fill('ArrowRight'),
+    ...Array(11).fill('ArrowDown'), // square 3 at 4-5: completes BOTH rows
   ];
   for (let i = 0; i < dc.length; i++) {
     await page.keyboard.press(dc[i]);

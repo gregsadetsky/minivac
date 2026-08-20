@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET, SHAPES, shapeRange } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -2264,6 +2264,151 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
   // pressing START while holding the tick slide), and taking the AUTO
   // slide back mid-release freezes the line high forever (time stops, the
   // cap never drains) — manual ticks and STARTs are all dead against it.
+  // the wider well: the same circuit generator at cols=6. every fan mask
+  // is checked against the geometry (SHAPES/shapeRange are the single
+  // source of truth the emitters compile from), including the staggered
+  // seam, the triples spanning the new columns, both overhang forms, and
+  // a bound refusal at T2's six-col maximum. the 2026-08-20 bring-up
+  // caught four collision classes here: per-row contact-set fans capped
+  // at 4 (MIRB/MIRC/MIRCT/the cut families), a composite take with baked
+  // per-column offsets (PIECET/LEGB), a hand splice entering a chain's
+  // 4-col tail (VMODEM), and the topmask slides overflowing onto the WID
+  // slide's section (a slide T jack is a permanent tie).
+  it('the six-wide well: fans, overhangs and bounds from the geometry (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const COLS6 = 6;
+    const { wires, layout: L, btnMachine } = tetrisCircuit(8, COLS6);
+    const m = new MinivacSimulator(wires, false, L.machines);
+    m.initialize();
+    const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+    const pos6 = () => {
+      for (let j = 0; j < COLS6; j++) if (rel(L.POSS(j))) return j;
+      return -1;
+    };
+    const shape6 = () => {
+      for (let i = 0; i < 12; i++) {
+        const sl = i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : L.SHR3(i, 2);
+        if (rel(sl)) return i;
+      }
+      return -1;
+    };
+    const press6 = (b: number, mm: number) => {
+      m.pressButton(b, mm);
+      m.releaseButton(b, mm);
+    };
+    const tick6 = () => {
+      m.setSlide(5, 'right', 1);
+      m.setSlide(5, 'left', 1);
+    };
+    const bank = (acc: (j: number) => number) => [...Array(COLS6)].map((_, j) => rel(acc(j))).join('');
+    const expectMask = (ix: number, p: number, kind: 'b' | 't') => {
+      const sh = SHAPES[ix];
+      const a = Array(COLS6).fill('0');
+      const [off, wd] = kind === 'b' ? [sh.bOff, sh.bW] : [sh.tOff, sh.tW];
+      for (let k = 0; k < wd; k++) if (p + off + k >= 0 && p + off + k < COLS6) a[p + off + k] = '1';
+      return a.join('');
+    };
+    const walkTo = (ix: number, tp: number) => {
+      let g = 0;
+      while (shape6() !== ix && g++ < 30) {
+        const r = shapeRange(SHAPES[(shape6() + 1) % 12], COLS6);
+        let g2 = 0;
+        while (pos6() < r.min && g2++ < 8) press6(4, btnMachine);
+        while (pos6() > r.max && g2++ < 8) press6(3, btnMachine);
+        press6(2, btnMachine);
+      }
+      let g3 = 0;
+      while (pos6() < tp && g3++ < 8) press6(4, btnMachine);
+      while (pos6() > tp && g3++ < 8) press6(3, btnMachine);
+      expect(shape6(), `walked to state ${ix}`).toBe(ix);
+      expect(pos6(), `walked to pos ${tp}`).toBe(tp);
+    };
+    press6(6, 1);
+    tick6();
+    for (const [ix, p, label] of [
+      [4, 2, 'S at the seam'], [4, 4, 'S in the new columns'], [6, 3, 'L1 spanning 3-5'],
+      [8, 3, 'T1 at 3'], [9, 3, 'L2 overhang'], [11, 3, 'T2 at its max'],
+    ] as [number, number, string][]) {
+      walkTo(ix, p);
+      expect(bank(L.PIECE), `${label}: B fan`).toBe(expectMask(ix, p, 'b'));
+      expect(bank(L.PIECET), `${label}: T fan`).toBe(expectMask(ix, p, 't'));
+    }
+    // the bound: T2's top spans p..p+2, so pos 4 must refuse at 6 cols
+    press6(4, btnMachine);
+    expect(pos6(), 'T2 refused past its six-col maximum').toBe(3);
+    // and the overhang writes through the new columns
+    for (let t = 0; t < 12; t++) {
+      tick6();
+      let live = false;
+      for (let i = 0; i < 8; i++) if (rel(L.RING(i, 2))) live = true;
+      if (!live) break;
+    }
+    const row6 = (r: number) => [...Array(COLS6)].map((_, j) => rel(L.CELL(r, j))).join('');
+    expect(row6(7), 'T2 bottom at p+1').toBe('000010');
+    expect(row6(6), 'T2 top across p..p+2').toBe('000111');
+    expect(m.getState().alerts).toEqual([]);
+
+    // the six-wide CLEAR, fresh machine: three 2-row pieces stack rows
+    // 6-7 at {0,1,2,4,5}, a 1x1 at col 3 completes row 7 -> it clears,
+    // row 6 falls in, and the register stays ONE-HOT through every
+    // reset. pins the two 6-col bring-up bugs: POSRST's re-home NCs
+    // read past the bank at j>=4 (slaves survived resets, the register
+    // went multi-hot -> all-columns pieces and mid-air locks) and the
+    // collapse beta trigger fired W(t-1,2) — breaker-0 only at 4 cols.
+    const m2 = new MinivacSimulator(wires, false, L.machines);
+    m2.initialize();
+    const rel2 = (i: number) => (m2.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+    const poss2 = () => [...Array(COLS6)].map((_, j) => rel2(L.POSS(j))).join('');
+    const shape2 = () => {
+      for (let i = 0; i < 12; i++) {
+        const sl = i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : L.SHR3(i, 2);
+        if (rel2(sl)) return i;
+      }
+      return -1;
+    };
+    const pos2 = () => poss2().indexOf('1');
+    const press2 = (b: number, mm: number) => {
+      m2.pressButton(b, mm);
+      m2.releaseButton(b, mm);
+    };
+    const tick2 = () => {
+      m2.setSlide(5, 'right', 1);
+      m2.setSlide(5, 'left', 1);
+    };
+    const live2 = () => {
+      for (let i = 0; i < 8; i++) if (rel2(L.RING(i, 2))) return true;
+      return false;
+    };
+    const drop2 = (ix: number, p: number) => {
+      let g = 0;
+      while (shape2() !== ix && g++ < 30) {
+        const r = shapeRange(SHAPES[(shape2() + 1) % 12], COLS6);
+        let g2 = 0;
+        while (pos2() < r.min && g2++ < 8) press2(4, btnMachine);
+        while (pos2() > r.max && g2++ < 8) press2(3, btnMachine);
+        press2(2, btnMachine);
+      }
+      press2(6, 1);
+      tick2();
+      let g3 = 0;
+      while (pos2() < p && g3++ < 8) press2(4, btnMachine);
+      while (pos2() > p && g3++ < 8) press2(3, btnMachine);
+      for (let t = 0; t < 45; t++) {
+        tick2();
+        if (!live2() && !rel2(L.LKS) && !rel2(L.LANE)) break;
+      }
+      expect(poss2(), `one-hot register after the drop at ${p}`).toBe('100000');
+    };
+    drop2(2, 0); // 2tall at 0
+    drop2(3, 1); // 2x2 at 1-2
+    drop2(3, 4); // 2x2 at 4-5
+    drop2(0, 3); // the 1x1 completes row 7
+    const row2 = (r: number) => [...Array(COLS6)].map((_, j) => rel2(L.CELL(r, j))).join('');
+    expect(row2(7), 'row 7 cleared and row 6 fell in').toBe('111011');
+    expect(row2(6), 'row 6 emptied by the collapse').toBe('000000');
+    expect(m2.getState().alerts).toEqual([]);
+  });
+
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const auto = (g: ReturnType<typeof makeGame>, on: boolean) =>

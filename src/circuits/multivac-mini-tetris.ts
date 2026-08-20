@@ -473,6 +473,7 @@ export interface TetrisLayout {
   MIRCX: (r: number, k: number) => number; MIRCX_CAP: number;
   MIRCTX: (r: number, k: number) => number; MIRCTX_CAP: number;
   CUTX: (f: number, k: number) => number; CUTX_CAP: number;
+  POSRSTX: (k: number) => number; POSRSTX_CAP: number;
   UPPOS: number; UPPOS_CAP: number;
   UPREAD: number; UPREAD_CAP: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
@@ -571,6 +572,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const mircXBase = take(mirbExtra * (rows - 1)); // occupancy token gates beyond MIRC x2
   const mirctXBase = take(mirbExtra * (rows - 2)); // top-rail gates beyond MIRCT x2
   const cutXBase = take(mirbExtra * 5); // 5 cut families x extra pairs beyond cols 4
+  const posrstXBase = take(mirbExtra); // reset re-home NCs beyond POSRST x2
   const upC = upResourceCounts(cols);
   const upPosBase = take(upC.posTotal); // UP-transition pos fan mirrors
   const upReadBase = take(upC.readTotal); // UP-transition delta reads
@@ -664,6 +666,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
     CUTX: (f, k) => cutXBase + 5 * k + f, CUTX_CAP: mirbExtra * 5,
+    POSRSTX: k => posrstXBase + k, POSRSTX_CAP: mirbExtra,
     UPPOS: upPosBase, UPPOS_CAP: upC.posTotal,
     UPREAD: upReadBase, UPREAD_CAP: upC.readTotal,
     btnMachine: Math.ceil(n / 6),
@@ -780,6 +783,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
   for (let k = 0; k < L8.CUTX_CAP; k++) claim('CUTX', L8.CUTX(0, 0) + k);
+  for (let k = 0; k < L8.POSRSTX_CAP; k++) claim('POSRSTX', L8.POSRSTX(k));
   for (let k = 0; k < L8.UPPOS_CAP; k++) claim('UPPOS', L8.UPPOS + k);
   for (let k = 0; k < L8.UPREAD_CAP; k++) claim('UPREAD', L8.UPREAD + k);
 
@@ -801,7 +805,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     RAILGATE2, RSTM2, CPSET, VMODE, TOPW,
     P2M, P2S, P2CLR, P2GATE, P2COL, TICKM2, P2CUT, LINEDLY,
     ELEVC, ELEVA, ELEVSL, SEEDM, CLEARPM, LANE, TICKM3, TGM, TGS,
-    LINEDLY2, CPSET2, CLEARP2, CLEARPM2, SCPM, P2SM, CLEARPM2B, CLEARPM2C, P2SM2, SEEDM2, MIRBX, MIRCX, MIRCTX, CUTX,
+    LINEDLY2, CPSET2, CLEARP2, CLEARPM2, SCPM, P2SM, CLEARPM2B, CLEARPM2C, P2SM2, SEEDM2, MIRBX, MIRCX, MIRCTX, CUTX, POSRSTX,
     ELEVW1, ELEVW2, CGA, CGB, CGB2, CUTC1, CUTC2, JUNC,
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
@@ -882,7 +886,16 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     // triggers, not the decoder)
     if (r < 8) w.push(`${sel[r]}/${comA}`);
     for (let k = 0; k < 2 * nGates; k++) {
-      const src = k < nGates ? comA : comB;
+      // com holes are finite (4): each com feeds its first TWO coils
+      // directly and the rest chain E-to-E — identical wiring at 4 cols
+      const src =
+        k < nGates
+          ? k < 2
+            ? comA
+            : R(W(r, k - 1), 'E')
+          : k < nGates + 2
+            ? comB
+            : R(W(r, k - 1), 'E');
       w.push(`${src}/${R(W(r, k), 'E')}`, `${R(W(r, k), 'F')}/${minusOf(W(r, k))}`);
     }
     for (let j = 0; j < cols; j++) {
@@ -1294,7 +1307,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // the decoder leaf dead-ends at the released WRITE button).
   for (let r = 1; r < rows; r++) {
     w.push(`${tap(p2gate, p2gUse)}/${R(TOPW(r), 'H')}`, `${R(TOPW(r), 'G')}/${R(W(r - 1, 0), 'E')}`);
-    w.push(`${tap(p2break, p2bUse)}/${R(TOPW(r), 'L')}`, `${R(TOPW(r), 'K')}/${comOf(W(r - 1, 2))}`);
+    w.push(`${tap(p2break, p2bUse)}/${R(TOPW(r), 'L')}`, `${R(TOPW(r), 'K')}/${comOf(W(r - 1, nGates))}`); // the breaker com, cols-general
   }
 
   // ---------- row collapse (rung 10) C1: the elevator chain + seeding ----
@@ -1483,7 +1496,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     const destTarget = t === rows - 1 ? R(W(rows - 1, 1), 'E') : comOf(JUNC(t - 1));
     w.push(`${tap(collapseA, caUse)}/${R(ELEVW2(t), 'H')}`, `${R(ELEVW2(t), 'G')}/${destTarget}`);
     // source breakers: comB of row t-1 (its coil jack's spare hole)
-    w.push(`${tap(cgbRail2, cb2Use)}/${R(ELEVW2(t), 'L')}`, `${R(ELEVW2(t), 'K')}/${R(W(t - 1, 2), 'E')}`);
+    w.push(`${tap(cgbRail2, cb2Use)}/${R(ELEVW2(t), 'L')}`, `${R(ELEVW2(t), 'K')}/${R(W(t - 1, nGates), 'E')}`); // the FIRST BREAKER (k=2 was breaker-0 only at 4 cols; at 6 it is a gate — the un-broken source row duplicated, caught by the 6-wide driver)
   }
   for (let x = 1; x <= rows - 2; x++) {
     w.push(`${R(W(x, 1), 'E')}/${comOf(JUNC(x - 1))}`);
@@ -1570,9 +1583,21 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // slides are gone)
   w.push(`${plusOf(TWIN)}/${R(TWIN, 'L')}`, `${R(TWIN, 'N')}/${R(POSRST(0), 'H')}`);
   w.push(`${R(POSRST(0), 'H')}/${R(POSRST(0), 'L')}`, `${R(POSRST(0), 'L')}/${R(POSRST(1), 'H')}`, `${R(POSRST(1), 'H')}/${R(POSRST(1), 'L')}`);
-  // one NC per column: POSRST(0) covers 0-1, POSRST(1) 2-3 (phase C grows)
+  // one NC per column: POSRST(0) covers 0-1, POSRST(1) 2-3; wider wells
+  // mint POSRSTX pairs (at 6 the old floor(j/2) read past the bank into
+  // TWIN's contacts — slaves 4-5 SURVIVED every re-home and the register
+  // went multi-hot: the all-columns piece, refused steering, mid-air locks)
+  for (let k = 0; k < Math.ceil(cols / 2) - 2; k++) {
+    const rx = POSRSTX(k);
+    const prevArm = k === 0 ? R(POSRST(1), 'L') : R(POSRSTX(k - 1), 'L');
+    w.push(`${prevArm}/${R(rx, 'H')}`, `${R(rx, 'H')}/${R(rx, 'L')}`);
+    w.push(
+      k === 0 ? `${R(POSRST(1), 'E')}/${R(rx, 'E')}` : `${R(POSRSTX(k - 1), 'E')}/${R(rx, 'E')}`,
+      `${R(rx, 'F')}/${minusOf(rx)}`
+    );
+  }
   for (let j = 0; j < cols; j++) {
-    const rr = POSRST(Math.floor(j / 2));
+    const rr = j < 4 ? POSRST(Math.floor(j / 2)) : POSRSTX(Math.floor((j - 4) / 2));
     const nc = j % 2 === 0 ? 'J' : 'N';
     w.push(`${R(rr, nc)}/${R(POSS(j), 'H')}`, `${R(POSS(j), 'G')}/${comOf(POSS(j))}`);
     w.push(`${comOf(POSS(j))}/${R(POSS(j), 'E')}`, `${R(POSS(j), 'F')}/${minusOf(POSS(j))}`);

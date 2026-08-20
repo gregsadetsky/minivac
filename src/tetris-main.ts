@@ -34,9 +34,9 @@ import { tetrisCircuit, SHAPES, shapeRange } from './circuits/multivac-mini-tetr
 setSolverEngine('fast');
 
 const ROWS = 12; // the tall well (rung 11): the generator is rows-parameterized
-const COLS = 4;
+const COLS = 6; // the wider well (was 4; the generator + emitters are cols-general)
 
-const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS);
+const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS, COLS);
 const loc = (n: number) => ({ machine: Math.floor(n / 6), index: n % 6 });
 const IO = {
   tick: { slide: 5, machine: 1 },
@@ -172,7 +172,7 @@ function mask(): number {
   if (p < 0) return 0;
   const sh = p + s.bOff;
   if (sh < 0 || sh + s.bW > COLS) return 0; // mirrors the fan's omitted terms
-  return (((1 << s.bW) - 1) << sh) & 0b1111;
+  return (((1 << s.bW) - 1) << sh) & ((1 << COLS) - 1);
 }
 
 function topMask(): number {
@@ -184,7 +184,7 @@ function topMask(): number {
   // re-homes the register, before the operator steps back in bounds
   const sh = p + s.tOff;
   if (sh < 0 || sh + s.tW > COLS) return 0;
-  return (((1 << s.tW) - 1) << sh) & 0b1111;
+  return (((1 << s.tW) - 1) << sh) & ((1 << COLS) - 1);
 }
 
 function press(b: { button: number; machine: number }) {
