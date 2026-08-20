@@ -480,13 +480,32 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    receipts: five occupancy transitions each blocked then allowed a row
    later; fit-range refusals; the register held through refusals; the
    whole file + check + playwright green. 414 relays / 71 machines.
-   NEXT (3b-4): grow the ring to the full 2-row-box family — L/J/T x2
-   orientations each = 12 states (L2/J2/T2 are the overhang forms with
-   3-wide TOPS and offset single bottoms). sub-increments: 4a ring+fans+
-   writes (documented steering gap for the new top classes, the 3b-1
-   precedent), 4b legality re-classed per top geometry (the S/Z-specific
-   NOT-gates generalize to per-class read banks), 4c the transition
-   branches. design in _notes/shapes-design.md; MASS at the rung close.
+   L, J AND T LANDED 2026-08-20, same session (3b-4a): the ring grew to
+   NINE states — the upright triples (3-wide bottoms, one-cell stems at
+   left/right/center) append after Z. one TRP rail feeds their five
+   IDENTICAL memberships (WIDM, VMODE, STAG — which now means "phase 2
+   reads the T fan" — the new WID3 third-column taps, and the steering
+   cut); the B fan is CUMULATIVE (base column + WIDM adds p+1 + WID3
+   adds p+2), the T fan gained six stem branches, and the transition
+   network grew branches into each triple reading its delta cells (the
+   T1-to-1x1 wrap is free: fully covered). steering a triple is CUT AT
+   THE BUTTON MIRRORS until 4b re-classes the legality trees — position
+   first, then shape; the cut sits at the mirrors and NOT the sample bus
+   because a sampleless press still runs TWIN's release window and would
+   wipe the register (the increment-2 hazard, nearly repeated on paper).
+   the page's SHAPES became (bottomWidth, topOffset, topWidth) geometry
+   tuples; the playwright driver caught a page bug (shapeRelay mapped
+   the triples through the 6-state accessor into unrelated relays — the
+   machine stepped, the page read garbage). receipts: the 9-state walk
+   asserting rails and both fans per state, an L-J-T tower with all
+   three stems, a mid-fall triple entry refused on a stored delta cell,
+   whole file + check + driver green. 449 relays / 76 machines.
+   NEXT: 3b-4b — the overhang trio (L2/J2/T2: 3-wide TOPS, offset single
+   bottoms — BCUT suppresses the base column, a TT rail drives triple
+   tops) and/or the legality re-classing that frees triple steering and
+   kills the NS cut. design in _notes/shapes-design.md; MASS receipts
+   are being restructured (the dense 12-row game crossed 2h — the sweep
+   + a short dense scenario will carry the gate).
 
 ## display/input notes
 
