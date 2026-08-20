@@ -545,9 +545,30 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    pos mirrors as two-hot-at-boot). receipts: the 12-state walk, L2+J2
    locks stacked on each other's stems, T2 steering refused-then-allowed
    under a tower, file/check/playwright green. 502 relays / 85 machines.
-   NEXT: deploy the whole ring arc once the restructured receipts land;
-   then the ladder's next rungs — the canvas multivac viewer, column
-   scaling (a wider well), or capacitor-timed self-ticking.
+   THE MACHINE TICKS ITSELF (3b-5) LANDED 2026-08-20, same session:
+   CAPACITOR GRAVITY. a two-relay slow-release oscillator on the REAL
+   capacitor bank — TOSC's coil parallels four paralleled 500uF sections
+   and is fed through TDRV's NC; TDRV follows TOSC and its second set
+   bridges + onto the tick net exactly as the tick slide's closure does
+   (the compatibility-OR again — the slide stays live). under stepTime:
+   the supply recharges the bank in ONE backward-euler step (A-stable,
+   no overshoot), the pair latches tick-HIGH while the bank drains
+   through the 55-ohm coil (~hundreds of ms), and the dropout transition
+   BUZZES — a real relay oscillator buzzes; the chatter pins de-energized
+   (the device-verified book-IV class) leaving one clean tick-LOW step,
+   then the cycle repeats. AUTO = the slide on TOSC's own section; the
+   two relays landed exactly in m83's last two free sections (504 relays,
+   still 85 machines). the page's 'a' key opens the time faucet (an
+   interval feeding wall-clock dt into stepTime) — the OSCILLATOR does
+   all the ticking, lock bookkeeping included; steering and reshaping
+   keep working mid-fall. receipts: engine parity on the oscillator
+   (sparse and fast agree edge-for-edge and cap-voltage-exact), hands-off
+   gameplay from a single START press, AUTO-off freezes gravity, whole
+   file + check + playwright hands-off scenario green. the scratch
+   experiment that gated the design: the first stepTime run ever to
+   drive the game (nothing in the browser had called it before).
+   NEXT: deploy the two pending arcs as receipts land; then the canvas
+   multivac viewer or column scaling (a wider well).
 
 ## display/input notes
 
