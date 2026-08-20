@@ -232,6 +232,19 @@ bounds and transitions all derive from the SHAPES tuple; the allocator
 owns every resource map. that closes the phase C design — remaining
 work is implementation.
 
+## prerequisite before the emitters: flip the constant direction
+
+the C emitters change bank SIZES at cols=4 (minimal checks drop the
+belt-and-braces relays), which shifts every baked constant after the
+first changed bank — the eq() gates would throw at module load. so
+BEFORE any emitter lands: make tetrisLayout primary and DERIVE the
+exported constants (`const L8 = tetrisLayout(8); export const SHR =
+L8.SHR; ...`), delete the eq() block (tautological then), keep the
+claim registry (it guards overlaps on the derived values). consumers
+(TETRIS_IO, the test file) import names/functions, never hard numbers
+— safe. gates: netlist byte-identity + tsc + fast file. bounded
+(~250 lines of mechanical rewiring), do it as its own commit.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
