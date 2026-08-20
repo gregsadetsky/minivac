@@ -233,6 +233,17 @@ export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
   min: Math.max(0, -s.bOff, s.tW > 0 ? -s.tOff : 0),
   max: Math.min(cols - s.bOff - s.bW, s.tW > 0 ? cols - s.tOff - s.tW : cols),
 });
+// the cells a step must check, as OFFSETS from the target position q:
+// stepping RIGHT enters bottom q+bOff+bW-1 (its rightmost bottom cell)
+// and top q+tOff+tW-1; LEFT enters q+bOff and q+tOff. every other
+// footprint cell was already covered (or is the piece's own, which can
+// never coexist with stored content). the step-tree emitter instantiates
+// these per interior column; verified against three hand-laid trees
+// (_notes/wider-well.md, the check tables).
+export const stepEntering = (s: (typeof SHAPES)[number], dir: 1 | -1) => ({
+  b: dir > 0 ? s.bOff + s.bW - 1 : s.bOff,
+  t: s.tW > 0 ? (dir > 0 ? s.tOff + s.tW - 1 : s.tOff) : null,
+});
 export const SHR2 = L8.SHR2; // states 6..8: clk, master, slave (415..423)
 export const MMIR2 = L8.MMIR2; // into-6..8 transition gates (424..426)
 // POSM5 set map (7 pos0 + 7 pos1 uses): k=0 B-fan PIECE(2) + T-fan L1;
