@@ -469,6 +469,10 @@ export interface TetrisLayout {
   FANPOS: number; FANPOS_CAP: number;
   FANRAIL: number; FANRAIL_CAP: number;
   FANMIR: number; FANMIR_CAP: number;
+  MIRBX: (r: number, k: number) => number; MIRBX_CAP: number;
+  MIRCX: (r: number, k: number) => number; MIRCX_CAP: number;
+  MIRCTX: (r: number, k: number) => number; MIRCTX_CAP: number;
+  CUTX: (f: number, k: number) => number; CUTX_CAP: number;
   UPPOS: number; UPPOS_CAP: number;
   UPREAD: number; UPREAD_CAP: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
@@ -539,7 +543,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const vmodemBase = take(cols);
   const gomBase = take(3); // GOM, GAMEOVER, LKM2 — appended after the tall-well layout shipped
   const scBase = take(31); // the score ring: 10 digits x (clk, master, slave) + SCBOOT
-  const stagBase = take(17); // PIECET x4, CUTC5/6, STAGM, CUTB1..4, CUTBD, LEGB x4, STAGM2
+  const stagBase = take(2 * cols + 9); // PIECET x cols, CUTC5/6, STAGM, CUTB1..4, CUTBD, LEGB x cols, STAGM2
   const shrBase = take(20); // the shape ring: 6 states x (clk, master, slave) + UPM + SHBOOT
   const smBase = take(15); // state mirrors SM x4, ZM x4, OM, I2TM, I2WM + POSM3 x4
   const ltBase = take(12); // 3b-3b: LTS x2, LTZ x4, SG x2, ZG x4
@@ -561,6 +565,11 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const fanPosBase = take(4 * cols); // per-position mirror banks
   const fanRailBase = take(4); // T-fan offset rails (T-1, T0, T1, T2)
   const fanMirBase = take(6 * Math.ceil(cols / 2) + 8); // rail mirrors (private tap sets)
+  const mirbExtra = Math.max(0, Math.ceil(cols / 2) - 2); // collision mirrors beyond MIRB/MIRB2
+  const mirbXBase = take(mirbExtra * (rows - 1));
+  const mircXBase = take(mirbExtra * (rows - 1)); // occupancy token gates beyond MIRC x2
+  const mirctXBase = take(mirbExtra * (rows - 2)); // top-rail gates beyond MIRCT x2
+  const cutXBase = take(mirbExtra * 5); // 5 cut families x extra pairs beyond cols 4
   const upC = upResourceCounts(cols);
   const upPosBase = take(upC.posTotal); // UP-transition pos fan mirrors
   const upReadBase = take(upC.readTotal); // UP-transition delta reads
@@ -617,8 +626,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     VMODEM: p => vmodemBase + p,
     GOM: gomBase, GAMEOVER: gomBase + 1, LKM2: gomBase + 2,
     SCR: (i, part) => scBase + 3 * i + part, SCBOOT: scBase + 30,
-    PIECET: j => stagBase + j, CUTC5: stagBase + 4, CUTC6: stagBase + 5, STAGM: stagBase + 6, CUTB1: stagBase + 7, CUTB2: stagBase + 8, CUTB3: stagBase + 9, CUTB4: stagBase + 10, CUTBD: stagBase + 11,
-    LEGB: j => stagBase + 12 + j, STAGM2: stagBase + 16,
+    PIECET: j => stagBase + j, CUTC5: stagBase + cols, CUTC6: stagBase + cols + 1, STAGM: stagBase + cols + 2, CUTB1: stagBase + cols + 3, CUTB2: stagBase + cols + 4, CUTB3: stagBase + cols + 5, CUTB4: stagBase + cols + 6, CUTBD: stagBase + cols + 7,
+    LEGB: j => stagBase + cols + 8 + j, STAGM2: stagBase + 2 * cols + 8,
     SHR: (i, part) => shrBase + 3 * i + part, UPM: shrBase + 18, SHBOOT: shrBase + 19,
     SM: k => smBase + k, ZM: k => smBase + 4 + k,
     OM: smBase + 8, I2TM: smBase + 9, I2WM: smBase + 10,
@@ -650,6 +659,10 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     FANPOS: fanPosBase, FANPOS_CAP: 4 * cols,
     FANRAIL: fanRailBase, FANRAIL_CAP: 4,
     FANMIR: fanMirBase, FANMIR_CAP: 6 * Math.ceil(cols / 2) + 8,
+    MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
+    MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
+    MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
+    CUTX: (f, k) => cutXBase + 5 * k + f, CUTX_CAP: mirbExtra * 5,
     UPPOS: upPosBase, UPPOS_CAP: upC.posTotal,
     UPREAD: upReadBase, UPREAD_CAP: upC.readTotal,
     btnMachine: Math.ceil(n / 6),
@@ -759,6 +772,10 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let k = 0; k < L8.FANPOS_CAP; k++) claim('FANPOS', L8.FANPOS + k);
   for (let k = 0; k < L8.FANRAIL_CAP; k++) claim('FANRAIL', L8.FANRAIL + k);
   for (let k = 0; k < L8.FANMIR_CAP; k++) claim('FANMIR', L8.FANMIR + k);
+  for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
+  for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
+  for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
+  for (let k = 0; k < L8.CUTX_CAP; k++) claim('CUTX', L8.CUTX(0, 0) + k);
   for (let k = 0; k < L8.UPPOS_CAP; k++) claim('UPPOS', L8.UPPOS + k);
   for (let k = 0; k < L8.UPREAD_CAP; k++) claim('UPREAD', L8.UPREAD + k);
 
@@ -780,7 +797,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     RAILGATE2, RSTM2, CPSET, VMODE, TOPW,
     P2M, P2S, P2CLR, P2GATE, P2COL, TICKM2, P2CUT, LINEDLY,
     ELEVC, ELEVA, ELEVSL, SEEDM, CLEARPM, LANE, TICKM3, TGM, TGS,
-    LINEDLY2, CPSET2, CLEARP2, CLEARPM2, SCPM, P2SM, CLEARPM2B, CLEARPM2C, P2SM2, SEEDM2,
+    LINEDLY2, CPSET2, CLEARP2, CLEARPM2, SCPM, P2SM, CLEARPM2B, CLEARPM2C, P2SM2, SEEDM2, MIRBX, MIRCX, MIRCTX, CUTX,
     ELEVW1, ELEVW2, CGA, CGB, CGB2, CUTC1, CUTC2, JUNC,
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
@@ -1054,9 +1071,18 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${tap(railB0p, bpUse)}/${R(MIRA(r), 'H')}`, `${R(MIRA(r), 'G')}/${comOf(W(r, 0))}`);
     w.push(`${tap(railB0, b0Use)}/${R(MIRA(r), 'L')}`, `${R(MIRA(r), 'K')}/${comOf(W(r, nGates))}`);
     if (r < rows - 1) {
-      // one contact set per column: MIRB carries columns 0-1, MIRB2 2-3
-      // (a wider well needs more mirrors per row — phase C grows the bank)
+      // one contact set per column: MIRB carries columns 0-1, MIRB2 2-3,
+      // and MIRBX mints ceil(cols/2)-2 more per row for the wider well
+      // (coils chain onto the mirror com net's free hole, then E-to-E)
       const mirs = [MIRB(r), MIRB2(r)];
+      for (let k = 0; k < Math.ceil(cols / 2) - 2; k++) {
+        const mx = MIRBX(r, k);
+        w.push(
+          k === 0 ? `${comOf(MIRB(r))}/${R(mx, 'E')}` : `${R(MIRBX(r, k - 1), 'E')}/${R(mx, 'E')}`,
+          `${R(mx, 'F')}/${minusOf(mx)}`
+        );
+        mirs.push(mx);
+      }
       for (let j = 0; j < cols; j++) {
         const mr = mirs[Math.floor(j / 2)];
         const [arm, no] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
@@ -1078,10 +1104,11 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // between the lock and the collapse, so this is reachable in play).
   for (let j = 0; j < cols; j++) {
     const p = PIECE(j);
-    const cutc = [CUTC1, CUTC2][Math.floor(j / 2)]; // one cut set per column
-    const cutb = [CUTB1, CUTB2][Math.floor(j / 2)]; // (phase C grows the banks)
+    const xk = Math.floor((j - 4) / 2); // CUTX pair index for columns 4+
+    const cutc = j < 4 ? [CUTC1, CUTC2][Math.floor(j / 2)] : CUTX(0, xk);
+    const cutb = j < 4 ? [CUTB1, CUTB2][Math.floor(j / 2)] : CUTX(1, xk);
     const [cArm, cNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
-    const cutk = [CUTC3, CUTC4][Math.floor(j / 2)];
+    const cutk = j < 4 ? [CUTC3, CUTC4][Math.floor(j / 2)] : CUTX(2, xk);
     // coils fed from the POS register (see the piece-register section) —
     // the per-column slides are gone; position is machine state now
     w.push(`${R(p, 'F')}/${minusOf(p)}`);
@@ -1090,7 +1117,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     // of the bottom-press leak) -> CUTC (NC, opens during collapses) ->
     w.push(`${colFan}/${R(cutb, cArm)}`, `${R(cutb, cNc)}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
     w.push(`${R(p, 'G')}/${tapRail(j)}`);
-    const cutb2 = [CUTB3, CUTB4][Math.floor(j / 2)];
+    const cutb2 = j < 4 ? [CUTB3, CUTB4][Math.floor(j / 2)] : CUTX(3, xk);
     w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${R(cutb2, cArm)}`);
     w.push(`${R(cutb2, cNc)}/${R(cutk, cArm)}`, `${R(cutk, cNc)}/${collideNode}`);
   }
@@ -1434,6 +1461,14 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${tap(laneNode, lnUse)}/${R(CUTC2, 'E')}`, `${R(CUTC2, 'F')}/${minusOf(CUTC2)}`);
   w.push(`${tap(laneNode, lnUse)}/${R(CUTC3, 'E')}`, `${R(CUTC3, 'F')}/${minusOf(CUTC3)}`);
   w.push(`${tap(laneNode, lnUse)}/${R(CUTC4, 'E')}`, `${R(CUTC4, 'F')}/${minusOf(CUTC4)}`);
+  // wider wells: lane-net cut extras chain E-to-E off CUTC4 (same net)
+  for (let k = 0; k < Math.ceil(cols / 2) - 2; k++) {
+    for (const f of [0, 2]) {
+      const cx = CUTX(f, k);
+      const prev = k === 0 && f === 0 ? CUTC4 : f === 0 ? CUTX(2, k - 1) : CUTX(0, k);
+      w.push(`${R(prev, 'E')}/${R(cx, 'E')}`, `${R(cx, 'F')}/${minusOf(cx)}`);
+    }
+  }
   for (let t = 1; t <= rows - 1; t++) {
     w.push(`${R(ELEVW1(t), 'E')}/${R(ELEVW2(t), 'E')}`, `${R(ELEVW2(t), 'F')}/${minusOf(ELEVW2(t))}`);
     // source gates: comA of row t-1 (row 0 has a direct spare hole; the
@@ -1607,8 +1642,17 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     const feed0 = r === 0 ? comOf(MIRA(0)) : R(TOPW(r), 'E');
     w.push(`${feed0}/${R(MIRC(r, 0), 'E')}`, `${R(MIRC(r, 0), 'E')}/${R(MIRC(r, 1), 'E')}`);
     w.push(`${R(MIRC(r, 0), 'F')}/${minusOf(MIRC(r, 0))}`, `${R(MIRC(r, 1), 'F')}/${minusOf(MIRC(r, 1))}`);
+    // wider wells mint extra token-gate mirrors on the same coil net.
+    // MIRC(r,1).E is FULL (it carries the MIRCT chain for r>=1 and the
+    // GOM chain at r=0) — enter at the jacks with a genuinely free hole:
+    // GOM.E for row 0, MIRCT(r,1).E for the rest (all one net)
+    for (let k = 0; k < Math.ceil(cols / 2) - 2; k++) {
+      const mx = MIRCX(r, k);
+      const src = k > 0 ? R(MIRCX(r, k - 1), 'E') : r === 0 ? R(GOM, 'E') : R(MIRCT(r, 1), 'E');
+      w.push(`${src}/${R(mx, 'E')}`, `${R(mx, 'F')}/${minusOf(mx)}`);
+    }
     for (let j = 0; j < cols; j++) {
-      const mr = MIRC(r, Math.floor(j / 2));
+      const mr = j < 4 ? MIRC(r, Math.floor(j / 2)) : MIRCX(r, Math.floor((j - 4) / 2));
       const [arm, no] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
       w.push(`${comOf(CELL(r, j))}/${R(mr, arm)}`, `${R(mr, no)}/${legTap(j)}`);
     }
@@ -1638,11 +1682,23 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   for (let r = 1; r <= rows - 2; r++) {
     w.push(`${R(MIRC(r, 1), 'E')}/${R(MIRCT(r, 0), 'E')}`, `${R(MIRCT(r, 0), 'E')}/${R(MIRCT(r, 1), 'E')}`);
     w.push(`${R(MIRCT(r, 0), 'F')}/${minusOf(MIRCT(r, 0))}`, `${R(MIRCT(r, 1), 'F')}/${minusOf(MIRCT(r, 1))}`);
+    // the wider-well top gates chain off MIRCX(r,0).E (same token net —
+    // MIRCT(r,1).E is spent feeding MIRCX now) and tie their arms
+    // through the MIRCX(r-1) arm jacks' spare holes — the exact idiom
+    // MIRCT uses on MIRC(r-1)
+    for (let k = 0; k < Math.ceil(cols / 2) - 2; k++) {
+      const mx = MIRCTX(r, k);
+      w.push(
+        k === 0 ? `${R(MIRCX(r, 0), 'E')}/${R(mx, 'E')}` : `${R(MIRCTX(r, k - 1), 'E')}/${R(mx, 'E')}`,
+        `${R(mx, 'F')}/${minusOf(mx)}`
+      );
+    }
     for (let j = 0; j < cols; j++) {
       const armPrev = j % 2 === 0 ? 'H' : 'L';
-      const mt = MIRCT(r, Math.floor(j / 2));
+      const prevRel = j < 4 ? MIRC(r - 1, Math.floor(j / 2)) : MIRCX(r - 1, Math.floor((j - 4) / 2));
+      const mt = j < 4 ? MIRCT(r, Math.floor(j / 2)) : MIRCTX(r, Math.floor((j - 4) / 2));
       const [arm, no] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
-      w.push(`${R(MIRC(r - 1, Math.floor(j / 2)), armPrev)}/${R(mt, arm)}`, `${R(mt, no)}/${legTTap(j)}`);
+      w.push(`${R(prevRel, armPrev)}/${R(mt, arm)}`, `${R(mt, no)}/${legTTap(j)}`);
     }
   }
   // 3b-3b: the top-bank coils are MODE-GATED at the feed — LEGINVT
@@ -1984,7 +2040,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // copies (the one-hot pos fan already scopes each branch); pos fans
   // feed through fanPos free sets, read chains head at rail tap holes.
   {
-    const upC = upResourceCounts(cols);
+  const upC = upResourceCounts(cols);
     const span = (o: number, w2: number, p: number) => Array.from({ length: w2 }, (_, k) => p + o + k);
     const ncOf = (cs: { arm: string }) => (cs.arm === 'H' ? 'J' : 'N');
     let upOff = 0;
@@ -2168,13 +2224,24 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(CUTC5, 'E')}/${R(CUTC6, 'E')}`);
   w.push(`${R(CUTC6, 'E')}/${R(CUTB1, 'E')}`, `${R(CUTB1, 'E')}/${R(CUTB2, 'E')}`);
   w.push(`${R(CUTB2, 'E')}/${R(CUTB3, 'E')}`, `${R(CUTB3, 'E')}/${R(CUTB4, 'E')}`);
+  // wider wells: stagger-cut extras chain off CUTB4 (the CUTBD net)
+  {
+    let prevCut = CUTB4;
+    for (let k = 0; k < Math.ceil(cols / 2) - 2; k++) {
+      for (const f of [1, 3, 4]) {
+        const cx = CUTX(f, k);
+        w.push(`${R(prevCut, 'E')}/${R(cx, 'E')}`, `${R(cx, 'F')}/${minusOf(cx)}`);
+        prevCut = cx;
+      }
+    }
+  }
   w.push(`${R(CUTB3, 'F')}/${minusOf(CUTB3)}`, `${R(CUTB4, 'F')}/${minusOf(CUTB4)}`);
   w.push(`${R(CUTC5, 'F')}/${minusOf(CUTC5)}`, `${R(CUTC6, 'F')}/${minusOf(CUTC6)}`);
   w.push(`${R(CUTB1, 'F')}/${minusOf(CUTB1)}`, `${R(CUTB2, 'F')}/${minusOf(CUTB2)}`);
   for (let j = 0; j < cols; j++) {
     const pt = PIECET(j);
     w.push(`${bmS}.${j + 1}+/${bmS}.${j + 1}S`, `${bmS}.${j + 1}T/${R(pt, 'E')}`, `${R(pt, 'F')}/${minusOf(pt)}`);
-    const cutc = [CUTC5, CUTC6][Math.floor(j / 2)]; // phase C grows the bank
+    const cutc = j < 4 ? [CUTC5, CUTC6][Math.floor(j / 2)] : CUTX(4, Math.floor((j - 4) / 2));
     const [cArm, cNo] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
     w.push(`${colFanT}/${R(cutc, cArm)}`, `${R(cutc, cNo)}/${R(pt, 'H')}`);
     w.push(`${R(pt, 'G')}/${tapRail(j)}`);
@@ -2437,7 +2504,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(T2M(1))}/${R(T2M(1), 'H')}`, `${R(T2M(1), 'G')}/${R(TRP, 'G')}`);
   w.push(`${plusOf(L2M(1))}/${R(L2M(1), 'H')}`, `${R(L2M(1), 'G')}/${R(WID3M, 'E')}`);
   w.push(`${plusOf(TTM(0))}/${R(TTM(0), 'H')}`, `${plusOf(TTM(0))}/${R(TTM(0), 'L')}`);
-  w.push(`${R(TRPM(0), 'G')}/${R(TTM(0), 'G')}`, `${R(TTM(0), 'G')}/${R(VMODEM(3), 'E')}`);
+  w.push(`${R(TRPM(0), 'G')}/${R(TTM(0), 'G')}`, `${R(TTM(0), 'G')}/${R(VMODEM(cols - 1), 'E')}`); // the chain TAIL (only jack with a free hole)
   w.push(`${R(TRPM(0), 'K')}/${R(TTM(0), 'K')}`, `${R(TTM(0), 'K')}/${R(STAGM2, 'E')}`);
   // the T fan: six TT x pos branches onto the column nets' free holes
   // pos mirror chains for the new contacts
