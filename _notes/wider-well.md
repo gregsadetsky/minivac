@@ -170,6 +170,18 @@ open questions for the next session:
   LEGB-output-tie pattern) — probably a second primitive join(handleA,
   handleB) that validates capacity.
 
+## the ledger (scratchpad/contact-ledger.mjs -> contact-ledger-8.txt)
+
+extracted the ACTUAL per-set spend from the hand-laid netlist: 113
+mirror-bank relays, zero unwired, and the usage is exactly the two
+kinds the allocator sketch guessed — gates spend GH/KL (arm+NO, 2
+jacks), changeovers GHJ/KLN (all 3) — with a handful of half-spare
+sets (ZM(3).set2, POSM3(3).set2, MMIR set2s...) as the hand's
+headroom. the allocator's count model reproduces reality; its dry-run
+at cols=4 must land within these counts (equal or tighter). the script
+doubles as the C gate's cross-check: run it on the emitted netlist and
+diff the spend per source family.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
