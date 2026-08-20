@@ -597,7 +597,12 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    driver, file/check green. no circuit changes (page + tests only).
    NEXT: deploy the pending arcs as receipts land (4a0aa1e = the
    overhang trio, DEPLOYED this session; 3b-5/3b-6 ride the next
-   batch); then column scaling (a wider well).
+   batch); then column scaling (a wider well) — IN PROGRESS: phases
+   A+B landed (cols threaded, netlist byte-identical at 4), phase C
+   fully scoped in _notes/wider-well.md (five emitters; check tables
+   verified against three hand-laid trees; contact-allocator API +
+   the extracted set-spend ledger). next session: implement the
+   allocator, then the step-tree emitter.
 
 ## display/input notes
 
