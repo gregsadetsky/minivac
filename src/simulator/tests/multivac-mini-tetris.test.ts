@@ -1444,6 +1444,63 @@ describe('Multivac: mini-tetris (50 machines)', () => {
     expect(g.m.getState().alerts).toEqual([]);
   });
 
+  // 3b-2: the top collision term. A staggered notch (a TOPMASK column
+  // outside the B mask) rests ON stored content instead of burying it —
+  // a private +-fed branch (PIECET AND occupied-at-token-row via the LEGB
+  // second reads) pre-arms COLLIDE continuously, the same mechanism a
+  // between-ticks steer under a block uses. The tap-side press gates
+  // (CUTP) keep that idle + off the data rails.
+  it('staggered collision: the notch rests on stored content (fast)', { timeout: 1500000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const bm = LEFTBTN.machine;
+    const setTop = (mask: number) => {
+      for (let j = 0; j < 4; j++) g.m.setSlide(j + 1, (mask >> j) & 1 ? 'right' : 'left', bm);
+    };
+    const vmode = (on: boolean) =>
+      g.m.setSlide((VMODE % 6) + 1, on ? 'right' : 'left', Math.floor(VMODE / 6));
+    const model = Array(8).fill(0);
+    g.operatorWrite(5, 0b0001); // the block under the S's notch column
+    model[5] = 0b0001;
+    g.pressStart();
+    vmode(true);
+    g.m.setSlide(6, 'right', bm); // STAG
+    setTop(0b0011);
+    g.setMask(0b0110); // the S again: notch = column 0
+    g.tick(); // spawn
+    for (let r = 1; r <= 5; r++) g.tick(); // arrives at 5: the notch senses (5,0)
+    model[5] |= 0b0110; // merged lock ON arrival — the bottom write
+    expect(g.field(), 'the notch rested the piece a row early').toEqual(model);
+    expect(g.tokenAt(), 'locked at 5, not fallen through').toEqual([5]);
+    g.tick(); // phase 2
+    model[4] = 0b0011;
+    expect(g.field(), 'the top write above the rest row').toEqual(model);
+    g.tick(); // reset
+    expect(g.tokenAt()).toEqual([]);
+
+    // the negative: with T == B (no notch) the bottom term owns the rest
+    // row exactly as ever — a staggered-mode column-3 piece rides down
+    // the clean side and stops on the (3,3) block by the ordinary sense
+    g.operatorWrite(3, 0b1000);
+    model[3] = 0b1000;
+    setTop(0b1000);
+    g.setMask(0b1000);
+    g.tick(); // spawn
+    g.tick(); // token 1
+    expect(g.tokenAt(), 'the clean side falls freely').toEqual([1]);
+    g.tick(); // token 2: (3,3) below -> merged lock by the bottom term
+    model[2] = 0b1000;
+    expect(g.field(), 'the bottom term still owns its cases').toEqual(model);
+    g.tick(); // phase 2
+    model[1] = 0b1000;
+    expect(g.field()).toEqual(model);
+    g.tick(); // reset
+    g.m.setSlide(6, 'left', bm);
+    setTop(0);
+    vmode(false);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
   // the score ring: a one-hot decimal digit stepped once per line clear
   // (the token-ring pattern with CLEARP as the clock; digit 0 seeded at
   // power-on through SCBOOT, which latches away on the first clear). The

@@ -146,6 +146,9 @@ export const STAGM = 335; // the STAG slide's mirror: phase 2 feeds colFanT (sta
 export const CUTB1 = 336, CUTB2 = 337; // sever the B fan during a staggered phase 2 (its closed gates bridge rails through colFan)
 export const CUTB3 = 338, CUTB4 = 339; // ...and the collision-tap side: the SECOND bridge (collideNode), rung 10's lesson verbatim
 export const CUTBD = 340; // one-hop delay for ALL the stagger cuts: they must outlive the gates/rails/readback at the release
+// the top collision term (shapes 3b-2): a staggered notch rests on stored content
+export const LEGB = (j: number) => 341 + j; // second reads of "col j occupied at the token row" (the legality rails)
+export const STAGM2 = 345; // second STAG mirror: the top collision term applies only in staggered mode
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
@@ -154,10 +157,10 @@ export const CUTBD = 340; // one-hop delay for ALL the stagger cuts: they must o
 // free. (They lived on m40 through the piece rung, sharing sections with
 // relays whose + jacks HAPPENED to be unused; the 12-row layout landed
 // TWIN's + on the shared section and the capacity auditor caught it.)
-export const LEFTBTN = { button: 3, machine: 57 };
-export const RIGHTBTN = { button: 4, machine: 57 };
-export const WIDSLIDE = { slide: 5, machine: 57 };
-export const MACHINES = 58; // relays through m56.2 + the dedicated button machine m57; m36's coms serve as the junctions
+export const LEFTBTN = { button: 3, machine: 58 };
+export const RIGHTBTN = { button: 4, machine: 58 };
+export const WIDSLIDE = { slide: 5, machine: 58 };
+export const MACHINES = 59; // relays through m57.5 + the dedicated button machine m58; m36's coms serve as the junctions
 
 // ---- the ROWS-parameterized layout (rung 11 groundwork) ----
 // The same allocation map as the exported constants, laid out sequentially
@@ -217,6 +220,7 @@ export interface TetrisLayout {
   GOM: number; GAMEOVER: number; LKM2: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
+  LEGB: (j: number) => number; STAGM2: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -276,7 +280,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const vmodemBase = take(cols);
   const gomBase = take(3); // GOM, GAMEOVER, LKM2 — appended after the tall-well layout shipped
   const scBase = take(31); // the score ring: 10 digits x (clk, master, slave) + SCBOOT
-  const stagBase = take(12); // PIECET x4, CUTC5, CUTC6, STAGM, CUTB1..4, CUTBD
+  const stagBase = take(17); // PIECET x4, CUTC5/6, STAGM, CUTB1..4, CUTBD, LEGB x4, STAGM2
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -327,6 +331,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
     GOM: gomBase, GAMEOVER: gomBase + 1, LKM2: gomBase + 2,
     SCR: (i, part) => scBase + 3 * i + part, SCBOOT: scBase + 30,
     PIECET: j => stagBase + j, CUTC5: stagBase + 4, CUTC6: stagBase + 5, STAGM: stagBase + 6, CUTB1: stagBase + 7, CUTB2: stagBase + 8, CUTB3: stagBase + 9, CUTB4: stagBase + 10, CUTBD: stagBase + 11,
+    LEGB: j => stagBase + 12 + j, STAGM2: stagBase + 16,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -392,6 +397,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
   claim('SCBOOT', SCBOOT);
   for (let j = 0; j < 4; j++) claim('PIECET', PIECET(j));
   claim('CUTC5/6/STAGM/CUTB', CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD);
+  for (let j = 0; j < 4; j++) claim('LEGB', LEGB(j));
+  claim('STAGM2', STAGM2);
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -437,6 +444,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
   eq('SCBOOT', L.SCBOOT, SCBOOT);
   for (let j = 0; j < 4; j++) eq('PIECET', L.PIECET(j), PIECET(j));
   eq('CUTC5', L.CUTC5, CUTC5); eq('CUTC6', L.CUTC6, CUTC6); eq('STAGM', L.STAGM, STAGM); eq('CUTB1', L.CUTB1, CUTB1); eq('CUTB2', L.CUTB2, CUTB2); eq('CUTB3', L.CUTB3, CUTB3); eq('CUTB4', L.CUTB4, CUTB4); eq('CUTBD', L.CUTBD, CUTBD);
+  for (let j = 0; j < 4; j++) eq('LEGB', L.LEGB(j), LEGB(j));
+  eq('STAGM2', L.STAGM2, STAGM2);
   eq('machines', L.machines, MACHINES);
   eq('btnMachine', L.btnMachine, LEFTBTN.machine);
   eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
@@ -463,7 +472,7 @@ export function tetrisCircuit(rows = 8): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, LEGINV2, WIDM3, WIDM4,
-    MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD,
+    MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
   // every anchor that shared a machine with relays eventually collided
@@ -1483,6 +1492,42 @@ export function tetrisCircuit(rows = 8): {
     w.push(`${R(pt, 'G')}/${tapRail(j)}`);
   }
 
+  // ---------- the top collision term (3b-2) ----------
+  // A staggered notch (a TOPMASK column outside the B mask) must REST on
+  // stored content instead of burying it: per column, a private +-fed
+  // series branch PIECET(j) AND occupied(tokenRow, j) feeds collideNode
+  // continuously — the same legitimate pre-arm the bottom collision uses
+  // between ticks (COLLIDE's own J contact re-routes the next tick into
+  // a lock). occupied() comes from LEGB mirrors, second reads of the
+  // increment-2 legality rails (their own contacts are all changeover-
+  // spent). The B-mask overlap term is unnecessary: gravity guarantees
+  // piece cells never coincide with stored cells, so a bottom-mask column
+  // can never read occupied at the token row. Branch pairs tie at the
+  // LEGB output jacks to fit collideNode's hole budget; a backward walk
+  // from the node dead-ends at + or an open contact in every state.
+  for (let j = 0; j < 4; j++) {
+    const feed =
+      j === 0 ? R(LEGINV(0), 'E') : j === 1 ? R(LEGINV(1), 'E') : j === 2 ? R(LEGINV2(2), 'E') : R(LEGINV2(3), 'E');
+    w.push(`${feed}/${R(LEGB(j), 'E')}`, `${R(LEGB(j), 'F')}/${minusOf(LEGB(j))}`);
+    w.push(`${plusOf(PIECET(j))}/${R(PIECET(j), 'L')}`, `${R(PIECET(j), 'K')}/${R(LEGB(j), 'H')}`);
+  }
+  // branch outputs chain jack-to-jack and enter at COLLIDE's com (its one
+  // spare hole — collideNode itself is full). Idle, the com connects to
+  // the node through COLLIDEM2's NC and the + does reach the B-mask
+  // rails through the closed taps — audited benign: the LINE chain's
+  // feed is LINEDLY press-delayed (lit coils, unpowered chain), the
+  // write gates are open, and every backward walk dead-ends at + or an
+  // open contact. A press-scoped tap gate was tried first and BROKE the
+  // bottom collision's between-ticks pre-arm, which runs through these
+  // same taps (both staggered tests watched pieces fall through blocks).
+  w.push(`${R(LEGB(0), 'G')}/${R(LEGB(1), 'G')}`, `${R(LEGB(1), 'G')}/${R(LEGB(2), 'G')}`);
+  // ...and the whole term is scoped to STAGGERED MODE through STAGM2 (a
+  // second STAG mirror — STAGM's sets are spent): with STAG off, raised
+  // TOPMASK slides must be inert everywhere (a hostile-slide regression
+  // caught the ungated term resting a symmetric piece mid-air)
+  w.push(`${R(STAGM, 'E')}/${R(STAGM2, 'E')}`, `${R(STAGM2, 'F')}/${minusOf(STAGM2)}`);
+  w.push(`${R(LEGB(2), 'G')}/${R(LEGB(3), 'G')}`, `${R(LEGB(3), 'G')}/${R(STAGM2, 'H')}`);
+  w.push(`${R(STAGM2, 'G')}/${comOf(COLLIDE)}`);
   return { wires: w, rails: dataRails, layout: L, btnMachine };
 }
 
