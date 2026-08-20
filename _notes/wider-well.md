@@ -215,6 +215,23 @@ table's (db,dt) offsets + bounds, requesting sets from MirrorBanks,
 first reproducing behavior at cols=4 (suite + driver + dense batch),
 then unlocking 5/6.
 
+## mode rails are geometry predicates (design closed, 15:00Z)
+
+verified against the wiring (2028-2092 + the splices): every mode rail
+is a predicate over SHAPES, wired as a one-contact-per-state OR chain
+into the coil net (the LEGB trick — each coil net takes ONE wire):
+- WIDM  (wide fork)      = bW == 2   -> 2wide, O, S, Z
+- WID3  (third column)   = bW == 3   -> L, J, T (the TRP rail)
+- tall  (VMODEM union)   = tW > 0    -> everything but 1x1/2wide
+- STAG  (phase-2 T fan)  = top footprint != bottom footprint
+                           -> S, Z, triples, overhangs
+- TT    (3-wide top)     = tW == 3   -> L2, J2, T2
+- BCUT  (offset bottom)  = bOff > 0  -> L2, T2
+so the emitter needs NO hand membership tables: rails, fans, trees,
+bounds and transitions all derive from the SHAPES tuple; the allocator
+owns every resource map. that closes the phase C design — remaining
+work is implementation.
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
