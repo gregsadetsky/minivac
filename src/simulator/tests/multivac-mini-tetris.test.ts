@@ -2099,6 +2099,76 @@ describe('Multivac: mini-tetris (67 machines at the classic 8 rows)', () => {
     expect(g.m.getState().alerts).toEqual([]);
   });
 
+  // 3b-5: THE MACHINE TICKS ITSELF — a two-relay slow-release oscillator
+  // on the real capacitor bank drives the tick net under stepTime. The
+  // transition solve BUZZES (a real relay oscillator buzzes; chatter
+  // pins de-energized and the game machinery rides through it, the
+  // device-verified class), leaving one clean tick-LOW step per cycle.
+  it('the machine ticks itself: capacitor gravity (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const auto = (on: boolean) =>
+      g.m.setSlide(TETRIS_IO.auto.slide, on ? 'right' : 'left', TETRIS_IO.auto.machine);
+    g.pressStart();
+    // AUTO off: time passes, nothing ticks, no token ever spawns
+    for (let t = 0; t < 10; t++) g.m.stepTime(100);
+    expect(g.tokenAt(), 'no oscillator, no ticks').toEqual([]);
+    // AUTO on: the piece falls, locks, runs its own bookkeeping, and the
+    // next piece spawns — hands off (START was pressed once, above)
+    auto(true);
+    let steered = false;
+    for (let t = 0; t < 140 && g.row(7) === 0; t++) {
+      g.m.stepTime(100);
+      // steer mid-fall once, during self-play
+      if (!steered && g.tokenAt().length === 1 && g.tokenAt()[0] >= 2) {
+        g.pressBtn(TETRIS_IO.right);
+        steered = true;
+        expect(g.posAt(), 'steering works during self-play').toBe(1);
+      }
+    }
+    expect(g.row(7), 'the steered piece locked at column 1, hands off').toBe(0b0010);
+    // keep time flowing until the SECOND piece lands on the floor too
+    for (let t = 0; t < 200 && g.row(7) === 0b0010; t++) g.m.stepTime(100);
+    expect(g.row(7) & 0b0001, 'the re-homed second piece landed at col 0').toBe(0b0001);
+    // AUTO off freezes gravity (the current token, if any, hangs forever)
+    auto(false);
+    const frozen = g.tokenAt();
+    for (let t = 0; t < 15; t++) g.m.stepTime(100);
+    expect(g.tokenAt(), 'no oscillator, no gravity').toEqual(frozen);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // ...and the oscillator itself is engine-exact: the standalone pair
+  // produces identical edges and cap voltages under sparse and fast.
+  it('the oscillator: sparse and fast agree edge for edge', { timeout: 600000 }, () => {
+    const wires = [
+      'm0.1+/m0.1S', 'm0.1T/m0.2H', 'm0.2J/m0.1E', 'm0.1F/m0.1-',
+      'm0.1E/m0.1cap',
+      'm0.1+/m0.1H', 'm0.1G/m0.2E', 'm0.2F/m0.2-',
+    ];
+    const run = (engine: 'sparse' | 'fast') => {
+      setSolverEngine(engine);
+      const m = new MinivacSimulator(wires, false, 1);
+      m.initialize();
+      m.setSlide(1, 'right', 0);
+      const edges: string[] = [];
+      let last = m.getMachineState(0).relays[1];
+      for (let t = 0; t < 80; t++) {
+        m.stepTime(25);
+        const d = m.getMachineState(0).relays[1];
+        if (d !== last) {
+          edges.push(`${t}:${d ? 1 : 0}:${m.getCapVoltage(1).toFixed(3)}`);
+          last = d;
+        }
+      }
+      return edges;
+    };
+    const sparse = run('sparse');
+    const fast = run('fast');
+    expect(sparse.length, 'it oscillates').toBeGreaterThan(10);
+    expect(fast, 'edge-for-edge parity').toEqual(sparse);
+  });
+
   // the score ring: a one-hot decimal digit stepped once per line clear
   // (the token-ring pattern with CLEARP as the clock; digit 0 seeded at
   // power-on through SCBOOT, which latches away on the first clear). The

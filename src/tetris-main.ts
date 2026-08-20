@@ -44,6 +44,7 @@ const IO = {
   left: { button: 3, machine: btnMachine },
   right: { button: 4, machine: btnMachine },
   up: { button: 2, machine: btnMachine },
+  auto: { slide: (L.TOSC % 6) + 1, machine: Math.floor(L.TOSC / 6) },
   shapeRelay: (i: number) => loc(i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : L.SHR3(i, 2)),
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
@@ -67,7 +68,7 @@ root.innerHTML = `
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},44px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
     <div style="margin-top:10px;color:#5c646e">
-      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = shape &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
+      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = shape &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; a = auto-gravity &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
     </div>
     <details style="margin-top:18px;color:#5c646e;text-align:left;max-width:520px">
       <summary style="cursor:pointer;text-align:center">dump the circuit</summary>
@@ -264,10 +265,13 @@ function render(note?: string) {
   for (let j = 0; j < COLS; j++) {
     colMarks[j].style.background = ((um >> j) & 1) === 1 ? '#7fd4ff' : 'transparent';
   }
-  const alerts = sim.getState().alerts;
+  // under AUTO the oscillator's transition solve BUZZES by design (a
+  // real relay oscillator buzzes; chatter pins de-energized) — that one
+  // alert is expected physics, not a fault, so it stays off the status
+  const alerts = sim.getState().alerts.filter(a => !(autoOn && /OSCILLATION/i.test(a)));
   status.textContent =
     note ??
-    `tick ${ticks} — score ${scoreAt()} — ${shapeLabel()}${tok >= 0 ? ` at row ${tok}` : ' (enter to spawn)'}` +
+    `tick ${ticks}${autoOn ? ' (auto)' : ''} — score ${scoreAt()} — ${shapeLabel()}${tok >= 0 ? ` at row ${tok}` : ' (enter to spawn)'}` +
       (alerts.length ? ` — ${alerts.join('; ')}` : '');
 }
 
@@ -302,11 +306,49 @@ function resyncPiece() {
   }
 }
 
+// 3b-5 auto-gravity: the AUTO slide feeds a real two-relay capacitor
+// oscillator inside the machine; the page's only job is to let TIME pass
+// (stepTime with the wall-clock delta) — the oscillator does the ticking,
+// bookkeeping runs included. The interval skips beats while a manual
+// interaction settles or after game over freezes the keyboard.
+let autoOn = false;
+let autoTimer: ReturnType<typeof setInterval> | undefined;
+let lastStep = 0;
+function setAuto(on: boolean) {
+  autoOn = on;
+  const a = IO.auto;
+  sim.setSlide(a.slide, on ? 'right' : 'left', a.machine);
+  if (on && autoTimer === undefined) {
+    lastStep = performance.now();
+    autoTimer = setInterval(() => {
+      if (busy) {
+        lastStep = performance.now();
+        return;
+      }
+      const now = performance.now();
+      const dt = Math.min(250, Math.max(80, now - lastStep));
+      lastStep = now;
+      sim.stepTime(dt);
+      ticks++;
+      render();
+    }, 130);
+  } else if (!on && autoTimer !== undefined) {
+    clearInterval(autoTimer);
+    autoTimer = undefined;
+  }
+}
+
 document.addEventListener('keydown', e => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
   if (e.key === 'm' || e.key === 'M') {
     soundOn = !soundOn;
     if (!busy) render(soundOn ? 'relay clatter on' : 'relay clatter off');
+    return;
+  }
+  if (e.key === 'a' || e.key === 'A') {
+    if (busy) return;
+    setAuto(!autoOn);
+    render(autoOn ? 'auto-gravity: the capacitor oscillator ticks the machine' : 'auto-gravity off');
     return;
   }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -366,6 +408,10 @@ document.addEventListener('keydown', e => {
     // slamming press+release into one paint made every clear look like a
     // row silently vanishing.
     if (busy) return;
+    if (autoOn) {
+      render('gravity is running — press a to take the tick slide back');
+      return;
+    }
     busy = true;
     status.textContent = 'tick — relays settling…';
     const cellsBefore = Array.from({ length: ROWS }, (_, r) => rowCells(r));

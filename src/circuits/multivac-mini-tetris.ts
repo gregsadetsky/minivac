@@ -257,6 +257,22 @@ export const T2B = (k: number) => 490 + k; // T2-gated bottom reads: k=0 col1, k
 export const UTR3 = 492; // one more top-col3 read (the T1->L2 transition)
 export const LEGB3 = (k: number) => 493 + k; // more bottom reads: k=0 col1, k=1 col2, k=2 col0
 export const POSM6 = (k: number) => 496 + k; // pos mirrors: k=0..2 pos0, k=3..5 pos1 (496..501)
+// 3b-5 — THE MACHINE TICKS ITSELF: a two-relay slow-release oscillator
+// on real capacitors. TOSC's coil parallels a paralleled cap bank and is
+// fed through TDRV's NC; TDRV is fed through TOSC's NO; TDRV's second
+// set bridges + onto the tick net exactly as the tick slide's closure
+// does (compatibility-OR — the slide still works). The cycle under
+// stepTime: the supply recharges the bank in one backward-Euler step,
+// TOSC+TDRV latch up (tick HIGH) while the bank drains through the coil,
+// dropout breaks the pair and the transition solve BUZZES (the armature
+// flap chatter-pins both down — a real relay oscillator buzzes; the game
+// machinery is chatter-tolerant, device-verified class) leaving one
+// clean tick-LOW step, then the recharge refires. AUTO = the slide on
+// TOSC's own section: the operator chooses self-play. Period: a few
+// hundred ms with four paralleled sections at 100ms steps (measured in
+// the oscillator test; more sections or larger steps slow it further).
+export const TOSC = 502; // the timing relay (coil || cap bank)
+export const TDRV = 503; // the driver: follows TOSC, its set2 drives the tick net
 export const MMIR = (i: number) => 393 + i; // master mirrors: gate the into-state-i branch (393..398)
 export const POSM4 = (k: number) => 399 + k; // pos mirrors for the branches: k=0 pos0, k=1,2 pos1, k=3,4 pos2, k=5 pos3 (399..404)
 // (POSM4(5) exists because NOTHING on POSM(3) was borrowable: its L arm
@@ -359,6 +375,7 @@ export interface TetrisLayout {
   L2M: (k: number) => number; J2M: number; T2M: (k: number) => number;
   LTOT: number; LTOB: (k: number) => number; T2B: (k: number) => number;
   UTR3: number; LEGB3: (k: number) => number; POSM6: (k: number) => number;
+  TOSC: number; TDRV: number;
   btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
@@ -428,6 +445,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const g4bBase = take(12); // 3b-4b: ZJT, SLJ, ZM2, SM2, J1M2/3, T1M2, LTJ x2, LTT x2, LTB3
   const shr3Base = take(9); // 3b-4c: states 9..11 (L2, J2, T2)
   const g4cBase = take(33); // MMIR3 x3, TT+TTM x6, BCUT x2, L2M x3, J2M, T2M x3, LTOT, LTOB x2, T2B x2, UTR3, LEGB3 x3, POSM6 x6
+  const oscBase = take(2); // 3b-5: TOSC, TDRV (the self-tick oscillator)
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -502,6 +520,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
     L2M: k => g4cBase + 11 + k, J2M: g4cBase + 14, T2M: k => g4cBase + 15 + k,
     LTOT: g4cBase + 18, LTOB: k => g4cBase + 19 + k, T2B: k => g4cBase + 21 + k,
     UTR3: g4cBase + 23, LEGB3: k => g4cBase + 24 + k, POSM6: k => g4cBase + 27 + k,
+    TOSC: oscBase, TDRV: oscBase + 1,
     btnMachine: Math.ceil(n / 6),
     machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
@@ -599,6 +618,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   claim('overhang reads', LTOT, LTOB(0), LTOB(1), T2B(0), T2B(1), UTR3);
   claim('LEGB3', LEGB3(0), LEGB3(1), LEGB3(2));
   for (let k = 0; k < 6; k++) claim('POSM6', POSM6(k));
+  claim('TOSC/TDRV', TOSC, TDRV);
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -682,6 +702,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   eq('LTOT', L.LTOT, LTOT); eq('LTOB', L.LTOB(0), LTOB(0)); eq('LTOB', L.LTOB(1), LTOB(1));
   eq('T2B', L.T2B(0), T2B(0)); eq('T2B', L.T2B(1), T2B(1)); eq('UTR3', L.UTR3, UTR3);
   for (let k = 0; k < 6; k++) eq('POSM6', L.POSM6(k), POSM6(k));
+  eq('TOSC', L.TOSC, TOSC); eq('TDRV', L.TDRV, TDRV);
   eq('machines', L.machines, MACHINES);
   eq('btnMachine', L.btnMachine, LEFTBTN.machine);
   eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
@@ -716,6 +737,7 @@ export function tetrisCircuit(rows = 8): {
     ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2, LTJ, LTT, LTB3,
     SHR3, MMIR3, TT, TTM, BCUT, BCUTM, L2M, J2M, T2M,
     LTOT, LTOB, T2B, UTR3, LEGB3, POSM6,
+    TOSC, TDRV,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
   // every anchor that shared a machine with relays eventually collided
@@ -2250,6 +2272,20 @@ export function tetrisCircuit(rows = 8): {
   for (const m of [MMIR3(9), MMIR3(10), MMIR3(11), TT, TTM(0), TTM(1), TTM(2), TTM(3), TTM(4), BCUT, BCUTM, L2M(0), L2M(1), L2M(2), J2M, T2M(0), T2M(1), T2M(2), LTOT, LTOB(0), LTOB(1), T2B(0), T2B(1), UTR3, LEGB3(0), LEGB3(1), LEGB3(2), POSM6(0), POSM6(1), POSM6(2), POSM6(3), POSM6(4), POSM6(5)])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
 
+  // ---------- 3b-5: the self-tick oscillator (see the constants) -------
+  const om = Math.floor(TOSC / 6);
+  const os = (TOSC % 6) + 1;
+  w.push(`m${om}.${os}+/m${om}.${os}S`, `m${om}.${os}T/${R(TDRV, 'H')}`); // AUTO gates the feed
+  w.push(`${R(TDRV, 'J')}/${R(TOSC, 'E')}`, `${R(TOSC, 'F')}/${minusOf(TOSC)}`);
+  w.push(`${R(TOSC, 'E')}/m${om}.${os}cap`); // the coil parallels the bank
+  const capSecs = [os, ...[1, 2, 3, 4, 5, 6].filter(s => s !== os).slice(0, 3)];
+  for (let i = 1; i < capSecs.length; i++)
+    w.push(`m${om}.${capSecs[i - 1]}cap/m${om}.${capSecs[i]}cap`);
+  w.push(`${plusOf(TOSC)}/${R(TOSC, 'H')}`, `${R(TOSC, 'G')}/${R(TDRV, 'E')}`, `${R(TDRV, 'F')}/${minusOf(TDRV)}`);
+  // the tick bridge: TDRV's set2 puts + on the tick net exactly as the
+  // slide's S-T closure does (both dead-end open when inactive)
+  w.push(`${plusOf(TDRV)}/${R(TDRV, 'L')}`, `${R(TDRV, 'K')}/${R(LKS, 'H')}`);
+
   return { wires: w, rails: dataRails, layout: L, btnMachine };
 }
 
@@ -2268,6 +2304,11 @@ export const TETRIS_IO = {
     const s = i < 6 ? SHR(i, 2) : i < 9 ? SHR2(i, 2) : SHR3(i, 2);
     return { machine: Math.floor(s / 6), index: s % 6 };
   },
+  // AUTO: the oscillator's own section slide — right = the machine ticks
+  // itself under stepTime (3b-5); the tick slide stays live in parallel
+  auto: { slide: (TOSC % 6) + 1, machine: Math.floor(TOSC / 6) },
+  // TDRV up = the oscillator is holding the tick line high
+  oscRelay: { machine: Math.floor(TDRV / 6), index: TDRV % 6 },
   // LKS up = the machine owes itself bookkeeping ticks (phase 2 / reset)
   lockedRelay: { machine: Math.floor(LKS / 6), index: LKS % 6 },
   // LANE up = a collapse is in progress: ticks walk the stack down
