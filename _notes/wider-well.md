@@ -336,10 +336,13 @@ coalescing); slave-E overflow (fixed by tail-chaining); ret groups
 ran dry at 3 (grown to 4).
 growth: 8-row 499 -> 627 relays (85 -> 107 machines), 12-row 605 ->
 733 (104 -> 125), dead banks included.
-receipts so far: walk test green, all steering tests green including
-seeded random gameplay; full file + check + driver pending, then the
-dense batch before any deploy. the fence (cols !== 4) STAYS until the
-fan + transition emitters land.
+receipts: FULL SET GREEN at 4 — walk + all steering, the three legacy
+failures fixed via slide-or-ring member pairs on the retired fork
+relays' free sets (af97236), full file 32 green, check 210 green,
+driver end to end (the wall breathes at 8 tile rows / 125 machines).
+the dense batch on the emitter tip is running; its green gates the
+deploy. the fence (cols !== 4) STAYS until the fan + transition
+emitters land — those are the next work units.
 
 ## traps to respect (from the rows job + 3b)
 
