@@ -407,6 +407,26 @@ ORDER for the next stretches: fan emitter first (its offset rails are
 the step-tree unions' siblings), then the UP emitter (reuses the pos
 banks), then the fence lifts: cols=6 tests + page bump + receipts.
 
+UP emitter resource plan (17:35Z, concrete):
+- branches: for i in 0..11, s2=(i+1)%12, for p in range(s1) AND
+  range(s2): emit; a p missing from range(s2) simply has no branch =
+  the bound refusal, exactly the hand's semantics (the page clamps
+  first as operator kindness — unchanged).
+- deltas: reshapeEntering(s1,s2,p) = bottom/top cells of s2-at-p minus
+  s1-at-p, clipped to the well; bottom deltas read the occupancy rails,
+  top deltas the top rails, both as PLAIN copies (no union gates — the
+  one-hot pos fan already scopes each branch).
+- resources: UPPOS bank take(5*cols) (pos fan sets, ~10 uses/pos);
+  UPREAD plain-read pool (coil fed straight from legTap/legTTap holes
+  — the tap() hole allocator budgets the rail groups, same as the
+  trees' gated reads); MMIR/MMIR2/MMIR3 master mirrors stay; the root
+  chain over the 12 M arms stays; branch ends chain into the ring
+  clock com as today.
+- replaces: POSM4/POSM5/POSM6 class maps, LEGB2/UTR/UTR2/UTR3 banks,
+  the three per-era transition blocks (~90 wires).
+- estimate: ~45-50 relays at cols=4 (the hand spent ~35; the pools
+  over-allocate and a later shrink pass can tighten).
+
 ## traps to respect (from the rows job + 3b)
 
 - a borrowed contact set is free only if arm AND throws are unwired.
