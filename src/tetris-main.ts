@@ -331,10 +331,22 @@ function runTick() {
   status.textContent = 'tick — relays settling…';
   const cellsBefore = Array.from({ length: ROWS }, (_, r) => rowCells(r));
   const step = (n: number) =>
+    // the PLAYER'S tick (n=0) keeps the theatrical rhythm — the line
+    // flash is only visible while the slide is held. The OWED ticks
+    // (bookkeeping + the collapse walk) run at native speed: the relays
+    // themselves are quasi-static, so the only real cost is the solve;
+    // one frame of hold keeps each walk stage visible without the old
+    // 120ms-per-tick wait (a 12-row cascade was ~5s of pure theater).
     setTimeout(() => {
       const t = IO.tick;
       sim.setSlide(t.slide, 'right', t.machine);
-      render('holding the tick…');
+      render(
+        n === 0
+          ? 'holding the tick…'
+          : relay(IO.collapseRelay)
+            ? 'line cleared — the stack falls…'
+            : 'locked — the machine runs its bookkeeping ticks…'
+      );
       setTimeout(() => {
         sim.setSlide(t.slide, 'left', t.machine);
         ticks++;
@@ -356,8 +368,8 @@ function runTick() {
           const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
           render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
         }
-      }, 120);
-    }, 15);
+      }, n === 0 ? 120 : 16);
+    }, n === 0 ? 15 : 0);
   step(0);
 }
 

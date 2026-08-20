@@ -337,9 +337,15 @@ await page.screenshot({ path: SHOT('machine-wall') });
 // The auto scenario may legitimately end at GAME OVER (a topped-out
 // stack freezes the keyboard by design), so this check runs on a
 // fresh page: boot -> spawn -> one manual tick must move the grid.
-await page.keyboard.press('a');
-await page.waitForTimeout(400);
-const sOff = await status();
+// the toggle can land in a busy window (native owed ticks) — verify
+// against the SETTLED status and re-press until it takes
+let sOff = '';
+for (let i = 0; i < 6; i++) {
+  await page.keyboard.press('a');
+  await page.waitForTimeout(300);
+  sOff = await waitIdle('a-off settle');
+  if (!/\(auto\)/.test(sOff)) break;
+}
 if (/\(auto\)/.test(sOff)) throw new Error('auto did not disengage: ' + sOff);
 await page.goto(`${BASE}/tetris/`);
 await waitIdle('post-auto boot', 60000);
