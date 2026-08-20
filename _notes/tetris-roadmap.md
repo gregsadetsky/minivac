@@ -262,8 +262,27 @@ sparse-engine.test.ts, or run suite with MINIVAC_SOLVER=sparse)
    their relays on the bigger field where they have room to matter.
 
 11. FIELD SCALING: wider/taller grid = stamping proven patterns; the
-   solver budget is the real constraint. also queued: score counter via
-   the adder rung.
+   solver budget is the real constraint.
+   THE SCORE RING LANDED 2026-08-20, same session: a one-hot DECIMAL
+   digit (0..9, wraps) stepped once per line clear — the token-ring
+   pattern verbatim with CLEARP as the clock, 31 appended relays (10 x
+   clk/master/slave + SCBOOT, the power-on seed latch that latches away
+   on the first pulse). a binary counter was drafted first and KILLED ON
+   PAPER: its increment ladder's done-track kept leaking + into the
+   below-toggle masters through bidirectional contacts (three redesigns
+   deep it still needed another mirror bank — the ring is the proven
+   idiom and displays as a real digit). two more wiring traps caught
+   before the suite ran: SCBOOT sharing the clock-chain node would have
+   held every ring clock high forever after the first clear (its pulse
+   feed rides CLEARPM's spare K instead, dead-ending at + or an open
+   contact in every state), and the button-machine anchor drifted TWICE
+   (machines-10 moved when the ring grew the count; the POS-block anchor
+   landed on TWIN's + jacks at 12 rows) — the buttons/WID slide now live
+   on a DEDICATED relay-free machine past the last relay machine, with
+   the registry asserting the exports match. receipts: eleven scored
+   clears incl. the 9 -> 0 wrap, green first run; full suite 192; the
+   page shows "score N" and the game-over banner reports the final
+   score. 8 rows: 324 relays / 56 machines; the 12-row well: 430 / 75.
    GAME OVER LANDED 2026-08-20, same session: any LOCK AT ROW 0 is the
    top-out (a row-0 clearing lock too — documented simplification).
    3 appended relays: GOM ("token at row 0", chained off MIRC(0,1)'s coil

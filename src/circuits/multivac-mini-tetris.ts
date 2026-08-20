@@ -136,10 +136,21 @@ export const VMODEM = (p: number) => 291 + p; // vmode mirrors: the tall forks i
 export const GOM = 295; // "token at row 0" mirror (chained off MIRC(0,1)'s coil jack)
 export const GAMEOVER = 296; // latches on any lock at row 0; its NC blocks START forever
 export const LKM2 = 297; // lock-master mirror: the +-fed lock scope for GAMEOVER's set
+// the score ring (0..9, one step per line clear — the token-ring pattern):
+export const SCR = (i: number, part: number) => 298 + 3 * i + part; // clk, master, slave per digit (298..327)
+export const SCBOOT = 328; // latches on the first clear; its NC is digit 0's power-on seed
 // (re-homing on the spawn tick would flip the register mid-tick under a
 // merged spawn+lock; the reset tick is stable long before any spawn)
 
-export const MACHINES = 50; // relays through m49.1; m36's coms serve as the junctions
+// the LEFT/RIGHT buttons and the WID slide live on a DEDICATED machine —
+// the one past the last relay machine, which therefore has every jack
+// free. (They lived on m40 through the piece rung, sharing sections with
+// relays whose + jacks HAPPENED to be unused; the 12-row layout landed
+// TWIN's + on the shared section and the capacity auditor caught it.)
+export const LEFTBTN = { button: 3, machine: 55 };
+export const RIGHTBTN = { button: 4, machine: 55 };
+export const WIDSLIDE = { slide: 5, machine: 55 };
+export const MACHINES = 56; // relays through m54.5 + the dedicated button machine m55; m36's coms serve as the junctions
 
 // ---- the ROWS-parameterized layout (rung 11 groundwork) ----
 // The same allocation map as the exported constants, laid out sequentially
@@ -197,6 +208,8 @@ export interface TetrisLayout {
   LEGINVT2: (k: number) => number;
   VMODEM: (p: number) => number;
   GOM: number; GAMEOVER: number; LKM2: number;
+  SCR: (i: number, part: number) => number; SCBOOT: number;
+  btnMachine: number; // the dedicated (relay-free) button/slide machine
   machines: number;
   relays: number; // wired coils (the junction gap is com-only)
 }
@@ -254,6 +267,7 @@ export function tetrisLayout(rows: number): TetrisLayout {
   const leginvt2Base = take(2);
   const vmodemBase = take(cols);
   const gomBase = take(3); // GOM, GAMEOVER, LKM2 — appended after the tall-well layout shipped
+  const scBase = take(31); // the score ring: 10 digits x (clk, master, slave) + SCBOOT
   return {
     rows,
     A0: aBase, A0m: aBase + 1, A1: aBase + 2, A2: aBase + 3,
@@ -302,7 +316,9 @@ export function tetrisLayout(rows: number): TetrisLayout {
     LEGINVT2: k => leginvt2Base + (k - 2),
     VMODEM: p => vmodemBase + p,
     GOM: gomBase, GAMEOVER: gomBase + 1, LKM2: gomBase + 2,
-    machines: Math.ceil(n / 6),
+    SCR: (i, part) => scBase + 3 * i + part, SCBOOT: scBase + 30,
+    btnMachine: Math.ceil(n / 6),
+    machines: Math.ceil(n / 6) + 1,
     relays: n - (rows - 3),
   };
 }
@@ -362,6 +378,8 @@ export function tetrisLayout(rows: number): TetrisLayout {
   claim('LEGINVT2', LEGINVT2(2), LEGINVT2(3));
   for (let p = 0; p < 4; p++) claim('VMODEM', VMODEM(p));
   claim('GOM/GAMEOVER/LKM2', GOM, GAMEOVER, LKM2);
+  for (let i = 0; i < 10; i++) claim('SCR', SCR(i, 0), SCR(i, 1), SCR(i, 2));
+  claim('SCBOOT', SCBOOT);
 
   // the parameterized layout must reproduce the hand-laid map exactly at
   // the default geometry — every scalar, every function over its domain,
@@ -402,11 +420,14 @@ export function tetrisLayout(rows: number): TetrisLayout {
   eq('LEGINV2(2)', L.LEGINV2(2), LEGINV2(2)); eq('LEGINV2(3)', L.LEGINV2(3), LEGINV2(3));
   eq('LEGINVT2(2)', L.LEGINVT2(2), LEGINVT2(2)); eq('LEGINVT2(3)', L.LEGINVT2(3), LEGINVT2(3));
   eq('GOM', L.GOM, GOM); eq('GAMEOVER', L.GAMEOVER, GAMEOVER); eq('LKM2', L.LKM2, LKM2);
+  for (let i = 0; i < 10; i++)
+    for (let pt = 0; pt < 3; pt++) eq('SCR', L.SCR(i, pt), SCR(i, pt));
+  eq('SCBOOT', L.SCBOOT, SCBOOT);
   eq('machines', L.machines, MACHINES);
+  eq('btnMachine', L.btnMachine, LEFTBTN.machine);
+  eq('btnMachine2', L.btnMachine, RIGHTBTN.machine);
+  eq('btnMachine3', L.btnMachine, WIDSLIDE.machine);
 }
-export const LEFTBTN = { button: 3, machine: 40 }; // m40.3 button
-export const RIGHTBTN = { button: 4, machine: 40 }; // m40.4 button
-export const WIDSLIDE = { slide: 5, machine: 40 }; // m40.5 slide -> WIDM coils
 
 export function tetrisCircuit(rows = 8): {
   wires: string[];
@@ -428,11 +449,13 @@ export function tetrisCircuit(rows = 8): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, LEGINV2, WIDM3, WIDM4,
-    MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2,
+    MIRCT, LEGINVT, LEGINVT2, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT,
   } = L;
-  // buttons/slides are separate hardware from relays; the classic build
-  // put them on m40 = machines - 10, kept as the general rule
-  const btnMachine = L.machines - 10;
+  // buttons/slides live on the layout's dedicated relay-free machine:
+  // every anchor that shared a machine with relays eventually collided
+  // (machines-10 drifted with appended rungs; the-POS-block's-machine put
+  // the buttons on TWIN's + jacks at 12 rows).
+  const btnMachine = L.btnMachine;
   const w: string[] = [];
 
   // rails on 6-hole M10/M11 matrix groups, allocated one list at a time
@@ -1347,7 +1370,46 @@ export function tetrisCircuit(rows = 8): {
   w.push(`${comOf(GAMEOVER)}/${R(GAMEOVER, 'E')}`, `${R(GAMEOVER, 'F')}/${minusOf(GAMEOVER)}`);
   w.push(`${plusOf(GAMEOVER)}/${R(GAMEOVER, 'L')}`, `${R(GAMEOVER, 'K')}/${comOf(GAMEOVER)}`);
 
-  return { wires: w, rails: dataRails, layout: L, btnMachine };
+  // ---------- the score ring: a decimal digit, one step per line clear ----
+  // The token-ring pattern verbatim with CLEARP as the clock: each clear
+  // pulses CLEARP (at most one row clears per lock), the one-hot digit
+  // steps 0 -> 1 -> ... -> 9 -> 0. Clock coils pair on their own section
+  // coms fed from CLEARPM's coil-jack chain; each stage's master samples
+  // the PREVIOUS digit's slave while the clock is low and the slaves copy
+  // on the pulse. Digit 0 seeds at power-on through SCBOOT's NC (the
+  // BOOTL idiom — its own relay: sharing BOOTL's N jack would tie the POS
+  // ring's com to the score com forever); SCBOOT latches on the FIRST
+  // pulse and the seed line goes dead mid-pulse, exactly before the
+  // clock-fall hold would have re-caught digit 0.
+  const scrClkCom = (i: number) => comOf(SCR(i, 0));
+  w.push(`${R(CLEARPM, 'E')}/${scrClkCom(0)}`);
+  for (let i = 2; i < 10; i += 2) w.push(`${scrClkCom(i - 2)}/${scrClkCom(i)}`);
+  for (let i = 0; i < 10; i++) {
+    const c = SCR(i, 0), a = SCR(i, 1), sl = SCR(i, 2);
+    w.push(`${scrClkCom(i - (i % 2))}/${R(c, 'E')}`, `${R(c, 'F')}/${minusOf(c)}`);
+    w.push(`${comOf(a)}/${R(a, 'E')}`, `${R(a, 'F')}/${minusOf(a)}`);
+    w.push(`${comOf(sl)}/${R(sl, 'E')}`, `${R(sl, 'F')}/${minusOf(sl)}`);
+    w.push(`${plusOf(c)}/${R(c, 'H')}`, `${plusOf(c)}/${R(c, 'L')}`);
+    // D while the clock is low: the previous digit's slave (9 wraps to 0)
+    const prev = SCR((i + 9) % 10, 2);
+    w.push(`${R(c, 'J')}/${R(prev, 'L')}`, `${R(prev, 'K')}/${comOf(a)}`);
+    w.push(`${R(c, 'G')}/${R(a, 'H')}`, `${R(a, 'G')}/${comOf(a)}`); // master holds, clock high
+    w.push(`${R(c, 'K')}/${R(a, 'L')}`, `${R(a, 'K')}/${comOf(sl)}`); // slave := master
+    w.push(`${R(c, 'N')}/${R(sl, 'H')}`, `${R(sl, 'G')}/${comOf(sl)}`); // slave holds, clock low
+  }
+  // SCBOOT: pulse-fed through CLEARPM's spare K contact — NOT the clock
+  // chain: a latch sharing the chain node would hold every ring clock
+  // high forever after the first clear. The self-hold injects into the
+  // coil jack; between pulses that + dead-ends at CLEARPM's open K, and
+  // during a pulse it meets the same + on the arm. Until the first pulse
+  // its NC feeds digit 0's com (the BOOTL idiom, private relay — sharing
+  // BOOTL's jack would tie the POS ring's com to the score com forever).
+  w.push(`${R(SCBOOT, 'F')}/${minusOf(SCBOOT)}`);
+  w.push(`${plusOf(CLEARPM)}/${R(CLEARPM, 'L')}`, `${R(CLEARPM, 'K')}/${R(SCBOOT, 'E')}`);
+  w.push(`${plusOf(SCBOOT)}/${R(SCBOOT, 'H')}`, `${R(SCBOOT, 'G')}/${R(SCBOOT, 'E')}`);
+  w.push(`${plusOf(SCBOOT)}/${R(SCBOOT, 'L')}`, `${R(SCBOOT, 'N')}/${comOf(SCR(0, 2))}`);
+
+    return { wires: w, rails: dataRails, layout: L, btnMachine };
 }
 
 

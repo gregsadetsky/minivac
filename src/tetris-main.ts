@@ -47,6 +47,7 @@ const IO = {
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
   gameOverRelay: loc(L.GAMEOVER),
+  scoreRelay: (i: number) => loc(L.SCR(i, 2)),
   posRelay: (j: number) => loc(L.POSS(j)),
   cellRelay: (r: number, j: number) => loc(L.CELL(r, j)),
   tokenRelay: (i: number) => loc(L.RING(i, 2)),
@@ -128,6 +129,12 @@ function press(b: { button: number; machine: number }) {
   sim.releaseButton(b.button, b.machine);
 }
 
+// the score ring's one-hot digit (0..9, wraps)
+function scoreAt(): number {
+  for (let i = 0; i < 10; i++) if (relay(IO.scoreRelay(i))) return i;
+  return 0;
+}
+
 function tokenRow(): number {
   for (let i = 0; i < ROWS; i++) if (relay(IO.tokenRelay(i))) return i;
   return -1;
@@ -165,7 +172,7 @@ function render(note?: string) {
     for (let r = 0; r < ROWS; r++)
       for (let j = 0; j < COLS; j++)
         if (relay(IO.cellRelay(r, j))) pixels[r][j].style.background = '#8a4a3a';
-    status.textContent = 'game over — the stack topped out (reload for a new game)';
+    status.textContent = `game over — score ${scoreAt()} — reload for a new game`;
     busy = true; // freeze the keyboard; the machine won\'t spawn anyway
     return;
   }
@@ -185,7 +192,7 @@ function render(note?: string) {
   const alerts = sim.getState().alerts;
   status.textContent =
     note ??
-    `tick ${ticks} — ${shapeLabel()}${tok >= 0 ? ` at row ${tok}` : ' (enter to spawn)'}` +
+    `tick ${ticks} — score ${scoreAt()} — ${shapeLabel()}${tok >= 0 ? ` at row ${tok}` : ' (enter to spawn)'}` +
       (alerts.length ? ` — ${alerts.join('; ')}` : '');
 }
 

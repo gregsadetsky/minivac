@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, TETRIS_IO } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, TETRIS_IO } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -1376,6 +1376,35 @@ describe('Multivac: mini-tetris (50 machines)', () => {
     expect(g.field(), 'the field is frozen history').toEqual(model);
     expect(relayOn(GAMEOVER), 'latched for good').toBe(1);
     expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  // the score ring: a one-hot decimal digit stepped once per line clear
+  // (the token-ring pattern with CLEARP as the clock; digit 0 seeded at
+  // power-on through SCBOOT, which latches away on the first clear). The
+  // cheap clear pattern: a block at (2,0) rests the piece at row 1, the
+  // lock completes row 1, and a row-1 clear runs a single 3-tick collapse
+  // stage. Eleven clears prove every step INCLUDING the 9 -> 0 wrap.
+  it('the score ring: one step per clear, wrapping past nine (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const g = makeGame();
+    const relayOn = (n: number) => (g.m.getMachineState(Math.floor(n / 6)).relays[n % 6] ? 1 : 0);
+    const score = () => {
+      const hot: number[] = [];
+      for (let i = 0; i < 10; i++) if (relayOn(SCR(i, 2))) hot.push(i);
+      expect(hot.length, `one-hot digit (got ${hot.join(',')})`).toBe(1);
+      return hot[0];
+    };
+    expect(score(), 'power-on: zero').toBe(0);
+    const model = Array(8).fill(0);
+    g.pressStart();
+    for (let n = 1; n <= 11; n++) {
+      g.operatorWrite(2, 0b0001);
+      model[2] = 0b0001;
+      g.operatorWrite(1, 0b1110);
+      model[1] = 0b1110;
+      dropPiece(g, 0b0001, model, `scoring clear ${n}`);
+      expect(score(), `after clear ${n}`).toBe(n % 10);
+    }
   });
 
   function runTallWell(engine: 'fast' | 'cktsim') {
