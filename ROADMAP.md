@@ -674,7 +674,22 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    buildability only — trigger entries at full jacks + over-tapped
    rail groups; the sim doesn't feel them). the buildability pass +
    the capacity audit in the six-wide test is the next unit.
-   NEXT: the buildability pass at 6; then rotation groups on the ring
+   THE BUILDABILITY PASS landed same evening (7e27973, deployed with
+   the key queue as a862408): zero jack-capacity violations at (8,6)
+   AND (12,6), the audit welded into the six-wide suite test. all
+   three violations were one disease — single 6-hole junction groups
+   EXACTLY full at 4 cols (colFan, whose comment literally said 'spare
+   6th hole', colFanT, collideNode) — grown into chained multi-group
+   rails with spread taps that collapse back to the original wiring
+   byte-for-byte at 4; the gate-coil chain re-entered through MIRA.G's
+   free hole (W(r,1).E carries the alpha trigger). ALSO: the KEY QUEUE
+   (game keys queue during solves instead of dropping — the 6-wide
+   made real inputs vanish; driver burst receipt: 3 rapid downs all
+   land) and the ROTATION GROUPS design (_notes/rotation-groups.md,
+   alternative C: ring reorder for adjacent pairs + 4 D-feed muxes +
+   NOTOK-gated cross-group roots) sent to adversarial review.
+   NEXT: rotation groups (pending the review verdict); then pivot-order
+   reuse in the fast engine (the 7s cascade is solve-bound).
    (UP steps within the current piece's orientations), random dealing,
    pivot-order reuse in the fast engine (the 7s cascade is solve-bound),
    and the 3-row piece engine toward the I piece and verticals.
