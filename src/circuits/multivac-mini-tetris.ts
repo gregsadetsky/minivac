@@ -1,7 +1,7 @@
 /**
- * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b): 4x8 field,
- * gravity + stacking + line clear in pure relay wiring — 163 relays across
- * 28 machines. A piece is any COLUMN MASK the slides raise (1 or 2 wide),
+ * The mini-tetris multivac circuit (roadmap rungs 7 + 9 + 9b + 10): 4x8 field,
+ * gravity + stacking + line clear + row collapse in pure relay wiring — 218 relays across
+ * 38 machines. A piece is any COLUMN MASK the slides raise (1 or 2 wide),
  * and with the VMODE slide up it is two cells TALL: the lock press writes
  * the token row as ever, then a phase-2 tick writes the row above through
  * the TOPW mirror bank before the (now one-tick-late) reset. This module is
@@ -56,15 +56,21 @@ export const TICKM2 = 159; // second tick mirror: clocks P2M -> P2S (TICKM's con
 export const P2CUT = (x: number) => 160 + x; // 4 relays: drop the collision mirrors during phase 2
 export const LINEDLY = 164; // delays the LINE chain's feed past the collision-sense cut
 // ---- row collapse ("the elevator", roadmap rung 10) ----
-// after a line clear at row r the hole walks UP: two ticks per row — the
-// row above the hole self-presses onto the rails and the hole's row latches
-// them through its gates alone (move), then the source drops breakers-only
-// (clear) and the chain steps. The chain is the rung-5 ring pattern chained
-// in REVERSE (the token ring only walks down); stage t = "the hole is at
-// row t", t = 1..7 — a clear at row 0 has nothing above it and never seeds.
-// The chain seeds from the dying token on the reset tick (the reset doubles
-// as the seed-transfer clock) and drains by walking off stage 1. Full
-// design + rejected alternatives: _notes/collapse-design.md
+// after a line clear at row r the hole walks UP: THREE ticks per row —
+// alpha fires the source and hole rows' gates only (the source's content
+// leaks onto the rails backward through its own closed gates — contacts
+// are bidirectional — and the hole latches an exact copy; nothing breaks,
+// nothing to strand), beta fires the source's breakers alone (the copied
+// row drops out), gamma steps the chain with every rail dark (stepping
+// with a hot rail fired the freshly hot stage's routing mid-tick and
+// killed the row above before its copy — the trace caught it). The chain
+// is the rung-5 ring pattern chained in REVERSE (the token ring only
+// walks down); stage t = "the hole is at row t", t = 1..7 — a clear at
+// row 0 has nothing above it and never seeds. The chain seeds from the
+// dying token on the reset tick (the reset doubles as the seed-transfer
+// clock) and drains by walking off stage 1. Full design + rejected
+// alternatives + the observed-but-unexplained alpha-release anomaly:
+// _notes/collapse-design.md
 export const ELEVC = (t: number) => 162 + 3 * t; // stage clocks (165..183)
 export const ELEVA = (t: number) => 163 + 3 * t; // stage masters (166..184)
 export const ELEVSL = (t: number) => 164 + 3 * t; // stage slaves (167..185)
@@ -72,12 +78,23 @@ export const SEEDM = (t: number) => 185 + t; // ring-slave mirrors: seed the cha
 export const CLEARPM = 193; // CLEARP mirror: scopes the seed to clearing locks
 export const LANE = 194; // collapse tick-lane slave (branches between LKS and COLLIDE)
 export const TICKM3 = 195; // third tick mirror: clocks LANE and the phase toggle
-export const TGM = 196, TGS = 197; // alpha/beta toggle (move tick / clear+step tick)
+export const TGM = 196, TGS = 197; // phase bit 0 (master/slave)
+export const TG2M = 222, TG2S = 223; // phase bit 1: the collapse is THREE
+// ticks per stage — alpha (gates-only move), beta (breakers-only clear),
+// gamma (chain step with every rail dark). Stepping with a hot rail fired
+// the freshly hot stage's routing mid-tick and killed the next row before
+// its copy (the trace caught it); gamma isolates the step. Cycle:
+// alpha arms TGM -> beta (TGS); beta arms TG2M -> gamma (TG2S); gamma arms
+// nothing -> alpha. Decodes ride the toggles' own contacts off cgbRail.
 export const ELEVW1 = (t: number) => 196 + 2 * t; // trigger-routing mirrors (198..210 even)
 export const ELEVW2 = (t: number) => 197 + 2 * t; // (199..211 odd)
 export const CGA = 212, CGB = 213; // collapse rail feeds (alpha rail / both-phase rail)
-export const JUNC = (k: number) => 216 + k; // m36: spare sections whose 4-hole coms serve as junction boxes
-export const MACHINES = 37; // relays through m35; m36 = junctions
+export const CGB2 = 214; // second-hop breaker rail: aligns the source hold-break with the gate wave
+export const CUTC1 = 215, CUTC2 = 216; // cut the piece arms off colFan during collapse ticks
+export const JUNC = (k: number) => 216 + k; // spare-section 4-hole coms as junction boxes
+// (JUNC(0) shares m36.1 with CUTC2 — a section's com jack is electrically
+// separate from its relay, so the junction coexists with the coil)
+export const MACHINES = 38; // relays through m37.2; m36's coms serve as the junctions
 
 export function tetrisCircuit(): {
   wires: string[];
@@ -341,12 +358,21 @@ export function tetrisCircuit(): {
   }
 
   // piece column relays: slide-driven; set 1 puts the column onto its data
-  // rail during a lock, set 2 taps the rail into the collision coil
+  // rail during a lock, set 2 taps the rail into the collision coil. The
+  // column feed runs through CUTC (pre-closed NC, coils on the collapse's
+  // cgbRail): with two or more mask slides raised, the closed piece gates
+  // would otherwise TIE their data rails together through the colFan node —
+  // colFan needs no feed to bridge, a jack is a tie — and a collapse move's
+  // row content would leak across the masked columns (the mask can change
+  // between the lock and the collapse, so this is reachable in play).
   for (let j = 0; j < 4; j++) {
     const p = PIECE(j);
     const sec = `m${Math.floor(p / 6)}.${(p % 6) + 1}`;
+    const cutc = j < 2 ? CUTC1 : CUTC2;
+    const [cArm, cNc] = j % 2 === 0 ? ['H', 'J'] : ['L', 'N'];
     w.push(`${sec}+/${sec}S`, `${sec}T/${R(p, 'E')}`, `${R(p, 'F')}/${minusOf(p)}`);
-    w.push(`${colFan}/${R(p, 'H')}`, `${R(p, 'G')}/${tapRail(j)}`);
+    w.push(`${colFan}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
+    w.push(`${R(p, 'G')}/${tapRail(j)}`);
     w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${collideNode}`);
   }
 
@@ -573,8 +599,8 @@ export function tetrisCircuit(): {
   // the "collapse active" OR: ELEVW1 mirrors (parallel coils on the stage
   // slaves' spare com holes) fan + into laneNode — legal one-contact-per-
   // consumer wired-OR: many sources, ONE consumer (LANE's copy gate)
-  const laneNode = takeGroups(2);
-  w.push(`${laneNode[0]}/${laneNode[1]}`);
+  const laneNode = takeGroups(3);
+  for (let i = 1; i < laneNode.length; i++) w.push(`${laneNode[i - 1]}/${laneNode[i]}`);
   const lnUse = { n: 0 };
   for (let t = 1; t <= 7; t++) {
     w.push(`${comOf(ELEVSL(t))}/${R(ELEVW1(t), 'E')}`, `${R(ELEVW1(t), 'F')}/${minusOf(ELEVW1(t))}`);
@@ -590,18 +616,78 @@ export function tetrisCircuit(): {
   w.push(`${R(LANE, 'G')}/${clpNode}`);
   w.push(`${clpNode}/${R(CGB, 'E')}`, `${R(CGB, 'F')}/${minusOf(CGB)}`);
   w.push(`${plusOf(CGB)}/${R(CGB, 'L')}`, `${R(CGB, 'K')}/${cgbRail}`);
-  // the toggle: TGM := (collapse tick) AND (not TGS), via TGS's own set 1 —
-  // its NO output doubles as the beta trigger (chain clock)
-  w.push(`${cgbRail}/${R(TGS, 'H')}`, `${R(TGS, 'J')}/${comOf(TGM)}`, `${R(TGS, 'G')}/${elevClkCom(7)}`);
+  // the phase ring, decoded through the toggles' own contact chains:
+  //   cgbRail -> TGS.H;  TGS.J (bit0 off) -> TG2S.H;  TGS.G (bit0 on) ->
+  //     TG2M's sample + CGB2 (beta);
+  //   TG2S.J (bit1 off too) -> TGM's sample + CGA (alpha);
+  //   TG2S.G (bit1 on) -> the chain clock (gamma).
+  // Both samplers ride cgbRail (depth 2), so a master outlives the tick by
+  // one wave and its TICKM.N self-hold catches it; the slaves copy between
+  // ticks (TICKM3.N) and hold through them (TICKM3.G carries laneNode).
+  w.push(`${cgbRail}/${R(TGS, 'H')}`, `${R(TGS, 'J')}/${R(TG2S, 'H')}`);
+  w.push(`${R(TG2S, 'J')}/${comOf(TGM)}`, `${R(TG2S, 'G')}/${elevClkCom(7)}`);
+  w.push(`${R(TGS, 'G')}/${comOf(TG2M)}`);
   w.push(`${comOf(TGM)}/${R(TGM, 'E')}`, `${R(TGM, 'F')}/${minusOf(TGM)}`);
-  // TGM survives the low period on TICKM.N (a tick-low + source), then the
-  // next rise finds TGS flipped and the sample path open — master consumed
+  w.push(`${comOf(TG2M)}/${R(TG2M, 'E')}`, `${R(TG2M, 'F')}/${minusOf(TG2M)}`);
   w.push(`${R(TICKM, 'N')}/${R(TGM, 'L')}`, `${R(TGM, 'K')}/${comOf(TGM)}`);
-  // TGS := TGM between ticks (TICKM3.N), holds through the tick on the
-  // lane-scoped tick-high source (TICKM3.G carries laneNode while high)
+  w.push(`${R(TICKM, 'N')}/${R(TG2M, 'L')}`, `${R(TG2M, 'K')}/${comOf(TG2M)}`);
   w.push(`${R(TICKM3, 'N')}/${R(TGM, 'H')}`, `${R(TGM, 'G')}/${comOf(TGS)}`);
+  w.push(`${R(TICKM3, 'N')}/${R(TG2M, 'H')}`, `${R(TG2M, 'G')}/${comOf(TG2S)}`);
   w.push(`${R(TICKM3, 'G')}/${R(TGS, 'L')}`, `${R(TGS, 'K')}/${comOf(TGS)}`);
+  w.push(`${R(TICKM3, 'G')}/${R(TG2S, 'L')}`, `${R(TG2S, 'K')}/${comOf(TG2S)}`);
   w.push(`${comOf(TGS)}/${R(TGS, 'E')}`, `${R(TGS, 'F')}/${minusOf(TGS)}`);
+  w.push(`${comOf(TG2S)}/${R(TG2S, 'E')}`, `${R(TG2S, 'F')}/${minusOf(TG2S)}`);
+
+  // ---------- row collapse C3: the moves ----------
+  // alpha: GATES ONLY on the source row and the hole row. The source's
+  // content leaks onto the rails backward through its own closed gates (a
+  // live com drives an idle rail — bidirectional contacts, the same leak
+  // the mid-reset bug demonstrated), and the hole latches an exact copy.
+  // No holds break, so nothing can strand at the release. beta: cgbRail2
+  // (CGB2, gated by TGS.G) alone fires the source's breakers — the copied
+  // row drops out, the line-clear shape. gamma: TG2S.G steps the chain
+  // with both rails dark. The gate-trigger nodes of rows 1-6 are out of
+  // holes (each is both a source and a destination), so they extend
+  // through junction coms: spare sections' com jacks as junction boxes.
+  // CGA (alpha) rides the phase decode off cgbRail — lane-gated by
+  // construction, so the reset tick that seeds the chain cannot fire it
+  // (an earlier draft fed it from the tick mirrors and the alpha ran one
+  // tick early, mid-reset, copying the source through its own write gates —
+  // contacts are bidirectional: a live row leaks onto the rails backward
+  // through a closed gate. That same leak, deliberately, IS the alpha move:
+  // gates-only on the source and the hole, no breakers, nothing to strand.)
+  w.push(`${R(TG2S, 'J')}/${R(CGA, 'E')}`, `${R(CGA, 'F')}/${minusOf(CGA)}`);
+  const collapseA = takeGroups(4);
+  for (let i = 1; i < collapseA.length; i++) w.push(`${collapseA[i - 1]}/${collapseA[i]}`);
+  const caUse = { n: 0 };
+  w.push(`${plusOf(CGA)}/${R(CGA, 'L')}`, `${R(CGA, 'K')}/${tap(collapseA, caUse)}`);
+  w.push(`${R(TGS, 'G')}/${R(CGB2, 'E')}`, `${R(CGB2, 'F')}/${minusOf(CGB2)}`);
+  const cgbRail2 = takeGroups(2);
+  w.push(`${cgbRail2[0]}/${cgbRail2[1]}`);
+  const cb2Use = { n: 0 };
+  w.push(`${plusOf(CGB2)}/${R(CGB2, 'L')}`, `${R(CGB2, 'K')}/${tap(cgbRail2, cb2Use)}`);
+  // the colFan bridge cut, scoped to the WHOLE collapse (laneNode), not per
+  // tick: the toggle masters' between-tick self-holds keep the phase decode
+  // nodes — and with them CGA/CGB2 and the held gates — alive through the
+  // inter-tick gaps (observed in the trace; idempotent re-latches of the
+  // same content), so the bridge must stay cut through the gaps too.
+  w.push(`${tap(laneNode, lnUse)}/${R(CUTC1, 'E')}`, `${R(CUTC1, 'F')}/${minusOf(CUTC1)}`);
+  w.push(`${tap(laneNode, lnUse)}/${R(CUTC2, 'E')}`, `${R(CUTC2, 'F')}/${minusOf(CUTC2)}`);
+  for (let t = 1; t <= 7; t++) {
+    w.push(`${R(ELEVW1(t), 'E')}/${R(ELEVW2(t), 'E')}`, `${R(ELEVW2(t), 'F')}/${minusOf(ELEVW2(t))}`);
+    // source gates: comA of row t-1 (row 0 has a direct spare hole; rows
+    // 1-6 go through their junction, being destinations too)
+    const srcATarget = t === 1 ? R(W(0, 1), 'E') : comOf(JUNC(t - 2));
+    w.push(`${tap(collapseA, caUse)}/${R(ELEVW1(t), 'H')}`, `${R(ELEVW1(t), 'G')}/${srcATarget}`);
+    // destination gates: comA of row t
+    const destTarget = t === 7 ? R(W(7, 1), 'E') : comOf(JUNC(t - 1));
+    w.push(`${tap(collapseA, caUse)}/${R(ELEVW2(t), 'H')}`, `${R(ELEVW2(t), 'G')}/${destTarget}`);
+    // source breakers: comB of row t-1 (its coil jack's spare hole)
+    w.push(`${tap(cgbRail2, cb2Use)}/${R(ELEVW2(t), 'L')}`, `${R(ELEVW2(t), 'K')}/${R(W(t - 1, 2), 'E')}`);
+  }
+  for (let x = 1; x <= 6; x++) {
+    w.push(`${R(W(x, 1), 'E')}/${comOf(JUNC(x - 1))}`);
+  }
 
   return { wires: w, rails: dataRails };
 }
@@ -614,6 +700,8 @@ export const TETRIS_IO = {
   vmode: { slide: (VMODE % 6) + 1, machine: Math.floor(VMODE / 6) }, // right = piece is 2 tall
   // LKS up = the machine owes itself bookkeeping ticks (phase 2 / reset)
   lockedRelay: { machine: Math.floor(LKS / 6), index: LKS % 6 },
+  // LANE up = a collapse is in progress: ticks walk the stack down
+  collapseRelay: { machine: Math.floor(LANE / 6), index: LANE % 6 },
   pieceSlide: (j: number) => ({ slide: (PIECE(j) % 6) + 1, machine: Math.floor(PIECE(j) / 6) }),
   cellRelay: (r: number, j: number) => ({ machine: Math.floor(CELL(r, j) / 6), index: CELL(r, j) % 6 }),
   tokenRelay: (i: number) => {

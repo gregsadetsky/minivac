@@ -1,7 +1,8 @@
 /**
- * Multivac roadmap rungs 7+9+9b: MINI-TETRIS. 4-wide x 8-tall field,
- * gravity + stacking + line clear. Pure wiring — every game decision is
- * made by relay contacts. 163 relays across 28 machines (the width is the
+ * Multivac roadmap rungs 7+9+9b+10: MINI-TETRIS. 4-wide x 8-tall field,
+ * gravity + stacking + line clear WITH row collapse. Pure wiring — every
+ * game decision is made by relay contacts. 218 relays across 38 machines
+ * (the width is the
  * price of tie-point-safe private contacts — see the notes below). The
  * piece is whatever COLUMN MASK the slides raise — singles, dominoes,
  * wider, with zero circuit changes (rung 9) — and with the VMODE slide up
@@ -66,8 +67,27 @@
  * the flash — and from the release on CLEARP alone powers the breaker-
  * trigger rail: the row's holds stay broken with the gates and column feed
  * dark, all four cells drop out, and the next (reset) tick's RSTM2 breaks
- * the latch to re-arm the row. Rows above do NOT collapse in this slice;
- * that is the field-scaling rung's work.
+ * the latch to re-arm the row.
+ *
+ * ROW COLLAPSE (rung 10, "the elevator"): the reset tick of a clearing lock
+ * doubles as a seed-transfer clock — CLEARPM gates + through the one-hot
+ * token's SEEDM mirror into the elevator chain (the ring pattern chained in
+ * REVERSE; stage t = "the hole is at row t"). From then until the chain
+ * drains off stage 1, LANE (a branch slave between LKS and COLLIDE — any
+ * deeper and collapse ticks would clock the ring and spawn mid-collapse)
+ * owns the ticks, and the TGM/TGS toggle alternates them: ALPHA fires the
+ * source row's gates+breakers (a self-press: its content rides the rails
+ * and relatches itself) plus the hole row's GATES ONLY — an exact copy into
+ * emptiness, with collapseA (CGA) and the second-hop breaker rail (CGB2)
+ * landing in the SAME wave (a depth-2 hold-break would kill the source one
+ * wave before its gates close). colFan never fires, so the mask cannot
+ * inject. BETA fires the source's breakers alone (the clear shape — the row
+ * just copied down drops out) while TGS.G steps the chain. Two ticks per
+ * row; the armed SPAWN waits (the ring clock stays dark, so SPAWNCLR never
+ * consumes it) and fires on the first tick after the lane releases. Rows
+ * 1-6 are both sources and destinations and their gate-trigger nodes ran
+ * out of holes: they extend through JUNCTION COMS (spare sections' com
+ * jacks as 4-hole junction boxes).
  *
  * THE LINE SENSOR'S FALSE WINDOW (found by the vertical rung's tests): for
  * a press's first waves — before PRESSCUT's cut lands — the collision
@@ -225,10 +245,14 @@ function dropPiece(
   collapseTicks(g, cleared, model, label);
 }
 
-// rung 10: a clearing lock is followed by 2*row collapse ticks — the
-// elevator walks the hole to the top, two ticks (move, clear+step) per
-// stage, while the tick lane defers the next spawn. A clear at row 0 has
-// nothing above it: the chain never seeds and play resumes immediately.
+// rung 10: a clearing lock is followed by 3*row collapse ticks — the
+// elevator walks the hole to the top, three ticks per stage, while the
+// tick lane defers the next spawn: alpha copies the row above the hole
+// down into it (gates only, both rows), beta drops the source
+// (breakers only), gamma steps the chain with every rail dark.
+// Model-checked at EVERY tick, so a leak on any phase shows immediately.
+// A clear at row 0 has nothing above it: the chain never seeds and play
+// resumes at once.
 function collapseTicks(
   g: ReturnType<typeof makeGame>,
   clearedRow: number,
@@ -236,10 +260,18 @@ function collapseTicks(
   label: string
 ) {
   if (clearedRow < 0) return;
-  for (let k = 1; k <= 2 * clearedRow; k++) {
-    g.tick();
-    expect(g.tokenAt(), `${label}: collapse tick ${k} defers the spawn`).toEqual([]);
-    expect(g.field(), `${label}: field during collapse tick ${k}`).toEqual(model);
+  for (let t = clearedRow; t >= 1; t--) {
+    g.tick(); // alpha: row t := row t-1 (the hole is empty, |= is exact)
+    model[t] |= model[t - 1];
+    expect(g.tokenAt(), `${label}: alpha at stage ${t} defers the spawn`).toEqual([]);
+    expect(g.field(), `${label}: field after the stage-${t} move`).toEqual(model);
+    g.tick(); // beta: the source drops
+    model[t - 1] = 0;
+    expect(g.tokenAt(), `${label}: beta at stage ${t} defers the spawn`).toEqual([]);
+    expect(g.field(), `${label}: field after the stage-${t} clear`).toEqual(model);
+    g.tick(); // gamma: the hole walks up, rails dark
+    expect(g.tokenAt(), `${label}: gamma at stage ${t} defers the spawn`).toEqual([]);
+    expect(g.field(), `${label}: field still after the stage-${t} step`).toEqual(model);
   }
 }
 
@@ -292,7 +324,7 @@ function dropVertical(
   collapseTicks(g, cleared, model, label);
 }
 
-describe('Multivac: mini-tetris (28 machines)', () => {
+describe('Multivac: mini-tetris (38 machines)', () => {
   it('gravity, stacking, and a line clear (sparse)', { timeout: 600000 }, () => {
     setSolverEngine('sparse');
     const g = makeGame();
@@ -320,14 +352,14 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     expect(g.row(7)).toBe(0b0111);
 
     // line clear: col 3 falls PAST row 6 (disjoint) to the floor, completes
-    // row 7, and the same press writes the row back as zeros
+    // row 7 — and the collapse walks the stacked cell down into the hole
     dropPiece(g, 0b1000, model, 'drop 5 (col 3, clears the line)');
-    expect(g.row(7), 'line cleared').toBe(0);
-    expect(g.row(6), 'row above stays (no collapse in this slice)').toBe(0b0001);
+    expect(g.row(7), 'the stacked cell fell into the cleared line').toBe(0b0001);
+    expect(g.row(6), 'its old row emptied (rung 10)').toBe(0);
 
-    // the game goes on: the floor is open again
+    // the game goes on, on top of the fallen cell
     dropPiece(g, 0b0100, model, 'drop 6 (col 2)');
-    expect(g.row(7)).toBe(0b0100);
+    expect(g.row(7)).toBe(0b0101);
   });
 
   it('operator setup + one drop completes a line (sparse)', { timeout: 600000 }, () => {
@@ -435,8 +467,12 @@ describe('Multivac: mini-tetris (28 machines)', () => {
       // falling piece between ticks (collide pre-armed).
       const resting = () => token === 7 || (model[token + 1] & mask) !== 0;
       if (collapseLeft > 0) {
-        // the elevator owns the tick: the spawn stays deferred and (until
-        // the routing increment) the field is frozen
+        // the elevator owns the tick: alpha moves the row above the hole
+        // down, beta drops the source, gamma steps the chain; the spawn
+        // stays deferred throughout
+        const stage = Math.ceil(collapseLeft / 3);
+        if (collapseLeft % 3 === 0) model[stage] |= model[stage - 1];
+        else if (collapseLeft % 3 === 2) model[stage - 1] = 0;
         collapseLeft--;
       } else if (phase2Pending) {
         // the top write: current mask, one row above the still-alive token;
@@ -448,7 +484,7 @@ describe('Multivac: mini-tetris (28 machines)', () => {
         token = -1;
         resetPending = false;
         spawnArmed = true;
-        if (clearedRow > 0) collapseLeft = 2 * clearedRow; // row-0 clears never seed
+        if (clearedRow > 0) collapseLeft = 3 * clearedRow; // row-0 clears never seed
         clearedRow = -1;
       } else if (token >= 0) {
         if (resting()) lockAt(token); // pre-armed collide: no movement
@@ -644,17 +680,18 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     g.pressStart();
 
     // the bottom write completes row 7 -> clears as ever; the top write
-    // still lands: the piece's upper cell survives its own line clear
+    // still lands — and the collapse then walks that fresh top cell down
+    // into the hole it sits above
     dropVertical(g, 0b0001, model, 'v-clear');
-    expect(g.row(7), 'bottom line cleared').toBe(0);
-    expect(g.row(6), 'top cell survives the clear below it').toBe(0b0001);
+    expect(g.row(7), 'the surviving top cell fell into its own clear').toBe(0b0001);
+    expect(g.row(6)).toBe(0);
 
     // the TOP write completes row 6 -> must NOT clear (token-row-addressed
-    // clear machinery; documented limit of this rung)
-    g.operatorWrite(6, 0b0110);
+    // clear machinery; documented limit)
+    g.operatorWrite(6, 0b0111);
     model[6] = 0b0111;
     dropVertical(g, 0b1000, model, 'v-topfull');
-    expect(g.row(7)).toBe(0b1000);
+    expect(g.row(7)).toBe(0b1001);
     expect(g.row(6), 'top-completed line stays full').toBe(0b1111);
 
     // the game continues over the full row; stack col 0 to the ceiling:
@@ -687,20 +724,84 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     expect(g.row(5)).toBe(0b1001);
   });
 
+  // THE rung-10 acceptance: content above a cleared line FALLS. Distinct
+  // row patterns prove the moves are exact copies (no OR-mixing between
+  // rows, no leaks into untouched rows), and a second clear immediately
+  // after proves the machinery re-arms.
+  it('row collapse: the stack falls into a cleared line, repeatedly (sparse)', { timeout: 900000 }, () => {
+    setSolverEngine('sparse');
+    const g = makeGame();
+    const model = Array(8).fill(0);
+    // distinct patterns, and the dropping column (0) free the whole way
+    // down — an occupied column would rest the piece early and clear
+    // nothing (this test's first draft did exactly that)
+    g.operatorWrite(7, 0b1110);
+    model[7] = 0b1110;
+    g.operatorWrite(6, 0b0110);
+    model[6] = 0b0110;
+    g.operatorWrite(5, 0b0010);
+    model[5] = 0b0010;
+    g.pressStart();
+    dropPiece(g, 0b0001, model, 'completes the floor');
+    expect(g.row(7), 'row 6 fell to the floor').toBe(0b0110);
+    expect(g.row(6), 'row 5 fell one down').toBe(0b0010);
+    expect(g.row(5)).toBe(0);
+    // second clear: a split mask completes the fallen floor row
+    dropPiece(g, 0b1001, model, 'split mask completes the fallen row');
+    expect(g.row(7), 'the second collapse landed the next row').toBe(0b0010);
+    expect(g.row(6)).toBe(0);
+    // third: the colFan-bridge probe. A multi-column mask cannot FALL past
+    // a source bit in its own column (collision blocks it), but the mask is
+    // just slides and can change right after the lock — the random test
+    // does it constantly. If the mask straddles an asymmetric source row
+    // during the collapse, the two closed piece-column contacts would tie
+    // their rails together through the colFan node and the moving row's
+    // col-0 bit would leak into col 3 (row 7 = 1001 instead of 0001);
+    // the CUTC cut opens the piece arms off the colFan while the lane owns
+    // the ticks.
+    g.operatorWrite(7, 0b0101);
+    model[7] |= 0b0101; // -> 0111, col 3 open
+    g.operatorWrite(6, 0b0001);
+    model[6] = 0b0001;
+    g.setMask(0b1000);
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick(); // col 3 falls clear to the floor
+    model[7] = 0; // 0111 | 1000 completes and clears
+    expect(g.field(), 'probe: line cleared').toEqual(model);
+    g.tick(); // reset; the chain seeds
+    expect(g.tokenAt()).toEqual([]);
+    g.setMask(0b1001); // the mask swap: cols 0+3 raised DURING the collapse
+    for (let t = 7; t >= 1; t--) {
+      g.tick(); // alpha
+      model[t] |= model[t - 1];
+      expect(g.field(), `probe: no rail bridge at stage ${t}`).toEqual(model);
+      g.tick(); // beta
+      model[t - 1] = 0;
+      expect(g.field(), `probe: stage ${t} cleared`).toEqual(model);
+      g.tick(); // gamma
+      expect(g.field(), `probe: stage ${t} stepped`).toEqual(model);
+    }
+    expect(g.row(7), 'the masked pair did not bridge the rails').toBe(0b0001);
+    expect(g.row(6)).toBe(0);
+  });
+
   // the /tetris/ page runs the 'fast' engine; until this rung no tetris
   // game test did. A short scenario keeps the page's engine covered on the
-  // full composed circuit: a line-clearing horizontal drop plus a vertical
-  // drop. (fast is oracle-validated on 5000 random circuits and the whole
-  // suite elsewhere; this is the composition smoke.)
+  // full composed circuit: a line-clearing horizontal drop WITH a collapse
+  // plus a vertical drop. (fast is oracle-validated on 5000 random circuits
+  // and the whole suite elsewhere; this is the composition smoke.)
   it('short scenario under the fast engine (what /tetris/ runs)', { timeout: 600000 }, () => {
     setSolverEngine('fast');
     const g = makeGame();
     const model = Array(8).fill(0);
     g.operatorWrite(7, 0b1110);
     model[7] = 0b1110;
+    g.operatorWrite(6, 0b0110);
+    model[6] = 0b0110;
     g.pressStart();
-    dropPiece(g, 0b0001, model, 'fast drop'); // completes and clears row 7
-    expect(g.row(7)).toBe(0);
+    dropPiece(g, 0b0001, model, 'fast drop'); // clears row 7; row 6 falls
+    expect(g.row(7)).toBe(0b0110);
+    expect(g.row(6)).toBe(0);
     g.operatorWrite(3, 0b0010);
     model[3] = 0b0010;
     g.m.setSlide((VMODE % 6) + 1, 'right', Math.floor(VMODE / 6));
@@ -755,13 +856,13 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     }
   });
 
-  // rung 10 sequencing: the elevator chain + the tick lane + the toggle,
-  // BEFORE any data routing exists. After a clearing lock's reset seeds the
-  // chain at the cleared row, the lane owns the ticks: alpha ticks do
-  // nothing yet, beta ticks step the one-hot up one stage, the armed spawn
-  // WAITS, and when the chain drains off stage 1 the lane releases and the
-  // deferred piece finally enters. Ordinary play must never engage any of
-  // it. (The moves land on the alpha ticks in the next increment.)
+  // rung 10 sequencing, watched stage by stage on an EMPTY stack: after a
+  // clearing lock's reset seeds the chain at the cleared row, the lane owns
+  // the ticks — alpha moves ripple empty rows, beta steps the one-hot up,
+  // the armed spawn WAITS — and when the chain drains off stage 1 the lane
+  // releases and the deferred piece finally enters. Ordinary play must
+  // never engage any of it. (Real content falling is the acceptance test
+  // below; this one pins the sequencing observables.)
   it('collapse prep: the lane owns the ticks, the chain walks, spawns wait (sparse)', { timeout: 900000 }, () => {
     setSolverEngine('sparse');
     const g = makeGame();
@@ -788,15 +889,18 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     expect(g.tokenAt()).toEqual([]);
     expect(elev(), 'seeded at stage 7').toEqual(oneHotAt(7));
 
-    // 7 alpha/beta pairs: the hole walks to the top while spawns wait
+    // 7 alpha/beta/gamma triples: the hole walks to the top while spawns wait
     for (let step = 7; step >= 1; step--) {
-      expect(elev(), `stage ${step} holds before its pair`).toEqual(oneHotAt(step));
-      g.tick(); // alpha — the move tick (a no-op until the routing lands)
+      expect(elev(), `stage ${step} holds before its triple`).toEqual(oneHotAt(step));
+      g.tick(); // alpha — the move tick (empty copies empty here)
       expect(g.tokenAt(), 'alpha defers the spawn').toEqual([]);
       expect(elev(), 'alpha does not step the chain').toEqual(oneHotAt(step));
-      g.tick(); // beta — clear + step
+      g.tick(); // beta — the clear tick
       expect(g.tokenAt(), 'beta defers the spawn').toEqual([]);
-      expect(g.field(), 'field frozen through the walk (no routing yet)').toEqual(model);
+      expect(elev(), 'beta does not step the chain either').toEqual(oneHotAt(step));
+      g.tick(); // gamma — the step, with every rail dark
+      expect(g.tokenAt(), 'gamma defers the spawn').toEqual([]);
+      expect(g.field(), 'empty rows ripple down — the field stays clear').toEqual(model);
     }
     expect(elev(), 'chain drained off the top').toEqual(oneHotAt(0));
 
@@ -829,5 +933,15 @@ describe('Multivac: mini-tetris (28 machines)', () => {
     dropVertical(g, 0b0010, model, 'dense vertical');
     expect(g.row(1)).toBe(0b0010);
     expect(g.row(0)).toBe(0b0010);
+    // and one collapse under the oracle: complete row 7 (col 3 falls clear
+    // past the 0010 stack) — the 14 dense collapse ticks walk the three
+    // stacked cells down one row each
+    g.m.setSlide((VMODE % 6) + 1, 'left', Math.floor(VMODE / 6));
+    dropPiece(g, 0b1000, model, 'dense clear + collapse');
+    expect(g.row(7)).toBe(0);
+    expect(g.row(3), 'the stack fell one row').toBe(0b0010);
+    expect(g.row(2)).toBe(0b0010);
+    expect(g.row(1)).toBe(0b0010);
+    expect(g.row(0)).toBe(0);
   });
 });

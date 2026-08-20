@@ -3,10 +3,11 @@
  * playfield as big pixels and a keyboard wired to the machine's inputs.
  * The pixels ARE relay armatures: each cell reads a field-cell relay, the
  * falling piece reads the token ring's slaves. Everything the game decides
- * (falling, landing, stacking, line clears, the two-row vertical write)
- * happens inside the 163-relay circuit; this page only flips the tick
+ * (falling, landing, stacking, line clears, the two-row vertical write,
+ * the row collapse that walks the stack down after a clear)
+ * happens inside the 218-relay circuit; this page only flips the tick
  * slide, the column and shape slides, and the START button — exactly what
- * a human at 28 real Minivacs would do. After a lock the machine owes
+ * a human at 38 real Minivacs would do. After a lock the machine owes
  * itself bookkeeping ticks (the vertical phase-2 write, then the reset);
  * the page runs those automatically while the LOCKED slave is up, which
  * also keeps the keyboard from re-steering the piece between the bottom
@@ -36,7 +37,7 @@ root.innerHTML = `
   <div style="text-align:center;padding:24px">
     <h1 style="font-size:16px;font-weight:600;letter-spacing:.06em;color:#e8e2d0;margin:0 0 4px">
       multivac tetris</h1>
-    <div style="color:#7a828c;margin-bottom:18px">163 relays / ${MACHINES} minivacs — pure wiring</div>
+    <div style="color:#7a828c;margin-bottom:18px">218 relays / ${MACHINES} minivacs — pure wiring</div>
     <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center;margin-bottom:6px"></div>
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},56px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
@@ -193,13 +194,19 @@ document.addEventListener('keydown', e => {
         setTimeout(() => {
           sim.setSlide(t.slide, 'left', t.machine);
           ticks++;
-          if (relay(TETRIS_IO.lockedRelay) && n < 3) {
-            render('locked — the machine runs its bookkeeping ticks…');
+          // the machine owes itself ticks while LOCKED (phase 2 / reset)
+          // or while a collapse walks the stack down (up to 21 more)
+          if ((relay(TETRIS_IO.lockedRelay) || relay(TETRIS_IO.collapseRelay)) && n < 26) {
+            render(
+              relay(TETRIS_IO.collapseRelay)
+                ? 'line cleared — the stack falls…'
+                : 'locked — the machine runs its bookkeeping ticks…'
+            );
             step(n + 1);
           } else {
             busy = false;
             const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
-            render(cleared ? `tick ${ticks} — line cleared! rows above stay put (collapse is the next rung)` : undefined);
+            render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
           }
         }, 120);
       }, 15);

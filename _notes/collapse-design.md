@@ -18,7 +18,42 @@ novel mechanism; field size is repetition.
    (~48 relays at 4x8), and the simultaneous version still ORs into
    uncleared destinations.
 
-## the surviving design: sequential moves, 2 ticks per row, O(rows)
+## what the traces changed (2026-08-20, during the build)
+
+the 2-tick design below died on the machine; the shipped design is THREE
+ticks per stage. traced findings, in order:
+
+1. stepping the chain during the beta (clear) tick fired the freshly hot
+   stage's routing MID-TICK with the breaker rail still hot: every row
+   above the first was killed before its copy. the chain may only step
+   when every rail is dark -> a third tick (gamma). the phase ring is two
+   master/slave toggle bits whose own contacts decode alpha/beta/gamma off
+   the cgbRail chain: alpha arms bit0, beta arms bit1, gamma arms nothing.
+2. the alpha needs NO breakers at all: a live row's content leaks onto the
+   rails BACKWARD through its own closed write gates (contacts are
+   bidirectional) — the mid-reset bug demonstrated the mechanism before it
+   was a feature. gates-only alpha = nothing breaks, nothing to strand.
+3. UNEXPLAINED (avoided, not exploited): in the old 2-tick alpha
+   (self-press + dest gates), the source row dropped at the alpha's
+   RELEASE despite a paper handoff that says its holds re-close in time.
+   the 3-phase design never breaks holds in alpha, so the mechanism cannot
+   fire; the wave-level cause was never established.
+4. the toggle masters' between-tick self-holds keep the phase-decode nodes
+   (and CGA/CGB2 + the held gates) alive through inter-tick gaps —
+   idempotent re-latches of the same content, but it forced the colFan
+   bridge cut (CUTC) to be laneNode-scoped (whole collapse) instead of
+   per-tick.
+5. the mask can change between the lock and the collapse (slides are
+   free), so with 2+ mask columns raised the piece gates would TIE their
+   data rails through the unfed colFan node (a jack is a tie) and moves
+   would cross-leak between masked columns -> CUTC relays open the piece
+   arms off colFan while the lane is up.
+6. the alpha originally fired one tick early — DURING the reset that seeds
+   the chain — because its trigger (tick mirrors + laneNode) could not
+   tell the reset from a collapse tick; riding the phase decode off
+   cgbRail (lane-gated by construction) fixed it.
+
+## the superseded first cut: sequential moves, 2 ticks per row, O(rows)
 
 the hole starts at the cleared row r and walks UP. each step moves the row
 above the hole down into it, using three firing shapes the machine already
