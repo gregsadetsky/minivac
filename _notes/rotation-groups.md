@@ -56,6 +56,42 @@ and the UPM root changeover (UPM set2? check spends).
 - driver: rotate mid-fall in the step-exact game; select pre-spawn.
 - gates as ever: file, check, sweep; deploy by sha.
 
+## the paper pass RESOLVED the design (21:50Z) — alternative C
+
+the one-button two-network idea has a fatal flaw: the SUCCESSOR MAP
+lives in the MASTER SAMPLING CHAIN (slave i feeds master next(i)
+continuously), not in the clock network — the network only decides
+whether the clock conducts. two different successors would need a
+D-feed mux on every slave. the fix that shrinks it:
+
+REORDER THE RING so rotation pairs are adjacent:
+  0 1x1 | 1 2wide, 2 2tall | 3 O | 4 S | 5 Z |
+  6 L1, 7 L2 | 8 J1, 9 J2 | 10 T1, 11 T2
+then mid-fall rotation IS the forward edge for group-first members
+(1->2, 6->7, 8->9, 10->11 — same successor, no mux), and only the
+FOUR group-last slaves {2,7,9,11} need a D-feed changeover (mid-fall:
+back to group-first; pre-spawn: the normal next). singletons refuse
+natively (no mid-fall branch). cross-group branches gain ONE series
+NOTOK contact at the transition root (8 roots = 4 mirror relays).
+
+NOTOK source: a NC-series chain through the SEEDM(t) mirrors' FREE
+second sets (they are ring-slave parallel coils, one per row; set1
+feeds the seed fan, set2 unspent) -> 'no token anywhere', rows-scaled.
+
+mux-flip safety: the shape ring's clock only rises on UP presses;
+spawns/deaths happen on FALL ticks with the shape clock LOW — the
+masters are transparent-D there, so a mid-low successor change just
+re-samples (the ring pattern's own discipline covers it).
+
+budget: NOTOK + its chain (1 relay), ~4-6 NOTOK mirrors (8 root
+contacts + 4 mux changeovers), the 4 back-edge network branches with
+delta checks, the reorder itself (free — everything derives from
+SHAPES order; SHBOOT still seeds state 0 = 1x1).
+
+reorder blast radius: SHAPES array order + any test/page site that
+hardcodes state INDICES (the emitters and ranges all derive; the walk
+test derives; grep for literal ring indices before assuming).
+
 ## open questions (paper-check before wiring)
 
 - the NOTOK signal source: needs a relay whose contacts say 'no token
