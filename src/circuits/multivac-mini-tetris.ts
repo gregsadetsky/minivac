@@ -888,11 +888,17 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     for (let k = 0; k < 2 * nGates; k++) {
       // com holes are finite (4): each com feeds its first TWO coils
       // directly and the rest chain E-to-E — identical wiring at 4 cols
+      // gate k=2 cannot chain off W(r,1).E — that jack carries the
+      // collapse alpha trigger; MIRA(r).G is on the comA net with a
+      // free hole. breakers chain off W(r, nGates+1) similarly (the
+      // first breaker's jack carries the beta trigger).
       const src =
         k < nGates
           ? k < 2
             ? comA
-            : R(W(r, k - 1), 'E')
+            : k === 2
+              ? R(MIRA(r), 'G')
+              : R(W(r, k - 1), 'E')
           : k < nGates + 2
             ? comB
             : R(W(r, k - 1), 'E');
@@ -1005,9 +1011,28 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   const railA = takeGroups(grown(3, 0.5)); // tick-driven, dies instantly on release
   const railB0 = takeGroups(grown(3, 1)); // breaker triggers: live on press OR clear
   const railB0p = takeGroups(grown(3, 1)); // gate triggers: live on press only
-  const colFan = takeGroups(1)[0]; // column feed, via RAILGATE2 (press only)
+  // column feed, via RAILGATE2 (press only). consumers = 2 feeds +
+  // one cut arm per column: exactly 6 at 4 cols (one group), chained
+  // groups beyond (4g+2 usable holes for g chained groups)
+  const colFanG = takeGroups(Math.ceil(cols / 4));
+  for (let i = 1; i < colFanG.length; i++) w.push(`${colFanG[i - 1]}/${colFanG[i]}`);
+  const cfUse = { n: 0 };
+  const colFan = () => {
+    const g = colFanG.length === 1 ? colFanG[0] : colFanG[Math.floor(cfUse.n / 4)];
+    cfUse.n++;
+    return g;
+  };
   const resetRail = takeGroups(grown(2, 0.5));
-  const collideNode = takeGroups(1)[0];
+  // COLLIDEM2 + the floor feed + one collide-tap NC per column + the
+  // top-collision term: 6+ holes at 4 cols was exact; chain beyond
+  const collideNodeG = takeGroups(Math.ceil(cols / 4));
+  for (let i = 1; i < collideNodeG.length; i++) w.push(`${collideNodeG[i - 1]}/${collideNodeG[i]}`);
+  const cnUse = { n: 0 };
+  const collideNode = () => {
+    const g = collideNodeG.length === 1 ? collideNodeG[0] : collideNodeG[Math.floor(cnUse.n / 4)];
+    cnUse.n++;
+    return g;
+  };
   for (const g of [railA, railB0, railB0p, resetRail]) {
     for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
   }
@@ -1021,7 +1046,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(READGATE)}/${R(READGATE, 'H')}`, `${R(READGATE, 'G')}/${tap(railB0, b0Use)}`);
   w.push(`${plusOf(READGATE)}/${R(READGATE, 'L')}`, `${R(READGATE, 'K')}/${tap(railB0p, bpUse)}`);
   w.push(`${tap(railB0p, bpUse)}/${R(RAILGATE2, 'E')}`, `${R(RAILGATE2, 'F')}/${minusOf(RAILGATE2)}`);
-  w.push(`${plusOf(RAILGATE2)}/${R(RAILGATE2, 'L')}`, `${R(RAILGATE2, 'K')}/${colFan}`);
+  w.push(`${plusOf(RAILGATE2)}/${R(RAILGATE2, 'L')}`, `${R(RAILGATE2, 'K')}/${colFan()}`);
   for (let x = 0; x < rows / 2; x++) {
     w.push(`${tap(railA, aUse)}/${R(PRESSCUT(x), 'E')}`, `${R(PRESSCUT(x), 'F')}/${minusOf(PRESSCUT(x))}`);
   }
@@ -1065,7 +1090,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // relay's SET path therefore enters its com through a private contact:
   // COLLIDEM2 (NC, open during the lock) isolates the collision node,
   // COLLIDEM's spare set gates LKM's set, RSTM's spare set gates SPAWN's.
-  w.push(`${collideNode}/${R(COLLIDEM2, 'H')}`, `${R(COLLIDEM2, 'J')}/${comOf(COLLIDE)}`);
+  w.push(`${collideNode()}/${R(COLLIDEM2, 'H')}`, `${R(COLLIDEM2, 'J')}/${comOf(COLLIDE)}`);
   w.push(`${tap(railA, aUse)}/${R(COLLIDEM2, 'E')}`, `${R(COLLIDEM2, 'F')}/${minusOf(COLLIDEM2)}`);
   w.push(`${comOf(COLLIDE)}/${R(COLLIDE, 'E')}`, `${R(COLLIDE, 'F')}/${minusOf(COLLIDE)}`);
   w.push(`${tap(railA, aUse)}/${R(COLLIDEM, 'E')}`, `${R(COLLIDEM, 'F')}/${minusOf(COLLIDEM)}`);
@@ -1107,7 +1132,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       }
     } else {
       // the floor: the token at the bottom row always collides
-      w.push(`${plusOf(MIRB(rows - 1))}/${R(MIRB(rows - 1), 'H')}`, `${R(MIRB(rows - 1), 'G')}/${collideNode}`);
+      w.push(`${plusOf(MIRB(rows - 1))}/${R(MIRB(rows - 1), 'H')}`, `${R(MIRB(rows - 1), 'G')}/${collideNode()}`);
     }
   }
 
@@ -1132,11 +1157,11 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     // colFan -> CUTB (NC, opens during a STAGGERED phase 2: the closed B
     // gates would bridge the T-driven rails through colFan — the mirror
     // of the bottom-press leak) -> CUTC (NC, opens during collapses) ->
-    w.push(`${colFan}/${R(cutb, cArm)}`, `${R(cutb, cNc)}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
+    w.push(`${colFan()}/${R(cutb, cArm)}`, `${R(cutb, cNc)}/${R(cutc, cArm)}`, `${R(cutc, cNc)}/${R(p, 'H')}`);
     w.push(`${R(p, 'G')}/${tapRail(j)}`);
     const cutb2 = j < 4 ? [CUTB3, CUTB4][Math.floor(j / 2)] : CUTX(3, xk);
     w.push(`${tapRail(j)}/${R(p, 'L')}`, `${R(p, 'K')}/${R(cutb2, cArm)}`);
-    w.push(`${R(cutb2, cNc)}/${R(cutk, cArm)}`, `${R(cutk, cNc)}/${collideNode}`);
+    w.push(`${R(cutb2, cNc)}/${R(cutk, cArm)}`, `${R(cutk, cNc)}/${collideNode()}`);
   }
 
   // LINE relays on the rails; their series chain latches CLEARP when a lock
@@ -1299,7 +1324,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // behavior change with the STAG slide off); staggered pieces divert to
   // the T fan (NO -> colFanT, the PIECET gates)
   w.push(`${plusOf(P2COL)}/${R(P2COL, 'L')}`, `${R(P2COL, 'K')}/${R(STAGM, 'H')}`);
-  w.push(`${R(STAGM, 'J')}/${colFan}`);
+  w.push(`${R(STAGM, 'J')}/${colFan()}`);
   // TOPW(r) routes the triggers to row r-1. The gate com (comA) is 4/4
   // full, but a com is one node: the trigger enters through W(r-1,0)'s coil
   // jack spare hole instead. Backfeed out of that node dead-ends at open
@@ -2233,8 +2258,16 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // increment: a staggered top cell can overhang stored content and the
   // phase-2 OR-write absorbs it (documented; the top collision term is
   // the next increment).
-  const colFanT = takeGroups(1)[0];
-  w.push(`${R(STAGM, 'G')}/${colFanT}`);
+  // 1 feed + one cut arm per column: one group at 4 cols, chained beyond
+  const colFanTG = takeGroups(Math.ceil(cols / 4));
+  for (let i = 1; i < colFanTG.length; i++) w.push(`${colFanTG[i - 1]}/${colFanTG[i]}`);
+  const cftUse = { n: 0 };
+  const colFanT = () => {
+    const g = colFanTG.length === 1 ? colFanTG[0] : colFanTG[Math.floor(cftUse.n / 4)];
+    cftUse.n++;
+    return g;
+  };
+  w.push(`${R(STAGM, 'G')}/${colFanT()}`);
   const bmS = `m${btnMachine}`;
   w.push(`${bmS}.6+/${bmS}.6S`, `${bmS}.6T/${R(STAGM, 'E')}`, `${R(STAGM, 'F')}/${minusOf(STAGM)}`);
   // ...and the gate coils are phase-2 AND staggered (STAGM's spare set):
@@ -2277,7 +2310,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${sm2}.${sec}+/${sm2}.${sec}S`, `${sm2}.${sec}T/${R(pt, 'E')}`, `${R(pt, 'F')}/${minusOf(pt)}`);
     const cutc = j < 4 ? [CUTC5, CUTC6][Math.floor(j / 2)] : CUTX(4, Math.floor((j - 4) / 2));
     const [cArm, cNo] = j % 2 === 0 ? ['H', 'G'] : ['L', 'K'];
-    w.push(`${colFanT}/${R(cutc, cArm)}`, `${R(cutc, cNo)}/${R(pt, 'H')}`);
+    w.push(`${colFanT()}/${R(cutc, cArm)}`, `${R(cutc, cNo)}/${R(pt, 'H')}`);
     w.push(`${R(pt, 'G')}/${tapRail(j)}`);
   }
 

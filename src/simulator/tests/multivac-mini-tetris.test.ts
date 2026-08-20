@@ -2278,6 +2278,8 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     setSolverEngine('fast');
     const COLS6 = 6;
     const { wires, layout: L, btnMachine } = tetrisCircuit(8, COLS6);
+    // physical buildability: the hole budget holds at SIX columns too
+    assertJackCapacity(wires);
     const m = new MinivacSimulator(wires, false, L.machines);
     m.initialize();
     const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
