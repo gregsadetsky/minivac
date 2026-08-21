@@ -69,3 +69,92 @@ which is the visible milestone, at a tenth of the cost. RUNG B after,
 and only with a design review — every review so far has found a fatal
 flaw in my first draft (the ring reorder, the row-0 NOTOK gap, the root
 gating that would have killed its own flips).
+
+## RUNG A, read out of the source — the exact edit list (2026-08-21)
+
+traced every site a 13th state touches. the ring machinery is already
+NSTATES-parametric (the clock-com pairing at `i - (i % 2)`, the D-feed
+`prevIx`, the UP emitter's per-target loop, `upResourceCounts`), so the
+work is: three new relays, two new unions, one new fan offset, and the
+five places that still switch on a hardcoded state index.
+
+geometry: `{ label: 'I', bOff: 0, bW: 4, tOff: 0, tW: 0 }` appended at
+index 12. flat, so tW = 0 and every top path stays dark.
+
+1. SHAPES + NSTATES 12 -> 13. `ROT_STATE(12) = 12` (singleton: its
+   partner is the vertical I, which RUNG B builds).
+2. layout: `shr4Base = take(3)` (clk/master/slave) + MMIR4 + the I
+   state's mirror tail + one more NOTM. allocate them at the END, next
+   to `rotBase` — taking relays mid-sequence re-hosts every later coil
+   and that is exactly what pushed a section past the 3.5A overload
+   alarm last time.
+3. `SH(i, part)`: add `i < 13 ? SHR4(i, part)`.
+4. `mm = ... : t < 12 ? MMIR3(t) : MMIR4(t)` in the UP emitter.
+5. the step-tree unions: `rightBottom(12) = 3`, which no union covers,
+   and `maxCol(12) = cols - 4`, a new bound class. so two new rails —
+   `uB3` and `uHIB2` — and STPUNION_CAP 10 -> 12. the right tree gains
+   `poolHop(c + 3, uB3, false)` and `if (dir > 0 && c === cols - 3)
+   refuse(uHIB2.request('changeover'))`. the LEFT tree needs nothing:
+   I's bOff is 0, so its left-entering column is the shared d0 check.
+6. the B fan gains offset 3: a fourth tap bank sourced from the I state
+   mirror (NOT a WID-style compat net — I is ring-only, no legacy
+   slide reaches it), tapping `fanPos[j - 3]` for j >= 3.
+7. `caps` (the per-state step-mirror bank sizes) gains a 13th entry.
+   count it from the emitter's actual requests and let the bank assert
+   catch drift rather than guessing high.
+8. the page + driver + tests: SHAPES is the single source of truth for
+   rendering, so the page follows for free; the driver's own copy of
+   the geometry table (verify-tetris-page.mjs) needs the 13th row.
+
+the receipt: I spawns, falls, steers to both walls, refuses the right
+wall at cols-4, locks, and completes a line by itself only at 4 wide.
+plus the singleton refusal (UP mid-fall says no) and the ring walk
+(12 -> 0 wraps).
+
+## RUNG B, resized honestly (2026-08-21)
+
+the earlier "40-60 relays" estimate counted the ENGINE and forgot the
+STATES. counting properly: a full tetris piece set with every rotation
+is 19 oriented shapes (I 2, O 1, S 2, Z 2, J 4, L 4, T 4). the ring
+holds 12 today, of which 9 are tetromino orientations (O, S, Z, and the
+two horizontal forms each of L/J/T) and 3 are the toy shapes (1x1,
+2 wide, 2 tall) that the legacy slide modes and ~all the tests are
+anchored to. so the gap is TEN more states, not two, and each state
+costs 3 ring relays plus a mirror tail plus its transition branches.
+
+so B is not one rung. the sequencing that actually works:
+
+- **B0 — SHAPES becomes N rows.** today the record is
+  `{bOff,bW,tOff,tW}` and every consumer reads those four fields
+  (circuit, page, tests, driver). generalise to `rows: [{off,w}, ...]`
+  bottom-first, keep bOff/bW/tOff/tW as derived getters so nothing
+  else changes yet. receipt: netlist BYTE-IDENTICAL at (8,4) and
+  (12,6), the same proof the union derivation used.
+- **B1 — the third-row engine + vertical S and Z.** this is where the
+  cost is: a phase-3 master/slave chained off P2S, a `p3railA` +
+  P3GATE + p3break/p3gate rails, a TOPW2(r) bank routing row r-2's W
+  group (rows-2 relays), a third mask fan (PIECET2 + its offset rails)
+  behind a second STAGM-style changeover on the column feed, and a
+  third collision term (PIECET2(j) AND occupied(tok-1, j)) — the
+  row-above occupancy bank LEGINVT already exists and is exactly that
+  read. two new ring states ride on top. **this alone answers half the
+  user's rotation complaint: S and Z stop being singletons.**
+- **B2 — vertical L/J/T, six states.** pure state work once B1's
+  engine exists: three relays + a mirror tail + transition branches
+  each, and ROT_STATE becomes a real 4-cycle for those three pieces
+  instead of the i <-> i+3 flip it is today.
+- **B3 — vertical I.** four rows tall, so it needs a FOURTH phase, fan
+  and collision term. only worth it after B1 proves the pattern
+  generalises; horizontal I (RUNG A) does not depend on it.
+
+the step trees also grow a third entering read per direction
+(`stepEntering` returns {b, t} and would return a list), and the
+bounds unions are already derived from `shapeRange`, so a 3-row
+shape's range falls out with no hand-laid lists — that is the payoff
+of the union-derivation commit landing first.
+
+DO NOT wire B1's phase sequencer from this note alone. every first
+draft of phase machinery written this session was refuted on review
+(the ring reorder, the row-0 NOTOK gap, the root gating that killed
+its own flips). draft it, hand it to a clean-context reviewer with
+the phase-2 source, THEN wire.
