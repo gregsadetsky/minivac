@@ -709,6 +709,29 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    rotation both ways + singleton refusal + the full chooser cycle, the
    mux flipping under a HELD up across both a spawn and a lock, the
    page driver turning L -> L flip -> L on a falling piece.
+   THE SUPPLY-OVERLOAD FIX rode along (2f7c421, deployed 0bd4327): the
+   "unexplained transient shorts" logged earlier were never shorts —
+   they were SUPPLY OVERLOADS. CELL was allocated row-major, so one
+   machine hosted up to a whole row of field cells, and since occupancy
+   sensing draws through the cell coms, writing over a stacked row put
+   that entire row's read load on ONE section's supply. measured on an
+   L2 locking beside a two-cell stack: machine 9 peaked 3.44A BEFORE
+   the rotation rung (alarm 3.5A; a genuine short here is 4.6-6.6A) and
+   3.61A after rotation added one more read to the same rail — so the
+   rung did not cause it, it exposed a design that was already at 98%
+   of the alarm. allocating cells COLUMN-major spreads a row across
+   supplies: peak 2.16A, every other machine's load bit-identical, the
+   game behaviour byte-for-byte the same (verified by running the same
+   scenario in both trees). the debugging path is worth remembering:
+   same scenario clean on the deployed commit -> netlist bisect (muxes,
+   not the NOTOK chain) -> remove the keypress so both trees hold
+   IDENTICAL state -> fields matched exactly, so it was purely
+   electrical -> per-machine current comparison isolated one supply.
+   also learned, twice: a test scenario can be PHYSICALLY IMPOSSIBLE —
+   for a 3-wide top over a 1-wide bottom, every cell that could block
+   the rotation also sits where the piece's own top lands one row down,
+   so the piece is already resting and written before the turn is
+   asked for. the machine was right both times; the model was wrong.
    NEXT: pivot-order / symbolic-factorization reuse in the fast engine
    — but MEASURE FIRST (_notes/pivot-reuse.md): the lever only exists
    if sparsity patterns repeat, and every relay flip changes the
