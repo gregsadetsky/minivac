@@ -584,3 +584,38 @@ coils on MIRA(r).E or SEEDM2(r).E. and the row-0/1 guard — a 3-tall piece
 locking at row 1 would aim phase 3 at row -1; today that is inert because
 nothing is routed, and it must stay inert (or be refused in the
 collision term) once it is.
+
+## B1b-ii's OUTPUT TIE POINTS, measured (2026-08-21) — the review missed these
+
+the cross-review flagged TOPW2's COIL tie point (comOf(MIRA(r)) is 4/4;
+use MIRA(r).E, measured 1 free at both geometries). it did not check the
+OUTPUT end, and the obvious one is full: the two jacks TOPW(r) itself
+uses to enter row r-1's write-trigger nets — `W(r,0).E` and
+`comOf(W(r,nGates))` — measure **0 free holes at every row, both
+geometries**. TOPW2 cannot copy TOPW's entry.
+
+but each net has exactly one spare hole somewhere else, because the W
+group's coils are chained E-to-E and a coil jack is a permanent tie, so
+any jack on the net will do:
+
+    8x4  (nGates 2)  gate net: MIRA(r).G  = 1 free (every row)
+                     breaker : W(r,3).E   = 1 free (every row)
+    12x6 (nGates 3)  gate net: W(r,2).E   = 1 free (every row)
+                     breaker : W(r,5).E   = 1 free (every row)
+
+so the BREAKER rule is general — `W(r, 2*nGates-1).E`, the last breaker
+coil in the chain — and the GATE rule is not: at 4 cols the chain is
+short enough that both gate coils are full (W0.E carries TOPW(r+1), W1.E
+carries the collapse alpha trigger) and the spare hole is on MIRA(r).G;
+at 6 cols MIRA(r).G is spent sourcing W2.E and the spare is on W2.E
+itself. `nGates > 2 ? W(r, nGates-1).E : MIRA(r).G`, and
+assertJackCapacity at both widths is what keeps it honest.
+
+the fan is legal by the same argument as everything else here: the gate
+net would then have three sources — the press path (comA), TOPW(r-1),
+TOPW2(r) — and no two are ever closed together. TOPW(r-1) and TOPW2(r)
+are one-hot on DIFFERENT token rows, and beyond that their far sides
+(row2gate vs row3gate) are the two sides of ROW2's changeover, so they
+are exclusive twice over.
+
+STILL UNVERIFIED and not to be reported as done: none of this is wired.
