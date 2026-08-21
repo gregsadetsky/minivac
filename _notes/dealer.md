@@ -69,3 +69,45 @@ so the whole rung is:
 - driver: the step-exact scenario keeps working (determinism), and a
   hands-off auto game shows varied pieces.
 - gates: fast file + check + driver (the user's amended gate).
+
+
+## THE BOUNDS STALL, MEASURED 2026-08-21 — and why this rung is BLOCKED
+
+walked the chooser from each column at 6 wide, counting how many of the
+twelve states a free-running ring can reach:
+
+    col 0: 4/12   (stalls at O — entering S needs column >= 1)
+    col 1: 12/12
+    col 2: 12/12
+    col 3: 12/12
+    col 4: 5/12   (stalls at S)
+    col 5: 1/12   (stalls immediately — even 2wide needs column <= 4)
+
+and a lock re-homes the register to COLUMN 0, so a tick-clocked dealer
+would always deal from the worst column: four shapes out of twelve,
+forever. the dealer cannot be built on top of that.
+
+## the fix that works, and why it is NOT landed here
+
+make the home column the middle of the window every shape can occupy —
+derived from the geometry, `homeColumn(cols)` = 1 at four wide, 2 at
+six, 4 at ten. it unblocks the ring completely (verified: from the new
+home, all 12 states reachable with no steering) AND it spawns pieces
+centrally, which is what tetris does anyway. two lines of wiring.
+
+BUT the home column is baked into roughly thirty test scenarios — every
+"drop at column 0" expectation, the seeded gameplay models, the driver's
+step-exact script. changing it turns nearly the whole suite red at once,
+and rewriting thirty scenarios to match NEW behaviour is precisely the
+situation where a test gets "fixed" into agreeing with a bug. that is a
+deliberate call for a human, not a thing to do unilaterally at 1am.
+
+so this rung is BLOCKED on one decision: move the home column (a real
+gameplay improvement, a big mechanical test rewrite, best done as its
+own rung with fresh eyes) or give the dealer its own steering machinery
+(more relays, no test churn). the measurement above is the evidence for
+whoever decides.
+
+the alternative worth noting: deal only among the shapes legal at the
+current column. rejected — at the home column that is four shapes, and
+a dealer that never deals an S is not a dealer.
