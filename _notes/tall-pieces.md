@@ -191,3 +191,152 @@ already derives a shape's legal columns from its geometry, and the step
 trees' bound unions are now derived predicates over `maxCol`. so a
 3-row shape's horizontal limits fall out with nothing hand-laid — that
 is what the union-derivation commit bought.
+
+## A LIVE BUG found while designing B1 (2026-08-21) — cells materialise
+
+designing the phase-3 sequencer raised the question "is the SHAPE frozen
+for the duration of a multi-phase lock?" — because the rotation muxes aim
+at the rotation partner whenever a token is alive, and the token IS alive
+from the lock press until the reset two ticks later. probed instead of
+assumed, at 12x6, with an L (state 6, 3-wide bottom + a left stem):
+
+    no UP mid-lock:  row10 "X....."   row11 "XXX..."   <- four cells, correct
+    UP mid-lock:     row10 "XXX..."   row11 "XXX..."   <- SIX cells
+
+so an UP pressed between the lock press and phase 2 re-aims the T fan and
+phase 2 writes the ROTATED shape's top row over the already-written
+bottom. the piece gains cells out of nowhere. this is in the shipped game
+today, not something RUNG B introduces — and it is a plausible cause of
+the "new shapes appear? conflicts?" report from the fast-gravity session,
+since the page's key queue drains at every settle, including the settles
+between a lock's phases.
+
+the fix looks small: the UP clock's + already enters at UPM's set-1 arm,
+and LKM2 (a lock-master mirror, up from the lock press until the reset)
+has a free set — running the arm's feed through its NC refuses UP for the
+whole lock. two wires. but the 'reshape legality' test deliberately
+probes with LKS UP, so that scenario has to be re-read before touching
+this: it may be asserting a refusal that would then come from the lock
+gate rather than from the delta check it is about.
+
+fix it as ITS OWN rung, with the failing test first — not folded into a
+piece rung.
+
+## B1 — the phase-3 write, DRAFT WIRING (2026-08-21). REVIEW BEFORE WIRING.
+
+read out of the phase-2 block rather than remembered. what exists today:
+
+    tick slide -> LKS (the LOCKED slave, master/slave off LKM)
+    LKS.G -> P2S.H changeover
+              P2S.J (NC, no phase 2) -> resetRail
+              P2S.G (NO, phase 2)    -> p2railA
+    p2railA -> P2CLR, P2GATE, the P2CUT bank            (depth 1)
+    P2GATE's two sets -> p2break and p2gate rails       (depth 2)
+    p2gate -> P2COL, and -> TOPW(r).H -> W(r-1,0).E     (the row-1 write)
+    p2break ->            TOPW(r).L -> W(r-1,nGates).com
+    P2COL.set2 -> STAGM.H: NC -> colFan (symmetric tops ride the B fan),
+                           NO -> colFanT (staggered tops ride the T fan)
+    P2M's set   = TICKM2.G AND COLLIDEM2 (press-scoped) AND VMODE
+    P2M's break = P2CLR (rides p2railA, so phase 2 ends phase 2)
+    P2S copies P2M only while the tick is LOW and holds while HIGH
+
+### the proposed phase 3, as a NESTED changeover rather than a parallel one
+
+    LKS.G -> P2S.H
+              P2S.J -> resetRail                    (unchanged)
+              P2S.G -> P3S.H                        (NEW: nest, don't fork)
+                        P3S.J -> p2railA            (phase 2 as today)
+                        P3S.G -> p3railA            (phase 3)
+
+nesting keeps ONE branch live at a time by construction — a fork would
+need a mutual-exclusion argument, and the tie-point law says two rails
+hanging off one contact bridge each other. P2S stays UP through phase 3
+so the reset rail is not reached early.
+
+    P3M's set   = TICKM2.G AND (phase 2 is live) AND (the shape is 3 tall)
+    P3M's break = P3CLR, riding p3railA
+    P3S copies P3M while the tick is LOW, holds while HIGH  (P2S verbatim)
+
+and the CLEAR ordering changes, which is the part most likely to be
+wrong: today P2CLR rides p2railA, so phase 2 always ends the lock. with
+a third phase, P2M must survive phase 2 when the piece is 3 tall. so
+P2CLR's coil becomes p2railA AND NOT-(3 tall), and P3CLR (on p3railA)
+breaks BOTH P3M and P2M. a 2-tall piece never raises the 3-tall rail and
+its sequence is bit-for-bit what it is today — that is the property to
+check first in any review.
+
+### what phase 3 has to drive
+
+- a TOPW2(r) bank, r = 2..rows-1, routing to W(r-2): `rows - 2` relays,
+  parallel coils on the same slave mirror coms TOPW(r) uses if a hole
+  is free, otherwise their own chain.
+- a THIRD mask fan. the B fan writes the bottom, the T fan the row
+  above; a 3-tall piece needs the row above THAT. same emitter shape as
+  the T fan (offset rails = the states whose third row covers the
+  offset, x a pos tap per column), feeding a new PIECET2 bank.
+- P3COL, and a second STAGM-style changeover so phase 3's column feed
+  reaches colFanT2.
+
+### the collision term
+
+the piece occupies rows tok, tok-1, tok-2. stepping DOWN newly enters
+(tok+1, B), (tok, T) and (tok-1, T2). the first two exist. the third is
+`PIECET2(j) AND occupied(tok-1, j)` — and the row-above occupancy bank
+LEGINVT ALREADY reads exactly (tok-1, j), so this is one more series
+branch onto collideNode, not a new bank.
+
+### the step trees
+
+`stepEntering(s, dir)` returns {b, t}; for R rows it returns a LIST, and
+the tree emitter walks it. the bounds need nothing: `shapeRange` is
+derived and the bound unions are predicates over `maxCol`.
+
+### open questions a review must answer before any wire is written
+
+1. is nesting P3S inside P2S's NO side correct, or does it make phase 3
+   depend on P2S's contact timing in a way a fork would not?
+2. P2CLR gaining a NOT-(3 tall) gate — is a dead gate relay's NC the
+   right idiom here (it is elsewhere), and does the gate settle before
+   the rail it gates?
+3. does the reset still run exactly one tick after the LAST phase for
+   both 2- and 3-tall pieces, and does CLEARP/CLEARP2 sensing still
+   land in the right wave? the double clear senses on the PHASE-2
+   rails; a 3-tall lock can complete THREE rows.
+4. TOPW2's coils: is there a spare hole on the slave mirror coms, or
+   does this need its own chain (and does that chain change any jack
+   already at capacity)?
+5. the mid-lock UP bug above doubles in exposure with a third phase —
+   is the LKM2 gate enough, or does the SHAPE need latching for the
+   duration of the lock?
+
+## width sweep with the I in the ring (2026-08-21)
+
+built every width 4..10, before and after, counting jack-capacity
+violations:
+
+    cols   baseline (12 states)        with the I (13 states)
+     4     builds, 0 violations        builds, 0 violations
+     5     builds, 6 violations        builds, 6 violations
+     6     builds, 0 violations        builds, 0 violations
+     7     builds, 12 violations       builds, 12 violations
+     8     builds, 7 violations        STPREAD pool exhausted (57/56)
+     9     builds, 12 violations       STPREAD pool exhausted (65/64)
+    10     builds, 6 violations        STPREAD pool exhausted (73/72)
+
+two separate things here, and only one is new:
+
+- the VIOLATIONS at 5, 7, 8, 9, 10 are PRE-EXISTING — those widths were
+  already not physically buildable. only 4 and 6 are clean, and 6 is
+  what ships. this is the buildability debt the roadmap already logs.
+- the POOL EXHAUSTION is new: the I's right-step trees each spend one
+  more gated read (`poolHop(c + 3, uB3)`), and `STPREAD_CAP = 8 *
+  (cols - 1)` has no room for it past seven columns.
+
+NOT bumping the cap. `stpReadBase` is taken in the MIDDLE of the
+allocation sequence, so widening it shifts every later bank — which is
+exactly what re-hosts coils onto other machines and pushed a section
+past the 3.5A overload alarm last time. widths 8-10 are already
+unbuildable on jack capacity, so the trade would be real risk at the
+shipping width for no gain at an unusable one. the 10-column rung has
+to revisit the pool formula and the jack debt together; this note is
+the pointer.
