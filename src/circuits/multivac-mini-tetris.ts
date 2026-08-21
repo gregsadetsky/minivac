@@ -468,6 +468,7 @@ export interface TetrisLayout {
   LEGINVT2: (k: number) => number;
   VMODEM: (p: number) => number;
   GOM: number; GAMEOVER: number; LKM2: number; LKM3: number; ROW2: number;
+  TICKM4: number; V3M: number; ROW2M: number; ROW2X: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -652,6 +653,22 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // depth-1 cut bank dark mid-write; see the cross-review verdict in
   // _notes/tall-pieces.md). appended last, like everything after rotBase.
   const row2Base = take(1);
+  // B1b-i: the FOURTH phase, which writes nothing yet.
+  //  - TICKM4: a fourth tick mirror. TICKM2 has spare HOLES but no spare
+  //    contact SET (both its changeovers are spent on P2M/P2S), and
+  //    fanning one of its gated jacks would bridge two slave coms
+  //    through their masters when the contact opens — the tie-point law.
+  //  - V3M: the 3-tall bit, off its own slide, exactly the way VMODE
+  //    carries the 2-tall bit (the ring's tall union splices in later).
+  //  - ROW2M: ROW2's master. p2railA is TICK-HIGH ONLY (measured: P2S is
+  //    up a half-tick before P2CLR ever fires), so the master cannot
+  //    ride the rail into the tick-low transfer and must latch like P2M.
+  //  - ROW2X: ROW2's parallel-coil mirror. ROW2's own two sets ARE the
+  //    write changeover, so the slave's hold and the "ROW2 is down" gate
+  //    have to come from somewhere else.
+  const tickm4Base = take(1);
+  const v3Base = take(1);
+  const row2mBase = take(2);
   return {
     rows,
     cols,
@@ -747,6 +764,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     SHR4: (i, part) => shr4Base + 3 * (i - 12) + part,
     MMIR4: shr4Base + 3, IM: k => shr4Base + 4 + k, FANW4: fanW4Base,
     LKM3: lkm3Base, ROW2: row2Base,
+    TICKM4: tickm4Base, V3M: v3Base, ROW2M: row2mBase, ROW2X: row2mBase + 1,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -869,6 +887,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   claim('FANW4', L8.FANW4, L8.FANW4 + 1);
   claim('LKM3', L8.LKM3);
   claim('ROW2', L8.ROW2);
+  claim('B1b-i', L8.TICKM4, L8.V3M, L8.ROW2M, L8.ROW2X);
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -901,7 +920,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
-    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, TICKM4, V3M, ROW2M, ROW2X, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
     MMIR,
@@ -1380,7 +1399,25 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   const p2aUse = { n: 0 };
   w.push(`${R(P2S, 'G')}/${tap(p2railA, p2aUse)}`);
   w.push(`${R(P2S, 'J')}/${tap(resetRail, rrUse)}`);
-  w.push(`${tap(p2railA, p2aUse)}/${R(P2CLR, 'E')}`, `${R(P2CLR, 'F')}/${minusOf(P2CLR)}`);
+  // B1b-i — P2CLR IS NOW GATED, and it LEAVES THE RAIL to be gated.
+  // The third write row needs the phase to run twice and P2CLR is what
+  // ends it: measured, P2M is cleared inside the phase-2 relaxation
+  // (t8 HI shows P2CLR=1 and P2M=0 in the same row), so the inhibit has
+  // to sit on P2CLR's COIL and nowhere downstream.
+  //
+  // The gate chain is +-SOURCED, and that is not a style choice: the
+  // first cut hung it on p2railA and the machine WEDGED — ROW2M's latch
+  // backfed through its own set path into the rail and held phase 2 on
+  // forever (P2M=1, P2S=1, LKS=1, no reset, reproduced). P2M has the
+  // identical latch-plus-set shape and is safe only because ITS set path
+  // dead-ends at +, which is a supply and does not care. So this one
+  // ends at + too: + -> TICKM4's tick-high NO -> P2SM (P2S's mirror:
+  // "the phase is running") -> V3M -> ROW2X. That product is exactly
+  // p2railA's own condition, so P2CLR's window is unchanged when the
+  // V3 slide is down.
+  w.push(`${plusOf(TICKM4)}/${R(TICKM4, 'H')}`);
+  w.push(`${R(TICKM4, 'G')}/${R(P2SM, 'L')}`, `${R(P2SM, 'K')}/${R(V3M, 'H')}`);
+  w.push(`${R(V3M, 'J')}/${R(P2CLR, 'E')}`, `${R(P2CLR, 'F')}/${minusOf(P2CLR)}`);
 
   // ---------- vertical pieces: the phase-2 write ----------
   // The top write may NOT re-power the press rails: the token row's mirrorA
@@ -1445,6 +1482,53 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${tap(row2gate, r2gUse)}/${R(TOPW(r), 'H')}`, `${R(TOPW(r), 'G')}/${R(W(r - 1, 0), 'E')}`);
     w.push(`${tap(row2break, r2bUse)}/${R(TOPW(r), 'L')}`, `${R(TOPW(r), 'K')}/${comOf(W(r - 1, nGates))}`); // the breaker com, cols-general
   }
+
+  // ---------- B1b-i: THE FOURTH PHASE, WHICH WRITES NOTHING YET -------
+  // A vertical lock is three ticks; a 3-tall one has to be four, and the
+  // extra tick is the dangerous part, not the extra row: ROW2 is a
+  // changeover sitting in the write-trigger path, and a changeover that
+  // moves while the triggers are live is the exact failure LKS and P2S
+  // exist to prevent. So this increment builds the TIMING and leaves
+  // row2gate/row2break's NO sides unwired: with the V3 slide up a lock
+  // takes four ticks and puts down EXACTLY the same two cells. The
+  // TOPW2 bank that makes the fourth tick write row r-2 is B1b-ii.
+  //
+  // The window, read off the 2-tall trace this was designed from:
+  //   press   P2M up                          bottom row written
+  //   phase2  p2railA hot, ROW2 DOWN          row r-1 written, P2CLR
+  //           inhibited (3-tall, ROW2 down) so P2M's latch survives;
+  //           ROW2M arms and LATCHES
+  //   (low)   TICKM4 transfers ROW2M -> ROW2  the changeover moves while
+  //           p2gate/p2break are COLD, which is the whole point
+  //   phase3  p2railA hot, ROW2 UP            ROW2X.G lets P2CLR fire:
+  //           P2M drops and ROW2M's latch breaks
+  //   (low)   P2S and ROW2 both follow their masters down
+  //   reset   as always, one tick later
+  w.push(`${R(TICKM3, 'E')}/${R(TICKM4, 'E')}`, `${R(TICKM4, 'F')}/${minusOf(TICKM4)}`);
+  // the 3-tall bit rides its own slide, exactly as VMODE's 2-tall bit
+  // does; when the ring learns the tall shapes its union splices in at
+  // V3M.E the way the 2-tall union splices at VMODEM(cols-1).E
+  const v3sec = `m${Math.floor(V3M / 6)}.${(V3M % 6) + 1}`;
+  w.push(`${v3sec}+/${v3sec}S`, `${v3sec}T/${R(V3M, 'E')}`, `${R(V3M, 'F')}/${minusOf(V3M)}`);
+  // ROW2 gets its coil at last, with a parallel-coil mirror beside it:
+  // ROW2's own two sets are the write changeover, so every contact this
+  // block needs of "is ROW2 up" comes from ROW2X.
+  w.push(`${comOf(ROW2)}/${R(ROW2, 'E')}`, `${R(ROW2, 'F')}/${minusOf(ROW2)}`);
+  w.push(`${R(ROW2, 'E')}/${R(ROW2X, 'E')}`, `${R(ROW2X, 'F')}/${minusOf(ROW2X)}`);
+  // V3M.G (3-tall) hands the phase rail to ROW2's own state
+  w.push(`${R(V3M, 'G')}/${R(ROW2X, 'H')}`);
+  w.push(`${R(ROW2X, 'G')}/${R(P2CLR, 'E')}`); // ROW2 up  -> end the phase
+  w.push(`${R(ROW2X, 'J')}/${comOf(ROW2M)}`); //  ROW2 down -> arm the next one
+  w.push(`${comOf(ROW2M)}/${R(ROW2M, 'E')}`, `${R(ROW2M, 'F')}/${minusOf(ROW2M)}`);
+  // ROW2M's latch, broken by P2CLR — the same idiom, and the same relay,
+  // that breaks P2M's. the two cannot disagree about when the phase ends.
+  w.push(`${plusOf(P2CLR)}/${R(P2CLR, 'L')}`, `${R(P2CLR, 'N')}/${R(ROW2M, 'L')}`, `${R(ROW2M, 'K')}/${comOf(ROW2M)}`);
+  // transfer while the tick is low, hold while it is high: the P2M/P2S
+  // idiom verbatim, on its own mirror because TICKM2 has no set to spare.
+  // TICKM4's set-1 arm is already at + (the gate chain above uses its NO
+  // for tick-high); this is the same arm's NC, so the two are exclusive.
+  w.push(`${R(TICKM4, 'J')}/${R(ROW2M, 'H')}`, `${R(ROW2M, 'G')}/${comOf(ROW2)}`);
+  w.push(`${plusOf(TICKM4)}/${R(TICKM4, 'L')}`, `${R(TICKM4, 'K')}/${R(ROW2X, 'L')}`, `${R(ROW2X, 'K')}/${comOf(ROW2)}`);
 
   // ---------- row collapse (rung 10) C1: the elevator chain + seeding ----
   // Stage t = "the hole is at row t". The chain is the ring pattern chained

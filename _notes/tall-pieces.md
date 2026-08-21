@@ -527,3 +527,60 @@ does not exist), hung off ROW2's NO sides, which measure entirely free
 (`G:2 K:2`). only then does a third row actually get written.
 
 B1a's inert-contract test goes RED at B1b-i, which is the point of it.
+
+## B1b-i LANDED (2026-08-21) — the fourth phase, writing nothing
+
+four relays appended last: TICKM4, V3M, ROW2M, ROW2X. with the V3 slide
+DOWN nothing changes; with it UP a vertical lock is four ticks instead of
+three and puts down exactly the same two cells.
+
+the measured trace (8x4, 2-tall piece, V3 up):
+
+    t7 HI   P2M=1                            bottom row written
+    t7 lo   P2S=1 LKS=1                      the transfer
+    t8 HI   P2M=1 P2CLR=0 ROW2M=1 ROW2=0     row r-1 written; P2M SURVIVES
+    t8 lo   ROW2=1 ROW2X=1                   the changeover moves, triggers cold
+    t9 HI   P2CLR=1 ROW2M=0 ROW2=1           the third phase tick (writes nothing yet)
+    t9 lo   P2S=0 ROW2=0                     both slaves follow their masters
+    t10 HI  token dies                       the reset, one tick later
+
+**the wedge, and why the gate chain is +-sourced.** the first cut hung
+ROW2M's set chain on p2railA, the way everything else in the phase block
+hangs on it. the machine WEDGED: P2M=1, P2S=1, LKS=1, no reset, forever.
+ROW2M's LATCH backfed through its own set path into the rail and held
+phase 2 on. P2M has the identical latch-plus-set shape and is safe only
+because its set path dead-ends at `+` — a supply does not care about
+backfeed, a rail driving fifteen coils does. so the chain is
+`+ -> TICKM4.G (tick high) -> P2SM (the phase is running) -> V3M (3-tall)
+-> ROW2X (is ROW2 up)`, whose product is exactly p2railA's own condition,
+and P2CLR's coil moved off the rail onto it. RULE, general: **a latched
+relay's set path must dead-end at a supply, never at a driven rail.**
+
+**measured, not assumed:**
+- peak supply current, worst branch, full drop: 8x4 2.444 -> 2.536 A,
+  12x6 2.863 -> 2.938 A, both on `I(m1.V_POWER)` — the tick machine, which
+  is the tightest supply in the build. +92 mA / +75 mA for the fourth
+  coil on the tick-mirror node. the overload alarm sits near 3.4 A, so
+  there is ~0.5 A of headroom left there and a FIFTH tick mirror needs
+  this measurement again before it is wired.
+- jack capacity clean at (8,4) and (12,6), zero undefined nodes. (16,8)
+  still throws on the pre-existing STPREAD exhaustion, unrelated.
+- machines 125 -> 126 at 8x4, 180 -> 181 at 12x6.
+- flat pieces are untouched with the slide UP: VMODE gates P2M, so no
+  phase means no fourth phase — 1x1 and 2-wide lock in 9 ticks either way.
+
+**the test, checked in both directions.** `B1b-i: the V3 slide adds a
+fourth phase tick that writes nothing new` pins the tick count, the
+identical field, ROW2 up for exactly one tick-HIGH solve, P2CLR inhibited
+on the phase-2 tick and firing on the phase-3 tick, and BREAK BEFORE MAKE
+(ROW2 never changes state during a tick-high solve). it goes red on the
+rail-sourced gate chain ("expected 16 to be 11" — the lock never ends)
+and red with the slave's hold removed ("ROW2 is up for exactly one
+tick-HIGH solve: expected +0 to be 1").
+
+**what B1b-ii still owes:** the TOPW2(r) bank itself, r = 2..rows-1,
+routing to W(r-2), hung off ROW2's NO sides (measured free: G:2 K:2),
+coils on MIRA(r).E or SEEDM2(r).E. and the row-0/1 guard — a 3-tall piece
+locking at row 1 would aim phase 3 at row -1; today that is inert because
+nothing is routed, and it must stay inert (or be refused in the
+collision term) once it is.

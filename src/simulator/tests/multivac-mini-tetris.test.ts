@@ -2772,16 +2772,17 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(shoved.cells, 'still an L, not a T').toBe(4);
   });
 
-  // B1a — the write-row changeover, wired INERT. the third write row will
-  // be a changeover on ONE phase rail rather than a second rail, because
-  // a second rail takes the depth-1 cut bank DARK while the new write
-  // rails are hot (the cut bank's coils hang on p2railA) and those coils
-  // cannot be shared — a coil jack is a permanent tie, so the wire would
-  // just short the two rails together. this case pins the halfway state:
-  // ROW2 sits in the TOPW feed path, its coil is unwired, and phase 2
-  // must route exactly as it did before. if a later rung drives ROW2, it
-  // is this assertion that should go red first.
-  it('the write-row changeover is inert: ROW2 never rises and phase 2 is unchanged (fast)', { timeout: 1800000 }, () => {
+  // B1a/B1b-i — the write-row changeover STAYS INERT WITH THE V3 SLIDE
+  // DOWN. ROW2 has a coil now (B1b-i), so "it can never rise" is no
+  // longer the contract; "it never rises unless an operator asks for a
+  // 3-tall piece" is, and that is the assertion that keeps every
+  // existing behaviour where it was. The third write row is a changeover
+  // on ONE phase rail rather than a second rail, because a second rail
+  // takes the depth-1 cut bank DARK while the new write rails are hot
+  // (the cut bank's coils hang on p2railA) and those coils cannot be
+  // shared — a coil jack is a permanent tie, so the wire would just
+  // short the two rails together.
+  it('the write-row changeover is inert with the V3 slide down: ROW2 never rises and phase 2 is unchanged (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const COLS = 6;
     const { wires, layout: L, btnMachine } = tetrisCircuit(12, COLS);
@@ -2827,10 +2828,98 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       tick();
       watch();
     }
-    expect(everUp, 'ROW2 has no coil feed: it must never rise').toBe(false);
+    expect(everUp, 'with the V3 slide down ROW2 must never rise').toBe(false);
     expect(row(11), "the S's bottom pair landed at columns 1-2").toBe('.XX...');
     expect(row(10), 'and phase 2 still wrote its top pair, staggered LEFT').toBe('XX....');
     expect(m.getState().alerts).toEqual([]);
+  });
+
+  // B1b-i — THE FOURTH PHASE, WHICH WRITES NOTHING YET.
+  //
+  // This is the risky half of the third write row, isolated on purpose:
+  // ROW2 is a changeover sitting in the write-trigger path, and a
+  // changeover that MOVES while the triggers are live is the exact
+  // failure LKS and P2S exist to prevent. So with the V3 slide up a lock
+  // takes FOUR ticks instead of three and still puts down EXACTLY the
+  // same two cells — the routing (a TOPW2 bank aimed at row r-2) is
+  // B1b-ii. What this case pins:
+  //   - the fourth tick exists and the reset is one tick later
+  //   - ROW2 is DOWN through the phase-2 write and UP through the third
+  //   - ROW2 never changes state during a tick-HIGH solve, i.e. it moves
+  //     only while p2gate/p2break are cold (break before make)
+  //   - the field is identical to the same lock with the slide down
+  // The first cut of this wiring hung the gate chain on p2railA and the
+  // machine WEDGED: ROW2M's latch backfed through its own set path into
+  // the rail and held phase 2 on forever. The chain is +-sourced now,
+  // like P2M's, and that is what this test would catch again.
+  it('B1b-i: the V3 slide adds a fourth phase tick that writes nothing new (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const COLS = 4;
+    const ROWS = 8;
+    const drop = (v3: boolean) => {
+      const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS, COLS);
+      assertJackCapacity(wires);
+      const m = new MinivacSimulator(wires, false, L.machines);
+      m.initialize();
+      const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+      const tok = () => {
+        for (let i = 0; i < ROWS; i++) if (rel(L.RING(i, 2))) return i;
+        return -1;
+      };
+      if (v3) m.setSlide((L.V3M % 6) + 1, 'right', Math.floor(L.V3M / 6));
+      for (let k = 0; k < 2; k++) {
+        m.pressButton(2, btnMachine);
+        m.releaseButton(2, btnMachine);
+      }
+      m.pressButton(6, 1);
+      m.releaseButton(6, 1);
+      // half-tick resolution: the write triggers are live only tick-HIGH
+      const half: Array<{ hi: boolean; row2: number; p2clr: number; tok: number }> = [];
+      let ticks = 0;
+      for (let t = 0; t < ROWS + 8; t++) {
+        m.setSlide(5, 'right', 1);
+        half.push({ hi: true, row2: rel(L.ROW2), p2clr: rel(L.P2CLR), tok: tok() });
+        m.setSlide(5, 'left', 1);
+        half.push({ hi: false, row2: rel(L.ROW2), p2clr: rel(L.P2CLR), tok: tok() });
+        ticks = t + 1;
+        if (t > 3 && tok() < 0 && !rel(L.LKS) && !rel(L.P2S)) break;
+      }
+      const field = [...Array(ROWS)].map((_, r) =>
+        [...Array(COLS)].map((_, j) => (rel(L.CELL(r, j)) ? 'X' : '.')).join('')
+      );
+      return { half, field, ticks, alerts: m.getState().alerts };
+    };
+
+    const off = drop(false);
+    const on = drop(true);
+
+    // the lock is one tick longer, and that tick is the only difference
+    expect(on.ticks, 'the V3 slide makes the lock a tick longer').toBe(off.ticks + 1);
+    expect(on.field, 'B1b-i routes NOTHING new: the same two cells').toEqual(off.field);
+    expect(off.field.filter((r) => r.includes('X')).length, 'a 2-tall piece writes two rows').toBe(2);
+
+    // ROW2 rises for exactly one tick-high window, and it is not the one
+    // that carries the phase-2 write
+    const highs = on.half.filter((h) => h.hi);
+    const upHighs = highs.filter((h) => h.row2 === 1);
+    expect(upHighs.length, 'ROW2 is up for exactly one tick-HIGH solve').toBe(1);
+    const phase3 = highs.indexOf(upHighs[0]);
+    expect(highs[phase3 - 1].row2, 'and DOWN for the phase-2 write before it').toBe(0);
+    expect(highs[phase3 - 1].p2clr, 'P2CLR is inhibited on the phase-2 tick').toBe(0);
+    expect(upHighs[0].p2clr, 'and fires on the phase-3 tick, ending the phase').toBe(1);
+
+    // BREAK BEFORE MAKE: ROW2 must never change during a tick-HIGH solve
+    for (let i = 1; i < on.half.length; i++) {
+      if (!on.half[i].hi) continue;
+      expect(
+        on.half[i].row2,
+        `ROW2 changed state during a tick-HIGH solve (half-step ${i}) — the write triggers are live there`
+      ).toBe(on.half[i - 1].row2);
+    }
+    // and with the slide down it never moves at all
+    expect(off.half.some((h) => h.row2 === 1), 'slide down: ROW2 stays put').toBe(false);
+    expect(on.alerts).toEqual([]);
+    expect(off.alerts).toEqual([]);
   });
 
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
