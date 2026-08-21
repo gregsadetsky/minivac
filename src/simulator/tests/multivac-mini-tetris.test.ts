@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET, SHAPES, shapeRange, NSTATES, ROT_STATE } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET, SHAPES, shapeRange, NSTATES, ROT_STATE, ringPart } from '../../circuits/multivac-mini-tetris';
 
 afterEach(() => setSolverEngine('sparse'));
 
@@ -2446,8 +2446,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     };
     const shape6 = () => {
       for (let i = 0; i < SHAPES.length; i++) {
-        const sl = i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : i < 12 ? L.SHR3(i, 2) : L.SHR4(i, 2);
-        if (rel(sl)) return i;
+        if (rel(ringPart(L, i, 2))) return i;
       }
       return -1;
     };
@@ -2522,8 +2521,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const poss2 = () => [...Array(COLS6)].map((_, j) => rel2(L.POSS(j))).join('');
     const shape2 = () => {
       for (let i = 0; i < SHAPES.length; i++) {
-        const sl = i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : i < 12 ? L.SHR3(i, 2) : L.SHR4(i, 2);
-        if (rel2(sl)) return i;
+        if (rel2(ringPart(L, i, 2))) return i;
       }
       return -1;
     };
@@ -2584,8 +2582,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const m = new MinivacSimulator(wires, false, L.machines);
     m.initialize();
     const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
-    const SH = (i: number, p: number) =>
-      i < 6 ? L.SHR(i, p) : i < 9 ? L.SHR2(i, p) : i < 12 ? L.SHR3(i, p) : L.SHR4(i, p);
+    const SH = (i: number, p: number) => ringPart(L, i, p);
     const shape = () => {
       for (let i = 0; i < SHAPES.length; i++) if (rel(SH(i, 2))) return i;
       return -1;

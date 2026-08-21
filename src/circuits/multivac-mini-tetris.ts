@@ -516,6 +516,23 @@ export interface TetrisLayout {
   relays: number; // wired coils (the junction gap is com-only)
 }
 
+// the ring's clk/master/slave for state i, whichever block holds it.
+// ONE definition on purpose. this dispatch used to be copied in six
+// places, and when the thirteenth state (the horizontal I) landed, two
+// of them still stopped at SHR3 — so reading state 12 evaluated
+// SHR3(12, 2) = shr3Base + 11, ran off the end of a nine-relay bank and
+// returned an unrelated relay in the next one. one test then saw the
+// ring as TWO-hot and another as no-hot, same cause. the table form
+// makes a new block one entry, and the throw makes an unmapped state
+// loud instead of silently wrong.
+export function ringPart(L: TetrisLayout, i: number, part: number): number {
+  if (i < 6) return L.SHR(i, part);
+  if (i < 9) return L.SHR2(i, part);
+  if (i < 12) return L.SHR3(i, part);
+  if (i < 13) return L.SHR4(i, part);
+  throw new Error(`ring state ${i} belongs to no block (NSTATES = ${NSTATES})`);
+}
+
 export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   if (rows < 4 || rows % 2 !== 0) throw new Error('rows must be even and >= 4');
   // the second parameterization axis (see _notes/wider-well.md). the
@@ -2460,8 +2477,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // shape persists across locks, exactly like the slides it derives.
   // states 0..5 live in the 3a block (SHR), 6..8 in the 4a block (SHR2),
   // 9..11 in the 4c block (SHR3)
-  const SH = (i: number, part: number) =>
-    i < 6 ? SHR(i, part) : i < 9 ? SHR2(i, part) : i < 12 ? SHR3(i, part) : SHR4(i, part);
+  const SH = (i: number, part: number) => ringPart(L, i, part);
   // ---------- rotation: NOTOK and the D-feed muxes ----------
   // UP means two different things and the difference lives in the
   // MASTER SAMPLING, not in the clock network: each master's coil com
@@ -2790,7 +2806,9 @@ export const TETRIS_IO = {
   up: UPBTN, // momentary: step the shape ring (1x1 -> 2wide -> 2tall -> O -> S -> Z -> L -> J -> T -> wrap)
   // the shape ring's one-hot slaves (state 0 = 1x1 seeds at power-on)
   shapeRelay: (i: number) => {
-    const s = i < 6 ? SHR(i, 2) : i < 9 ? SHR2(i, 2) : i < 12 ? SHR3(i, 2) : SHR4(i, 2);
+    // TETRIS_IO is module-level, so it reads the default-geometry layout
+    // (L8) — the ring's relay numbers are width-invariant
+    const s = ringPart(L8, i, 2);
     return { machine: Math.floor(s / 6), index: s % 6 };
   },
   // AUTO: the oscillator's own section slide — right = the machine ticks

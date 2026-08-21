@@ -25,7 +25,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, ringPart } from './circuits/multivac-mini-tetris';
 
 // the 'fast' engine: typed-array rewrite of the sparse solver, validated
 // against the dense oracle on 5000 random circuits (zero mismatches, max
@@ -46,7 +46,7 @@ const IO = {
   up: { button: 2, machine: btnMachine },
   auto: { slide: (L.TOSC % 6) + 1, machine: Math.floor(L.TOSC / 6) },
   oscRelay: loc(L.TDRV), // up = the oscillator is holding the tick line high
-  shapeRelay: (i: number) => loc(i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : i < 12 ? L.SHR3(i, 2) : L.SHR4(i, 2)),
+  shapeRelay: (i: number) => loc(ringPart(L, i, 2)),
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
   gameOverRelay: loc(L.GAMEOVER),
