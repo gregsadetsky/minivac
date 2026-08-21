@@ -98,6 +98,20 @@ future multivac viewer is planned as canvas, browser-side notes in _notes/
   it includes a STEP-EXACT scripted game checked against a rules model
   after every keypress — treat it as a gate; it has caught bugs the
   suite missed (the auto-off wedge, the score race).
+- the relay viewer's receipt: `scripts/verify-relays-page.mjs`, same
+  preview. it drives /relays/'s real keyboard and checks the MACHINE
+  answered (register stepped, ring dealt all 13 states, piece kept
+  falling), not that a handler ran. the whole class it guards: the page
+  once took its button numbers from the module-level TETRIS_IO, which
+  bakes the DEFAULT 8x4 geometry's button machine (m124) while the page
+  builds 12x6 (m178) — LEFT/RIGHT/UP pressed jacks no wire touches and
+  the viewer looked like it had no controls. VERIFIED to go red on that
+  exact defect, not just green on the fix.
+- a page that drives the machine must derive its IO from ITS OWN
+  `tetrisCircuit(...)` return (`built.btnMachine`). the module-level
+  TETRIS_IO is default-geometry only; tick (m1 slide 5) and start (m1
+  button 6) are the only two that hold in every geometry, which is
+  exactly why those kept working while nothing else did.
 - deploys: fast-forward push a GATED sha to main (`git push origin
   <sha>:main`), never the branch ref; verify the Pages run concluded
   success. gate = fast suite + driver + the 5000-circuit sweep (see the

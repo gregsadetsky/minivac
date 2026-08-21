@@ -24,10 +24,22 @@
  *   - the static picture (relay bodies, dead wires) is rendered ONCE to
  *     an offscreen canvas per zoom level and blitted; only the armatures
  *     and the ~120 live wires are redrawn per frame
+ *
+ * THE KEYBOARD IS THE GAME PAGE'S, not a second implementation. It shipped
+ * as one, and every difference was a bug: the buttons came from the
+ * module-level TETRIS_IO, whose machine number is baked from the DEFAULT
+ * 8x4 geometry (m124) — at this page's 12x6 the button machine is m178, so
+ * LEFT, RIGHT and UP pressed jacks that no wire in this netlist touches
+ * and did nothing at all. START had no interlock, so a second press mid-
+ * fall injected a SECOND token and left a cell stranded in mid-air on the
+ * lock. And UP with no column clamp walks the shape chooser only as far as
+ * the square: state 4 (S) needs pos >= 1 and the contacts correctly refuse
+ * it at column 0, so the ring stuck three states in and every piece was
+ * the 1x1. All three are gone; the machine still decides every move.
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, TETRIS_IO } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, ringPart } from './circuits/multivac-mini-tetris';
 import { panelLayout, sectionOrigin, SEC_JACKS, CONTACT_SETS, SEC_W, SEC_H, COIL_BOX } from './relays/panel-layout';
 import { buildWirePaths, type WireStyle, type WirePaths } from './relays/wire-paths';
 import { circuitBlocks, ownerMap } from './relays/blocks';
@@ -59,6 +71,7 @@ css.textContent = `
   #rv-canvas { flex:1; width:100%; display:block; cursor:grab; touch-action:none }
   #rv-canvas:active { cursor:grabbing }
   #rv-help { padding:5px 12px; background:#111621; border-top:1px solid #1e2632; color:#4d5972 }
+  #rv-status { color:#9aa7bd }
 `;
 document.head.appendChild(css);
 root.innerHTML = `
@@ -87,6 +100,7 @@ root.innerHTML = `
       <label><input type="checkbox" id="rv-io"> only its i/o</label>
       <label><input type="checkbox" id="rv-well" checked> well</label>
       <span class="rv-sep"></span>
+      next: <select id="rv-deal"></select>
       <button id="rv-tick">tick</button>
       <button id="rv-run">run</button>
       <button id="rv-fit">fit</button>
@@ -94,7 +108,9 @@ root.innerHTML = `
       <span id="rv-hud"></span>
     </div>
     <canvas id="rv-canvas"></canvas>
-    <div id="rv-help">drag to pan &middot; wheel to zoom &middot; enter spawns &middot; arrows steer/rotate &middot; space ticks</div>
+    <div id="rv-help"><span id="rv-status">wiring the relays…</span>
+      <span style="color:#3c4658"> &middot; drag to pan &middot; wheel to zoom &middot; enter spawns &middot;
+      &larr;/&rarr; steer &middot; &uarr; rotates (pre-spawn: picks the shape) &middot; space ticks</span></div>
   </div>`;
 
 const canvas = document.getElementById('rv-canvas') as HTMLCanvasElement;
@@ -110,6 +126,8 @@ const cbIO = document.getElementById('rv-io') as HTMLInputElement;
 const rngDim = document.getElementById('rv-dim') as HTMLInputElement;
 const cbWell = document.getElementById('rv-well') as HTMLInputElement;
 const selPal = document.getElementById('rv-pal') as HTMLSelectElement;
+const selDeal = document.getElementById('rv-deal') as HTMLSelectElement;
+const statusEl = document.getElementById('rv-status')!;
 /** the dead harness was drawn at #232c3a on #0b0e13 and read as invisible:
  *  all 4782 wires were there, only ~117 amber ones showed. brightness is a
  *  control now, and the HUD reports how many were actually stroked. */
@@ -127,6 +145,45 @@ setSolverEngine('fast');
 const built = tetrisCircuit(ROWS, COLS);
 const sim = new MinivacSimulator(built.wires, false, built.layout.machines);
 sim.initialize();
+
+/** how big a well cell wants to be, in px (it shrinks on a short viewport) */
+const WELL_CELL = 52;
+
+/**
+ * The machine's inputs, derived from THIS build's layout.
+ *
+ * Not the module-level TETRIS_IO: that one's button machine is frozen at
+ * the default 8x4 geometry's m124, and this page is 12x6, where the
+ * button/slide machine is m178. Nothing in this netlist touches m124's
+ * button jacks, so the shipped viewer's LEFT/RIGHT/UP were electrically
+ * silent — the keys were wired to a machine that isn't there. TICK and
+ * START sit on m1 in every geometry, which is exactly why those two
+ * worked and nothing else did.
+ */
+const IO = {
+  tick: { slide: 5, machine: 1 },
+  start: { button: 6, machine: 1 },
+  left: { button: 3, machine: built.btnMachine },
+  right: { button: 4, machine: built.btnMachine },
+  up: { button: 2, machine: built.btnMachine },
+};
+
+// ---- reading the game out of the relays (the page stores no game state) ----
+const rel = (n: number) => sim.getMachineState(Math.floor(n / 6)).relays[n % 6];
+const tokenRow = (): number => {
+  for (let i = 0; i < ROWS; i++) if (rel(built.layout.RING(i, 2))) return i;
+  return -1;
+};
+const posAt = (): number => {
+  for (let j = 0; j < COLS; j++) if (rel(built.layout.POSS(j))) return j;
+  return -1;
+};
+const shapeAt = (): number => {
+  for (let i = 0; i < SHAPES.length; i++) if (rel(ringPart(built.layout, i, 2))) return i;
+  return 0;
+};
+const owedTicks = () => rel(built.layout.LKS) || rel(built.layout.LANE);
+const gameOver = () => rel(built.layout.GAMEOVER);
 
 const L = panelLayout(built.layout.machines);
 const terms = sim.getWireTerminals();
@@ -481,33 +538,61 @@ function draw(): void {
   // above it (PIECET). nothing here is a model of the game — it is the
   // same relays the wall is drawing, just arranged as a playfield.
   if (cbWell.checked) {
-    const cell = 11, pad = 8;
-    const w = COLS * cell + pad * 2, h = ROWS * cell + pad * 2 + 14;
+    // sized to be READ, not to be tucked away: it shipped at 11px a cell
+    // and was unusable. WELL_CELL is the target; the only thing that
+    // shrinks it is a viewport too short to hold twelve of them.
+    const cell = Math.max(12, Math.min(WELL_CELL, Math.floor((ch - 112) / ROWS)));
+    const pad = Math.round(cell * 0.3);
+    const cap = Math.round(cell * 0.42) + 12;
+    const w = COLS * cell + pad * 2, h = ROWS * cell + pad * 2 + cap;
     const ox = cw - w - 14, oy = ch - h - 14;
-    ctx.fillStyle = 'rgba(10,13,19,0.92)';
+    ctx.fillStyle = 'rgba(10,13,19,0.94)';
     ctx.strokeStyle = '#2b3648';
     ctx.lineWidth = 1;
     ctx.fillRect(ox, oy, w, h);
     ctx.strokeRect(ox + 0.5, oy + 0.5, w - 1, h - 1);
-    const relayOn = (n: number) => sim.getMachineState(Math.floor(n / 6)).relays[n % 6];
-    let tokenRow = -1;
-    for (let i = 0; i < ROWS; i++) if (relayOn(built.layout.RING(i, 2))) { tokenRow = i; break; }
+    // the well's own grid, so an empty column still reads as a column
+    ctx.strokeStyle = '#1a2230';
+    ctx.beginPath();
+    for (let j = 0; j <= COLS; j++) {
+      ctx.moveTo(ox + pad + j * cell + 0.5, oy + pad);
+      ctx.lineTo(ox + pad + j * cell + 0.5, oy + pad + ROWS * cell);
+    }
+    for (let r = 0; r <= ROWS; r++) {
+      ctx.moveTo(ox + pad, oy + pad + r * cell + 0.5);
+      ctx.lineTo(ox + pad + COLS * cell, oy + pad + r * cell + 0.5);
+    }
+    ctx.stroke();
+    const tr = tokenRow();
     for (let r = 0; r < ROWS; r++) {
       for (let j = 0; j < COLS; j++) {
-        const stored = relayOn(built.layout.CELL(r, j));
+        const stored = rel(built.layout.CELL(r, j));
         let live = false;
-        if (tokenRow >= 0) {
-          if (r === tokenRow) live = relayOn(built.layout.PIECE(j));
-          else if (r === tokenRow - 1) live = relayOn(built.layout.PIECET(j));
+        if (tr >= 0) {
+          if (r === tr) live = rel(built.layout.PIECE(j));
+          else if (r === tr - 1) live = rel(built.layout.PIECET(j));
         }
         if (!stored && !live) continue;
+        const x = ox + pad + j * cell, y = oy + pad + r * cell;
         ctx.fillStyle = live ? '#ffd166' : '#5f7fb0';
-        ctx.fillRect(ox + pad + j * cell + 1, oy + pad + r * cell + 1, cell - 2, cell - 2);
+        ctx.fillRect(x + 2, y + 2, cell - 4, cell - 4);
+        // a lit face on each block: at this size a flat square looks dead
+        ctx.fillStyle = live ? '#fff0c2' : '#8fa9d4';
+        ctx.fillRect(x + 2, y + 2, cell - 4, Math.max(1, Math.round(cell * 0.12)));
       }
     }
-    ctx.fillStyle = '#55627a';
-    ctx.font = '10px ui-monospace, monospace';
-    ctx.fillText(tokenRow >= 0 ? `piece at row ${tokenRow}` : 'no piece — enter to spawn', ox + pad, oy + h - 8);
+    ctx.fillStyle = '#7d8ba6';
+    ctx.font = `${Math.round(cell * 0.28) + 4}px ui-monospace, monospace`;
+    const shp = SHAPES[shapeAt()].label;
+    ctx.fillText(
+      gameOver()
+        ? 'game over — the top-out latch is holding'
+        : tr >= 0
+          ? `${shp} · row ${tr} · col ${posAt()}`
+          : `next: ${shp} — enter to spawn`,
+      ox + pad,
+      oy + h - 10
+    );
   }
 
   lastDrawMs = performance.now() - t0;
@@ -531,24 +616,191 @@ function schedule(): void {
 }
 
 // ------------------------------------------------------------- driving it
-function timedSolve(fn: () => void): void {
-  const t = performance.now();
-  fn();
-  lastSolveMs = performance.now() - t;
-  schedule();
-}
-const tick = () =>
-  timedSolve(() => {
-    sim.setSlide(TETRIS_IO.tick.slide, 'right', TETRIS_IO.tick.machine);
-    sim.setSlide(TETRIS_IO.tick.slide, 'left', TETRIS_IO.tick.machine);
-  });
-const pressBtn = (b: { button: number; machine: number }) =>
-  timedSolve(() => {
-    sim.pressButton(b.button, b.machine);
-    sim.releaseButton(b.button, b.machine);
-  });
+const say = (s: string) => (statusEl.textContent = s);
+const rawTick = () => {
+  sim.setSlide(IO.tick.slide, 'right', IO.tick.machine);
+  sim.setSlide(IO.tick.slide, 'left', IO.tick.machine);
+};
+const press = (b: { button: number; machine: number }) => {
+  sim.pressButton(b.button, b.machine);
+  sim.releaseButton(b.button, b.machine);
+};
 
-document.getElementById('rv-tick')!.addEventListener('click', tick);
+/**
+ * EVERY OPERATION IS A GENERATOR, ONE PRESS PER FRAME.
+ *
+ * A solve here is ~400-500ms, and the interesting operations are not one
+ * press: a random deal walks the shape ring up to twelve states with a
+ * column clamp at each, and a lock owes the machine its phase-2 write,
+ * its reset, and up to a full collapse walk. Run as one blocking call a
+ * random deal froze the page for as long as THIRTEEN SECONDS, measured —
+ * which on a page whose whole subject is watching relays move is both a
+ * hang and a waste. So each press yields, the wall repaints, and the
+ * pump resumes on the next frame: the same total work, visible.
+ */
+type Step = Generator<string, string | void, void>;
+
+/** step the register toward a column, stopping when the contacts refuse */
+function* gSteer(target: number): Step {
+  let cur = posAt();
+  for (let guard = 0; cur !== target && guard < COLS; guard++) {
+    press(cur < target ? IO.right : IO.left);
+    const stepped = posAt();
+    if (stepped === cur) return; // refused in the contacts
+    cur = stepped;
+    yield `column ${cur}`;
+  }
+}
+
+/**
+ * One press of UP, with the column walked into the target state's fit
+ * range first. That clamp is the whole reason the ring moves at all: the
+ * transition legality lives in the contacts, and state 4 (S) will not
+ * come up at column 0. Without it the chooser stopped dead at the square,
+ * three states in, and every piece on this page was a 1x1.
+ */
+function* gStepShape(): Step {
+  const cur = shapeAt();
+  const falling = tokenRow() >= 0;
+  const next = falling ? ROT_STATE(cur) : (cur + 1) % SHAPES.length;
+  if (next === cur) return;
+  const p = posAt();
+  if (p >= 0) {
+    const r = shapeRange(SHAPES[next], COLS);
+    yield* gSteer(Math.min(r.max, Math.max(r.min, p)));
+  }
+  press(IO.up);
+  yield SHAPES[shapeAt()].label;
+}
+
+/** walk the pre-spawn chooser to a state, or stop where it is refused */
+function* gDeal(target: number): Step {
+  for (let guard = 0; shapeAt() !== target && guard <= SHAPES.length; guard++) {
+    const before = shapeAt();
+    yield* gStepShape();
+    if (shapeAt() === before) return;
+  }
+}
+
+// ---- the dealer -----------------------------------------------------------
+// THE MACHINE HAS NO RANDOMNESS. There is no noise source in a relay bank
+// and no dealer bank in this circuit yet, so "random" here is the OPERATOR
+// rolling a die and then stepping the shape ring with the UP button —
+// exactly the presses a human would make, just made for you. The ring
+// itself, and every refusal along the way, is still the relays'.
+selDeal.innerHTML =
+  '<option value="-2">manual</option><option value="-1">random</option>' +
+  SHAPES.map((s, i) => `<option value="${i}">${s.label}</option>`).join('');
+selDeal.value = '-2';
+function* gDealNext(): Step {
+  const mode = parseInt(selDeal.value, 10);
+  if (mode === -2 || tokenRow() >= 0) return;
+  const want = mode === -1 ? Math.floor(Math.random() * SHAPES.length) : mode;
+  if (want === shapeAt()) return;
+  yield* gDeal(want);
+  if (shapeAt() !== want)
+    yield `dealt as far as ${SHAPES[shapeAt()].label} — the contacts refused the rest`;
+}
+
+/** one tick, plus every tick the machine then OWES ITSELF */
+function* gTick(): Step {
+  rawTick();
+  yield 'tick';
+  // after a lock LKS holds while the phase-2 write and the reset run, and
+  // LANE holds while a cleared row walks the stack down. Leaving those
+  // undrained means the next keypress steers a piece half-written into
+  // the field — the game page drains them and so does this one.
+  for (let n = 0; n < 3 * ROWS + 6 && owedTicks(); n++) {
+    rawTick();
+    yield rel(built.layout.LANE) ? 'line cleared — the stack falls…' : 'locked — bookkeeping…';
+  }
+  // the reset tick re-arms SPAWN, so the next piece comes by itself: the
+  // dealer gets its presses in while the ring is still free
+  yield* gDealNext();
+  if (gameOver()) return 'game over — the top-out latch is holding';
+}
+
+// ---- the pump -------------------------------------------------------------
+let busy = true;
+const keyQueue: string[] = [];
+/** the DOM's copy of `busy`, so a driver can wait on state, not on prose */
+const setBusy = (b: boolean) => {
+  busy = b;
+  statusEl.dataset.busy = b ? '1' : '0';
+};
+function act(label: string, gen: () => Step): void {
+  if (busy) return;
+  setBusy(true);
+  say(`${label} — relays settling…`);
+  const it = gen();
+  const pump = (): void => {
+    const t = performance.now();
+    const r = it.next();
+    lastSolveMs = performance.now() - t;
+    if (r.done) {
+      setBusy(false);
+      say(typeof r.value === 'string' ? r.value : label);
+      schedule();
+      if (keyQueue.length) handleKey(keyQueue.shift() as string);
+      return;
+    }
+    say(r.value);
+    schedule();
+    // schedule()'s draw lands on the next frame; the pump resumes on the
+    // one after, so every press is on screen before the next one runs
+    requestAnimationFrame(() => requestAnimationFrame(pump));
+  };
+  requestAnimationFrame(pump);
+}
+
+const GAME_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'];
+function handleKey(key: string): void {
+  if (busy) {
+    if (keyQueue.length < 4) keyQueue.push(key);
+    return;
+  }
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    const p = posAt();
+    if (p < 0) return;
+    const dir = key === 'ArrowRight' ? 1 : -1;
+    const r = shapeRange(SHAPES[shapeAt()], COLS);
+    const next = Math.min(r.max, Math.max(r.min, p + dir));
+    if (next === p) return void say(`column ${p} — the well edge`);
+    act(`column ${next}`, function* () {
+      yield* gSteer(next); // one step: |next - p| is 1 by construction
+      return posAt() === p ? 'blocked — the contacts refused the step' : `column ${posAt()}`;
+    });
+  } else if (key === 'ArrowUp') {
+    const falling = tokenRow() >= 0;
+    const cur = shapeAt();
+    const next = falling ? ROT_STATE(cur) : (cur + 1) % SHAPES.length;
+    if (next === cur) return void say(`${SHAPES[cur].label} has only one orientation`);
+    act(falling ? `rotate: ${SHAPES[next].label}` : SHAPES[next].label, function* () {
+      yield* gStepShape();
+      return shapeAt() === next
+        ? `${falling ? 'rotated' : 'next'}: ${SHAPES[next].label}`
+        : `blocked — the contacts refused the ${falling ? 'rotation' : 'reshape'}`;
+    });
+  } else if (key === 'ArrowDown' || key === ' ') {
+    act('tick', gTick);
+  } else if (key === 'Enter') {
+    // START has NO interlock in the circuit: it arms the SPAWN latch
+    // unconditionally, so a second press mid-fall makes the next ring tick
+    // inject a SECOND token. Two tokens fall together, the overlay draws
+    // whichever is higher, and the lock writes both rows — that is the
+    // cell left stranded in mid-air (reproduced: a token pair 3 rows
+    // apart writes rows 8 and 11 on the same lock). The game page guards
+    // the key rather than spending eight contacts on an interlock; so
+    // does this one.
+    if (tokenRow() >= 0) return void say('a piece is already falling');
+    act('start', function* () {
+      yield* gDealNext();
+      press(IO.start);
+    });
+  }
+}
+
+document.getElementById('rv-tick')!.addEventListener('click', () => handleKey(' '));
 document.getElementById('rv-fit')!.addEventListener('click', () => {
   fit();
   schedule();
@@ -563,9 +815,12 @@ runBtn.addEventListener('click', () => {
     return;
   }
   runBtn.textContent = 'stop';
+  // a tick here is a full solve (~200-500ms) plus any owed ones, so the
+  // interval only ever ASKS: the busy guard drops the ones that land
+  // while the previous solve is still running instead of piling up.
   runTimer = window.setInterval(() => {
-    tick();
-  }, 120);
+    if (!busy) handleKey(' ');
+  }, 140);
 });
 for (const el of [cbRelays, cbArms, cbCurrent, cbRails, selWires, selBlock, cbIO, rngDim, cbWell, selPal]) {
   el.addEventListener('change', () => {
@@ -573,15 +828,18 @@ for (const el of [cbRelays, cbArms, cbCurrent, cbRails, selWires, selBlock, cbIO
     schedule();
   });
 }
+selDeal.addEventListener('change', () => {
+  if (busy || tokenRow() >= 0) return;
+  act('deal', function* () {
+    yield* gDealNext();
+    return `next: ${SHAPES[shapeAt()].label}`;
+  });
+});
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') pressBtn(TETRIS_IO.start);
-  else if (e.key === 'ArrowLeft') pressBtn(TETRIS_IO.left);
-  else if (e.key === 'ArrowRight') pressBtn(TETRIS_IO.right);
-  else if (e.key === 'ArrowUp') pressBtn(TETRIS_IO.up);
-  else if (e.key === ' ' || e.key === 'ArrowDown') tick();
-  else return;
+  if (!GAME_KEYS.includes(e.key)) return;
   e.preventDefault();
+  handleKey(e.key);
 });
 
 let dragging = false;
@@ -630,3 +888,12 @@ window.addEventListener('resize', () => {
 fit();
 readRelays();
 schedule();
+// the constructor already settled the machine; opening the keyboard is
+// deferred one frame so the first paint lands before any solve can block it
+setTimeout(() => {
+  setBusy(false);
+  act('deal', function* () {
+    yield* gDealNext();
+    return `ready — ${built.layout.machines} minivacs, next piece ${SHAPES[shapeAt()].label}`;
+  });
+}, 30);

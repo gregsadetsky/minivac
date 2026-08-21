@@ -803,6 +803,34 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    the page's key queue drains at every settle including the ones
    between a lock's phases.
 
+44. THE RELAY VIEWER'S KEYBOARD WAS WIRED TO A MACHINE THAT ISN'T THERE.
+   /relays/ took its button numbers from the module-level TETRIS_IO,
+   which bakes the DEFAULT 8x4 geometry's button machine (m124); the
+   page builds 12x6, where they live on m178. no wire in that netlist
+   touches m124's button jacks, so LEFT, RIGHT and UP were electrically
+   silent (measured: zero wires match /m124\.[234][XY]/). tick and
+   start sit on m1 in every geometry — which is exactly why those two
+   worked and nothing else did, and why it read as "the page has no
+   controls" rather than as a crash. three more, each reproduced before
+   being fixed:
+   - a second START mid-fall injects a SECOND token (the circuit has no
+     interlock — the game page guards the KEY instead of spending eight
+     contacts). two tokens 3 rows apart, one lock, rows 8 and 11 both
+     written: a cell stranded in mid-air.
+   - without the column clamp the shape chooser stops dead at the square:
+     state 4 (S) needs column >= 1 and the contacts rightly refuse it at
+     column 0. every piece on the page was a 1x1.
+   - the well overlay shipped at 11px a cell (now 52, viewport-capped).
+   also measured: a random deal is up to ~17 solves, and as ONE blocking
+   call it froze the page for 13 SECONDS. every operation is a generator
+   now, one press per frame — same work, worst frame gap ~0.7-1.0s (one
+   solve), which is the floor without a worker.
+   receipt: scripts/verify-relays-page.mjs, and it was checked in BOTH
+   directions — red on the m124 buttons (ring stuck at 1x1, steps
+   refused) and red with the START guard removed ("cells stranded above
+   the floor: rows 8,9,10,11").
+
+
 ## display/input notes
 
 - the canvas viewer reads relay states directly as pixels — the playfield does
