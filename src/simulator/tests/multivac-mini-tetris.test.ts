@@ -1123,12 +1123,20 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g.tick(); // row 7: merged landing + lock at (7,1)
     model[7] = 0b0010;
     expect(g.field(), 'the survivor locks where it was steered').toEqual(model);
-    // post-lock, pre-reset: row 7 has no legality row — steps stay free
-    // (the piece is already written; a step only pre-positions the next)
+    // post-lock, pre-reset: the register is FROZEN now, and the old
+    // assertion here ('steps stay free — a step only pre-positions the
+    // next piece') was wrong on its own terms: the reset re-homes the
+    // register two lines below, so such a step never pre-positioned
+    // anything. it was not harmless either — a lock is three ticks and
+    // phase 2 writes the row ABOVE, so a step in this window moved where
+    // that row landed and an L came down as '.X....' over 'XXX...', four
+    // cells with the stem over the middle, which is a T. the piece here
+    // is flat so nothing visible changes; the gate is what makes that
+    // true for every piece.
     g.pressBtn(TETRIS_IO.right);
-    expect(g.posAt(), 'post-lock steps are unrestricted').toBe(2);
+    expect(g.posAt(), 'a lock freezes the register: the step is refused').toBe(1);
     quiet();
-    g.tick(); // reset re-homes
+    g.tick(); // reset re-homes (which is why the step bought nothing anyway)
     expect(g.tokenAt()).toEqual([]);
     expect(g.posAt()).toBe(0);
     expect(g.field()).toEqual(model);
