@@ -745,10 +745,19 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    with it, since it needs the same stability. recorded in full in
    _notes/pivot-reuse.md; the decision rule was written down BEFORE the
    measurement so the answer could not be rationalised after the fact.
-   NEXT: the only surviving structural perf idea is SUBSTRUCTURING
-   (per-machine thevenin reduction), and it rests on a different,
-   UNMEASURED invariant — that most machines are untouched between
-   consecutive solves. measure that before building it. otherwise: then the I piece + vertical orientations (the 3-row piece
+   SUBSTRUCTURING WAS MEASURED TOO, and the answer is "probably not":
+   its reuse premise HOLDS beautifully — a solve touches a median of
+   TWO machines out of 178 (1.1%), p90 13, and ~30% of solves change
+   nothing — but its cost side does not: 49% of wires cross machines,
+   the interface is 3446 boundary jacks against a matrix of N~=8950
+   (~38% of the system), and each machine reduces to a DENSE 26-54
+   block, so the reduced boundary system would carry far more fill than
+   today's very sparse matrix. a fifth hypothesis (that most of those
+   8950 nodes are unwired jacks carried for nothing) died in one
+   measurement: only 1% of rows are isolated or dangling. so there is
+   NO cheap solver lever; the cascade is near this architecture's
+   floor. full numbers and the measurement kit in _notes/pivot-reuse.md.
+   NEXT (game, not solver — that is where the same effort pays): then the I piece + vertical orientations (the 3-row piece
    engine), random dealing, and 10 columns.
    (UP steps within the current piece's orientations), random dealing,
    pivot-order reuse in the fast engine (the 7s cascade is solve-bound),

@@ -167,7 +167,11 @@ export const profStats = {
   sigs: new Map<number, number>(),
   tSearch: 0,
   tElim: 0,
+  sizes: [] as number[],
+  deadRows: [] as number[],
   reset() {
+    this.sizes = [];
+    this.deadRows = [];
     this.solves = 0;
     this.repeats = 0;
     this.sigs = new Map<number, number>();
@@ -483,6 +487,13 @@ export class FastCircuit {
 
     // ---- sparse gaussian elimination: same pivot policy as SparseCircuit ----
     if (profStats.on) {
+      profStats.sizes.push(N);
+      // how many rows are isolated (empty) or dangling (a single entry)?
+      // those are unwired/one-legged jacks carried through the whole
+      // elimination for nothing
+      let dead = 0;
+      for (let r = 0; r < N; r++) if (rowLen[r] <= 1) dead++;
+      profStats.deadRows.push(dead);
       // FNV-1a over the row structure — O(nnz), only when profiling
       let h = 0x811c9dc5;
       for (let r = 0; r < N; r++) {

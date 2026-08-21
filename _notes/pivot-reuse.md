@@ -102,3 +102,47 @@ essentially never the same twice.
 the instrumentation stays in fast-circuit.ts behind `profStats.on`
 (default false, one boolean test per solve) because the substructuring
 question needs the same kind of evidence.
+
+
+## THE FULL PERF PICTURE, MEASURED 2026-08-21
+
+four measurements, each with its rule written before the run:
+
+1. SPARSITY-PATTERN REPEAT (pivot-order + symbolic reuse):
+   0.0% on an ordinary lock, 1.1% on a clearing cascade. **DEAD.**
+2. PER-SOLVE MACHINE CHURN (substructuring's premise): median **2 of
+   178 machines** touched per solve (1.1%), p90 13, max 22, and ~30% of
+   solves change nothing at all. the reuse premise HOLDS — if machines
+   could be reduced independently, ~176 of 178 reductions would survive
+   a solve untouched.
+3. THE BOUNDARY (substructuring's cost): 49% of wires cross machines;
+   3446 distinct boundary jacks against a matrix of N ~= 8950; median
+   26 ports per machine, max 54. so the interface is ~38% of the whole
+   system, and each machine's reduction is a DENSE block of 26-54 —
+   the reduced boundary system would carry far more fill than today's
+   very sparse matrix. **payoff uncertain, quite possibly negative.**
+4. ISOLATED/DANGLING ROWS (a cheap pruning win?): median 105 of 8950 =
+   **1%**. the hypothesis that most nodes are unwired jacks carried for
+   nothing is WRONG. no win here.
+
+## conclusion: no cheap solver lever exists
+
+the ~7s post-clear cascade is close to the floor for this architecture.
+what remains is substructuring, and measurement 3 says its reduced
+system may cost more than the sparse solve it replaces — it is a large
+engine build (per-machine schur complements, a boundary assembly, and a
+full equivalence protocol against the dense oracle) with a genuinely
+uncertain payoff. NOT recommended now.
+
+better places for the same effort, in order: random piece dealing (a
+free-running relay ring sampled at START), then the I piece and the
+vertical orientations (the 3-row piece engine), then 10 columns. if the
+solve cost ever becomes the actual blocker, come back to
+substructuring, prototype the boundary assembly FIRST on one tick, and
+only build it if the prototype beats the current solve.
+
+the measurement kit stays: `profStats` in fast-circuit.ts (pattern
+signature, N, dead rows) and `churnStats` in minivac-simulator.ts
+(machines touched per solve), both default-off, one boolean test each.
+probes: scratchpad/dbg-profile.mjs, dbg-churn.mjs, dbg-boundary.mjs,
+dbg-size.mjs.

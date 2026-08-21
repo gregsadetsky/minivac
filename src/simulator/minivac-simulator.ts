@@ -152,6 +152,20 @@ export interface MinivacState {
 /**
  * Stateful Minivac Simulator
  */
+// MEASUREMENT ONLY (see _notes/pivot-reuse.md): substructuring — the
+// last surviving perf idea — rests on most MACHINES being untouched
+// between consecutive solves. this counts, per solve, how many machines
+// had ANY relay flip as a result of it. off unless enabled.
+export const churnStats = {
+  on: false,
+  solves: 0,
+  machinesTouched: [] as number[],
+  reset() {
+    this.solves = 0;
+    this.machinesTouched = [];
+  },
+};
+
 export class MinivacSimulator {
   private wires: Array<[string, string]>;
   private buttonStates!: boolean[];
@@ -490,6 +504,13 @@ export class MinivacSimulator {
       }
 
       this.relayStates = newRelayStates;
+
+      if (churnStats.on) {
+        const machines = new Set<number>();
+        for (const i of flippedNow) machines.add(Math.floor(i / 6));
+        churnStats.solves++;
+        churnStats.machinesTouched.push(machines.size);
+      }
 
       // Relays still flipping this deep into the relaxation are chattering — buzz them
       // (alert, since the real machine audibly buzzes here) and pin them de-energized
