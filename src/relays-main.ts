@@ -77,10 +77,15 @@ root.innerHTML = `
       </select>
       <label><input type="checkbox" id="rv-current" checked> colour by current</label>
       harness: <input type="range" id="rv-dim" min="1" max="10" value="6" style="width:70px">
+      <select id="rv-pal">
+        <option value="amber" selected>amber on slate</option>
+        <option value="gr">green off / red live</option>
+      </select>
       <label><input type="checkbox" id="rv-rails" checked> supply stubs</label>
       <span class="rv-sep"></span>
       part: <select id="rv-block"></select>
       <label><input type="checkbox" id="rv-io"> only its i/o</label>
+      <label><input type="checkbox" id="rv-well" checked> well</label>
       <span class="rv-sep"></span>
       <button id="rv-tick">tick</button>
       <button id="rv-run">run</button>
@@ -103,14 +108,19 @@ const cbRails = document.getElementById('rv-rails') as HTMLInputElement;
 const selBlock = document.getElementById('rv-block') as HTMLSelectElement;
 const cbIO = document.getElementById('rv-io') as HTMLInputElement;
 const rngDim = document.getElementById('rv-dim') as HTMLInputElement;
+const cbWell = document.getElementById('rv-well') as HTMLInputElement;
+const selPal = document.getElementById('rv-pal') as HTMLSelectElement;
 /** the dead harness was drawn at #232c3a on #0b0e13 and read as invisible:
  *  all 4782 wires were there, only ~117 amber ones showed. brightness is a
  *  control now, and the HUD reports how many were actually stroked. */
 const harnessColour = () => {
   const t = +rngDim.value / 10;
-  const c = Math.round(30 + t * 95);
-  return `rgb(${Math.round(c * 0.72)},${Math.round(c * 0.85)},${c})`;
+  const c = Math.round(30 + t * 110);
+  return selPal.value === 'gr'
+    ? `rgb(${Math.round(c * 0.3)},${c},${Math.round(c * 0.45)})`
+    : `rgb(${Math.round(c * 0.72)},${Math.round(c * 0.85)},${c})`;
 };
+const liveColour = () => (selPal.value === 'gr' ? '#ff4d4d' : '#ffb000');
 
 // ------------------------------------------------------------- the machine
 setSolverEngine('fast');
@@ -285,7 +295,36 @@ function renderStatic(): void {
   g.translate(panX, panY);
   g.scale(zoom, zoom);
 
-  // dead wires FIRST, so the relays sit on top of the harness
+  if (cbRelays.checked) {
+    for (let m = 0; m < built.layout.machines; m++) {
+      const [mx, my] = L.machineOrigin(m);
+      g.fillStyle = '#141922';
+      g.strokeStyle = '#1e2632';
+      g.lineWidth = 1;
+      const mw = 2 * SEC_W + 10 + 24;
+      const mh = 3 * SEC_H + 16 + 34 + 28;
+      g.fillRect(mx, my, mw, mh);
+      g.strokeRect(mx + 0.5, my + 0.5, mw - 1, mh - 1);
+      if (zoom > 0.42) {
+        g.fillStyle = '#55627a';
+        g.font = '11px ui-monospace, monospace';
+        g.fillText(`m${m}`, mx + 8, my + 14);
+      }
+      for (let s = 1; s <= 6; s++) {
+        const [sx, sy] = sectionOrigin(s);
+        const b = owner[m * 6 + (s - 1)];
+        const mode = blockMode();
+        const tint =
+          mode === -2 || b < 0 ? null : mode === -1 || mode === b ? BLOCKS[b].colour : '#2a3242';
+        drawSectionBody(g, mx + sx, my + sy, tint, mode >= 0 && b === mode);
+      }
+    }
+  }
+  // THE HARNESS GOES ON TOP. drawing it first and then filling the relay
+  // bodies painted over nearly every wire — machines tile the whole wall,
+  // so only the fragments crossing the gaps survived and the picture read
+  // as a tiny subset of the wiring. patch cords lie on top of the panel in
+  // the real thing too.
   const style = selWires.value as WireStyle | 'none';
   if (style !== 'none') {
     const p = paths[style];
@@ -327,31 +366,6 @@ function renderStatic(): void {
     }
   }
 
-  if (cbRelays.checked) {
-    for (let m = 0; m < built.layout.machines; m++) {
-      const [mx, my] = L.machineOrigin(m);
-      g.fillStyle = '#141922';
-      g.strokeStyle = '#1e2632';
-      g.lineWidth = 1;
-      const mw = 2 * SEC_W + 10 + 24;
-      const mh = 3 * SEC_H + 16 + 34 + 28;
-      g.fillRect(mx, my, mw, mh);
-      g.strokeRect(mx + 0.5, my + 0.5, mw - 1, mh - 1);
-      if (zoom > 0.42) {
-        g.fillStyle = '#55627a';
-        g.font = '11px ui-monospace, monospace';
-        g.fillText(`m${m}`, mx + 8, my + 14);
-      }
-      for (let s = 1; s <= 6; s++) {
-        const [sx, sy] = sectionOrigin(s);
-        const b = owner[m * 6 + (s - 1)];
-        const mode = blockMode();
-        const tint =
-          mode === -2 || b < 0 ? null : mode === -1 || mode === b ? BLOCKS[b].colour : '#2a3242';
-        drawSectionBody(g, mx + sx, my + sy, tint, mode >= 0 && b === mode);
-      }
-    }
-  }
   g.restore();
   staticDirty = false;
 }
@@ -372,7 +386,7 @@ function draw(): void {
     canvas.height = Math.round(ch * dpr);
     staticDirty = true;
   }
-  const key = `${zoom}|${panX}|${panY}|${selWires.value}|${cbRelays.checked}|${cbRails.checked}|${selBlock.value}|${cbIO.checked}|${rngDim.value}|${cw}x${ch}`;
+  const key = `${zoom}|${panX}|${panY}|${selWires.value}|${cbRelays.checked}|${cbRails.checked}|${selBlock.value}|${cbIO.checked}|${rngDim.value}|${selPal.value}|${cw}x${ch}`;
   if (staticDirty || key !== staticKey) {
     renderStatic();
     staticKey = key;
@@ -391,7 +405,7 @@ function draw(): void {
     sim.getWireCurrents(current);
     lastWireMs = performance.now() - tw;
     const p = paths[style];
-    ctx.strokeStyle = '#ffb000';
+    ctx.strokeStyle = liveColour();
     ctx.lineWidth = Math.max(1, 2.2 / zoom);
     ctx.beginPath();
     let live = 0;
@@ -460,6 +474,42 @@ function draw(): void {
     }
   }
   ctx.restore();
+
+  // ---- the well, in SCREEN space, so you can see what you are playing ----
+  // read from the machine's own relays: stored cells from CELL, and the
+  // falling piece from the mask fans at the token row (PIECE) and the row
+  // above it (PIECET). nothing here is a model of the game — it is the
+  // same relays the wall is drawing, just arranged as a playfield.
+  if (cbWell.checked) {
+    const cell = 11, pad = 8;
+    const w = COLS * cell + pad * 2, h = ROWS * cell + pad * 2 + 14;
+    const ox = cw - w - 14, oy = ch - h - 14;
+    ctx.fillStyle = 'rgba(10,13,19,0.92)';
+    ctx.strokeStyle = '#2b3648';
+    ctx.lineWidth = 1;
+    ctx.fillRect(ox, oy, w, h);
+    ctx.strokeRect(ox + 0.5, oy + 0.5, w - 1, h - 1);
+    const relayOn = (n: number) => sim.getMachineState(Math.floor(n / 6)).relays[n % 6];
+    let tokenRow = -1;
+    for (let i = 0; i < ROWS; i++) if (relayOn(built.layout.RING(i, 2))) { tokenRow = i; break; }
+    for (let r = 0; r < ROWS; r++) {
+      for (let j = 0; j < COLS; j++) {
+        const stored = relayOn(built.layout.CELL(r, j));
+        let live = false;
+        if (tokenRow >= 0) {
+          if (r === tokenRow) live = relayOn(built.layout.PIECE(j));
+          else if (r === tokenRow - 1) live = relayOn(built.layout.PIECET(j));
+        }
+        if (!stored && !live) continue;
+        ctx.fillStyle = live ? '#ffd166' : '#5f7fb0';
+        ctx.fillRect(ox + pad + j * cell + 1, oy + pad + r * cell + 1, cell - 2, cell - 2);
+      }
+    }
+    ctx.fillStyle = '#55627a';
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText(tokenRow >= 0 ? `piece at row ${tokenRow}` : 'no piece — enter to spawn', ox + pad, oy + h - 8);
+  }
+
   lastDrawMs = performance.now() - t0;
 
   let up = 0;
@@ -517,7 +567,7 @@ runBtn.addEventListener('click', () => {
     tick();
   }, 120);
 });
-for (const el of [cbRelays, cbArms, cbCurrent, cbRails, selWires, selBlock, cbIO, rngDim]) {
+for (const el of [cbRelays, cbArms, cbCurrent, cbRails, selWires, selBlock, cbIO, rngDim, cbWell, selPal]) {
   el.addEventListener('change', () => {
     staticDirty = true;
     schedule();
