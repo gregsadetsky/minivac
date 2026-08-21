@@ -651,6 +651,38 @@ export class MinivacSimulator {
     return this.capVoltages[sectionNum - 1];
   }
 
+  /** the wires as parsed, in notation order: [jackA, jackB] per wire. */
+  getWireTerminals(): ReadonlyArray<readonly [string, string]> {
+    return this.wires;
+  }
+
+  /**
+   * Per-wire current in mA, in notation order. A wire is modelled as a
+   * 0.1-ohm RESISTOR rather than an ideal short, so both of its jacks are
+   * real nodes and the current through it is exactly (V(a) - V(b)) / R —
+   * no probe needed and nothing estimated. Sign is a-to-b.
+   *
+   * Writes into `out` when one of the right length is handed in, so a
+   * per-frame reader (the relay viewer) can stay off the allocator.
+   */
+  getWireCurrents(out?: Float32Array): Float32Array {
+    const n = this.wires.length;
+    const dst = out && out.length === n ? out : new Float32Array(n);
+    const r = this.lastResults;
+    if (!r) {
+      dst.fill(0);
+      return dst;
+    }
+    for (let i = 0; i < n; i++) {
+      const w = this.wires[i];
+      // the ground node carries no entry in the solution; it IS zero
+      const va = r[w[0]] ?? 0;
+      const vb = r[w[1]] ?? 0;
+      dst[i] = ((va - vb) / WIRE_RESISTANCE) * 1000;
+    }
+    return dst;
+  }
+
   /**
    * Advance simulated time by dtMs, letting capacitors charge/discharge.
    * Uses the backward-Euler companion (series dt/C) for the solve, then

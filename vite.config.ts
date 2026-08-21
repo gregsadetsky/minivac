@@ -18,6 +18,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         simulator: resolve(__dirname, 'simulator.html'),
         tetris: resolve(__dirname, 'tetris.html'),
+        relays: resolve(__dirname, 'relays.html'),
       },
     },
   },
