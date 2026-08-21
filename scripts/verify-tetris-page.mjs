@@ -414,7 +414,7 @@ const cellsOf = (ix, pos, row) => {
 };
 // the ring's rotation map: {0,3,4,5} hold one orientation, 1<->2, and
 // i<->i+3 across the L/J/T pairs (mirrors ROT_STATE in the circuit)
-const ROT_IX = (i) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 ? (i < 9 ? i + 3 : i - 3) : i);
+const ROT_IX = (i) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 && i < 12 ? (i < 9 ? i + 3 : i - 3) : i);
 const modelKey = (key) => {
   const m = model;
   if (key === 'Enter') { if (!m.piece) m.armed = true; return; }
@@ -435,7 +435,7 @@ const modelKey = (key) => {
       m.shapeIx = rot;
       return;
     }
-    m.shapeIx = (m.shapeIx + 1) % 12;
+    m.shapeIx = (m.shapeIx + 1) % 13; // twelve shapes plus the horizontal I
     return;
   }
   if (key === 'ArrowLeft' || key === 'ArrowRight') {

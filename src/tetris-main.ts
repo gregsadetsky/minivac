@@ -46,7 +46,7 @@ const IO = {
   up: { button: 2, machine: btnMachine },
   auto: { slide: (L.TOSC % 6) + 1, machine: Math.floor(L.TOSC / 6) },
   oscRelay: loc(L.TDRV), // up = the oscillator is holding the tick line high
-  shapeRelay: (i: number) => loc(i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : L.SHR3(i, 2)),
+  shapeRelay: (i: number) => loc(i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : i < 12 ? L.SHR3(i, 2) : L.SHR4(i, 2)),
   lockedRelay: loc(L.LKS),
   collapseRelay: loc(L.LANE),
   gameOverRelay: loc(L.GAMEOVER),

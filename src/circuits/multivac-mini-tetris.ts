@@ -34,7 +34,7 @@ export const minusOf = (n: number) => `m${Math.floor(n / 6)}.${(n % 6) + 1}-`;
 // source now (wider-well phase C shifts bank sizes; literals would
 // break). the inline comments document each bank; jack ranges in
 // them describe TODAY'S map and move with the allocator.
-export const NSTATES = 12; // ring states (the page's cycle length)
+export const NSTATES = 13; // ring states (the page's cycle length)
 // the shape set — geometry per ring state as (bottom offset/width, top
 // offset/width): the bottom row sits at register position p+bOff, the
 // top at p+tOff. Order MUST match the ring (the L/J/T triples appended
@@ -54,6 +54,12 @@ export const SHAPES = [
   { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3 },
   { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3 },
   { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3 },
+  // 3b-4d — the horizontal I: 4 wide and FLAT (tW 0, so every top path
+  // stays dark and no new write phase or collision term is needed). its
+  // rotation partner is the VERTICAL I, which wants a four-row write
+  // engine, so until that exists I is a ring singleton and UP refuses
+  // it mid-fall exactly like O.
+  { label: 'I', bOff: 0, bW: 4, tOff: 0, tW: 0 },
 ] as const;
 if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
 // legal register positions for a shape at a given width (both rows fit)
@@ -72,7 +78,7 @@ export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
 // i<->i+3 inside 6..11). pre-spawn every occupancy rail is dark, so the
 // branch carries the ROTATION pair's deltas and serves selection too —
 // upResourceCounts asserts the pos ranges coincide per shared branch.
-export const ROT_STATE = (i: number) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 ? (i < 9 ? i + 3 : i - 3) : i);
+export const ROT_STATE = (i: number) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 && i < 12 ? (i < 9 ? i + 3 : i - 3) : i);
 // the state whose deltas the target's branch checks (the mid-fall
 // source when one exists, else the selection predecessor)
 export const DELTA_SOURCE = (t: number) => (ROT_STATE(t) !== t ? ROT_STATE(t) : (t + NSTATES - 1) % NSTATES);
@@ -347,6 +353,9 @@ export const LTB3 = L8.LTB3; // triple-only bottom read of col 3 (the right step
 // (TT-gated c+2 on the right step), and the pos-2 bound extends to TT.
 // the into-0 wrap gains its first check: T2 -> 1x1 uncovers (tok, p).
 export const SHR3 = L8.SHR3; // states 9..11 (460..468)
+export const SHR4 = L8.SHR4; // state 12 (the horizontal I)
+export const MMIR4 = L8.MMIR4; // into-12 transition gate
+export const IM = L8.IM; // I state mirrors (fan rail feed + the step-mirror tail)
 export const MMIR3 = L8.MMIR3; // into-9..11 gates (469..471)
 export const TT = L8.TT; // the triple-TOP rail: L2|J2|T2
 export const TTM = L8.TTM; // TT mirrors (473..477)
@@ -492,6 +501,8 @@ export interface TetrisLayout {
   FANRAIL: number; FANRAIL_CAP: number;
   FANMIR: number; FANMIR_CAP: number;
   NOTOK: number; NOTM: (k: number) => number; TOKM0: number;
+  SHR4: (i: number, part: number) => number; MMIR4: number; IM: (k: number) => number;
+  FANW4: number;
   MIRBX: (r: number, k: number) => number; MIRBX_CAP: number;
   MIRCX: (r: number, k: number) => number; MIRCX_CAP: number;
   MIRCTX: (r: number, k: number) => number; MIRCTX_CAP: number;
@@ -583,7 +594,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // trees; the hand-laid tree support banks above go dead-unwired) ----
   // caps are generous formula bounds; the emitter asserts actual <= cap
   const stpMirBase = take(40 + 6 * (cols - 1)); // per-state member + singleton-gate mirrors
-  const stpUnionBase = take(10); // the union rails (B0..WALLB)
+  const stpUnionBase = take(12); // the union rails (B0..WALLB, B3, HIB2)
   const stpUGateBase = take(12 * (cols - 1)); // union mirrors: per-tree gate contacts
   const stpReadBase = take(8 * (cols - 1)); // the gated read pool
   // the fan emitter's banks (B/T fans as offset rails x pos taps)
@@ -606,6 +617,13 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // pushed one section's supply past the overload alarm (measured:
   // machine 9 peaked 3.44A before, 3.61A after, alarm at 3.5A).
   const rotBase = take(7);
+  // 3b-4d: the 13th state (horizontal I) — clk/master/slave, its
+  // into-gate mirror, a two-relay mirror tail, and the B fan's
+  // fourth offset bank. appended LAST for the rotation block's
+  // reason verbatim: relays taken mid-sequence re-host every later
+  // coil onto other machines, which is what tripped a supply alarm.
+  const shr4Base = take(6);
+  const fanW4Base = take(2);
   return {
     rows,
     cols,
@@ -691,13 +709,15 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     UTR3: g4cBase + 23, LEGB3: k => g4cBase + 24 + k, POSM6: k => g4cBase + 27 + k,
     TOSC: oscBase, TDRV: oscBase + 1,
     STPMIR: stpMirBase, STPMIR_CAP: 40 + 6 * (cols - 1),
-    STPUNION: stpUnionBase, STPUNION_CAP: 10,
+    STPUNION: stpUnionBase, STPUNION_CAP: 12,
     STPUGATE: stpUGateBase, STPUGATE_CAP: 12 * (cols - 1),
     STPREAD: stpReadBase, STPREAD_CAP: 8 * (cols - 1),
     FANPOS: fanPosBase, FANPOS_CAP: 4 * cols,
     FANRAIL: fanRailBase, FANRAIL_CAP: 4,
     FANMIR: fanMirBase, FANMIR_CAP: 6 * Math.ceil(cols / 2) + 8,
     NOTOK: rotBase, NOTM: k => rotBase + 1 + k, TOKM0: rotBase + 6,
+    SHR4: (i, part) => shr4Base + 3 * (i - 12) + part,
+    MMIR4: shr4Base + 3, IM: k => shr4Base + 4 + k, FANW4: fanW4Base,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -816,6 +836,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let k = 0; k < L8.FANRAIL_CAP; k++) claim('FANRAIL', L8.FANRAIL + k);
   for (let k = 0; k < L8.FANMIR_CAP; k++) claim('FANMIR', L8.FANMIR + k);
   claim('rotation', L8.NOTOK, L8.NOTM(0), L8.NOTM(1), L8.NOTM(2), L8.NOTM(3), L8.NOTM(4), L8.TOKM0);
+  claim('SHR4', L8.SHR4(12, 0), L8.SHR4(12, 1), L8.SHR4(12, 2), L8.MMIR4, L8.IM(0), L8.IM(1));
+  claim('FANW4', L8.FANW4, L8.FANW4 + 1);
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -855,6 +877,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     SHR2, MMIR2, TRP, TRPM, L1M, J1M, T1M, WID3M,
     ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2,
     SHR3, MMIR3, TT, TTM, BCUT, BCUTM, L2M, J2M, T2M,
+    SHR4, MMIR4, IM,
     TOSC, TDRV,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
@@ -1838,6 +1861,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   const mirrorTailOf = [
     SHR(0, 2), I2WM, I2TM, OM, SM2, ZG(3),
     L1M(1), J1M3, T1M2, L2M(2), J2M, T2M(2),
+    IM(1),
   ];
   const stBanks: MirrorBank[] = [];
   {
@@ -1852,7 +1876,9 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     // + the legacy gates; growing states get a (cols-4) term; the bank
     // asserts catch any drift
     const capg = Math.max(0, cols - 4);
-    const caps = [4, 1, 2, 3, 4 + capg, 3, 3, 3 + capg, 3, 6 + capg, 4, 7 + capg];
+    // state 12 (I): two union memberships (B3, HIB2) + the B fan's
+    // offset-3 rail feed. one spare set for the bank's own assert.
+    const caps = [4, 1, 2, 3, 4 + capg, 3, 3, 3 + capg, 3, 6 + capg, 4, 7 + capg, 2];
     let off = 0;
     for (let i = 0; i < NSTATES; i++) {
       stBanks.push(
@@ -1940,6 +1966,9 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   const uWALLB = mkUnion('WALLB', where(i => maxCol(i) === cols - 2), [
     [{ relay: WIDM3, arm: 'L', no: 'K' }, leg1x1()], // legacy wide wall
   ]); // max == cols-2
+  // the 4-wide bottom's two new classes (empty before the I piece)
+  const uB3 = mkUnion('B3', where(i => rightBottom(i) === 3)); // right bottom d3
+  const uHIB2 = mkUnion('HIB2', where(i => maxCol(i) === cols - 4)); // max == cols-4
   const stpPool = new GatedReadPool({ name: 'STPREAD', source: null, base: L.STPREAD, capacity: L.STPREAD_CAP, w, R, minusOf });
   // refusal returns per SOURCE column, on matrix groups into the master
   const retNode = Array.from({ length: cols }, () => takeGroups(4)); // ~15 refusal taps/source peak (width-invariant)
@@ -1983,6 +2012,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       // bounds first
       if (dir > 0 && c === cols - 1) refuse(uWALLB.request('changeover'));
       if (dir > 0 && c === cols - 2) refuse(uHIB.request('changeover'));
+      if (dir > 0 && c === cols - 3) refuse(uHIB2.request('changeover'));
       if (dir < 0 && c === 0) refuse(stBanks[4].request('changeover')); // S: min 1
       if (dir > 0) {
         // right: bottom d0 (path-gated LEGINV set1), d1, d2; top d0
@@ -1990,6 +2020,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
         gatedHop(LEGINV(c), 1, uB0.request('changeover'));
         poolHop(c + 1, uB1, false);
         poolHop(c + 2, uB2, false);
+        poolHop(c + 3, uB3, false);
         gatedHop(LEGINVT(c), 1, uT0.request('changeover'));
         poolHop(c + 1, uT1, true);
         poolHop(c + 2, uT2, true);
@@ -2065,6 +2096,11 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(WIDM4)}/${R(WIDM4, 'L')}`, `${R(WIDM4, 'K')}/${R(L.FANMIR, 'E')}`);
   const wid3Bank = new MirrorBank({ name: 'FANWID3', source: null, base: L.FANMIR + Math.ceil(cols / 2), capacity: Math.ceil(cols / 2), w, R, minusOf });
   w.push(`${plusOf(WID3M)}/${R(WID3M, 'H')}`, `${R(WID3M, 'G')}/${R(L.FANMIR + Math.ceil(cols / 2), 'E')}`);
+  // offset 3 = "the bottom grows a fourth column", which is the I state
+  // and nothing else: no slide can reach it, so the rail is the state
+  // mirror itself rather than a slide-or-ring compatibility net
+  const wid4Bank = new MirrorBank({ name: 'FANWID4', source: null, base: L.FANW4, capacity: 2, w, R, minusOf });
+  w.push(`${plusOf(IM(0))}/${R(IM(0), 'H')}`, `${R(IM(0), 'G')}/${R(L.FANW4, 'E')}`);
   for (let j = 1; j < cols; j++) {
     const bOuts: string[] = [];
     {
@@ -2077,6 +2113,13 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     if (j >= 2) {
       const tm = wid3Bank.request('gate');
       const pm = fanPos[j - 2].request('gate');
+      w.push(`${plusOf(tm.relay)}/${R(tm.relay, tm.arm)}`);
+      w.push(`${R(tm.relay, tm.no)}/${R(pm.relay, pm.arm)}`);
+      bOuts.push(R(pm.relay, pm.no));
+    }
+    if (j >= 3) {
+      const tm = wid4Bank.request('gate');
+      const pm = fanPos[j - 3].request('gate');
       w.push(`${plusOf(tm.relay)}/${R(tm.relay, tm.arm)}`);
       w.push(`${R(tm.relay, tm.no)}/${R(pm.relay, pm.arm)}`);
       bOuts.push(R(pm.relay, pm.no));
@@ -2184,7 +2227,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       const s2 = SHAPES[t];
       const r1 = shapeRange(s1, cols);
       const r2 = shapeRange(s2, cols);
-      const mm = t < 6 ? MMIR(t) : t < 9 ? MMIR2(t) : MMIR3(t);
+      const mm = t < 6 ? MMIR(t) : t < 9 ? MMIR2(t) : t < 12 ? MMIR3(t) : MMIR4;
       let armChain: string | null = null;
       for (let p = r1.min; p <= r1.max; p++) {
         if (p < r2.min || p > r2.max) continue;
@@ -2418,7 +2461,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // states 0..5 live in the 3a block (SHR), 6..8 in the 4a block (SHR2),
   // 9..11 in the 4c block (SHR3)
   const SH = (i: number, part: number) =>
-    i < 6 ? SHR(i, part) : i < 9 ? SHR2(i, part) : SHR3(i, part);
+    i < 6 ? SHR(i, part) : i < 9 ? SHR2(i, part) : i < 12 ? SHR3(i, part) : SHR4(i, part);
   // ---------- rotation: NOTOK and the D-feed muxes ----------
   // UP means two different things and the difference lives in the
   // MASTER SAMPLING, not in the clock network: each master's coil com
@@ -2679,6 +2722,25 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // transitions into the overhangs (the root chain extends; deltas only)
   w.push(`${R(MMIR2(8), 'H')}/${R(MMIR3(9), 'H')}`);
   w.push(`${R(MMIR3(9), 'H')}/${R(MMIR3(10), 'H')}`, `${R(MMIR3(10), 'H')}/${R(MMIR3(11), 'H')}`);
+  // ---------- 3b-4d: the horizontal I's coils ----------
+  // two mirrors off the new slave: IM(0) feeds the B fan's offset-3
+  // rail, IM(1) is the step-mirror bank's chain tail (the slave's own
+  // sets are spent stepping the ring, as everywhere else here)
+  w.push(`${R(SHR4(12, 2), 'E')}/${R(IM(0), 'E')}`, `${R(IM(0), 'E')}/${R(IM(1), 'E')}`);
+  w.push(`${R(SHR4(12, 1), 'E')}/${R(MMIR4, 'E')}`);
+  for (const m of [MMIR4, IM(0), IM(1)]) w.push(`${R(m, 'F')}/${minusOf(m)}`);
+  w.push(`${R(MMIR3(11), 'H')}/${R(MMIR4, 'H')}`); // the master-mirror arm chain
+  // a 4-wide bottom needs the fan's offsets 0,1,2,3, so the I joins the
+  // SAME rails the 2-wide and 3-wide states use rather than minting
+  // parallel per-column taps: WIDB (= 2wide|O|S|Z, whose chain ends at
+  // WIDM3.E and — the slide's T jack ties all four WIDM coils into one
+  // net — raises WIDM4, which gates the fan's offset-1 rail) and WID3M
+  // (offset 2). measured first: with neither joined, the I masked only
+  // columns p and p+3. entry holes are the chain LINKS, not the coil
+  // jacks: WIDM*.E are all 2/2 and so is WID3M.E, but I2WM.G and
+  // L2M(1).G each carry exactly one wire.
+  w.push(`${plusOf(IM(0))}/${R(IM(0), 'L')}`, `${R(IM(0), 'K')}/${R(I2WM, 'G')}`); // WIDB: offset 1
+  w.push(`${plusOf(IM(1))}/${R(IM(1), 'H')}`, `${R(IM(1), 'G')}/${R(L2M(1), 'G')}`); // WID3M: offset 2
   // into 9 (T1 -> L2): the top grows cols p and p+2
   // into 10 (L2 -> J2): the bottom moves to col p
   // into 11 (J2 -> T2): the bottom moves to col p+1
@@ -2715,7 +2777,7 @@ export const TETRIS_IO = {
   up: UPBTN, // momentary: step the shape ring (1x1 -> 2wide -> 2tall -> O -> S -> Z -> L -> J -> T -> wrap)
   // the shape ring's one-hot slaves (state 0 = 1x1 seeds at power-on)
   shapeRelay: (i: number) => {
-    const s = i < 6 ? SHR(i, 2) : i < 9 ? SHR2(i, 2) : SHR3(i, 2);
+    const s = i < 6 ? SHR(i, 2) : i < 9 ? SHR2(i, 2) : i < 12 ? SHR3(i, 2) : SHR4(i, 2);
     return { machine: Math.floor(s / 6), index: s % 6 };
   },
   // AUTO: the oscillator's own section slide — right = the machine ticks

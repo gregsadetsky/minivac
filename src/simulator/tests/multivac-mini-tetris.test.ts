@@ -1562,7 +1562,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const rel = (idx: number) => (g.m.getMachineState(Math.floor(idx / 6)).relays[idx % 6] ? 1 : 0);
     const shapeAt = () => {
       const hot: number[] = [];
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < SHAPES.length; i++) {
         const r = TETRIS_IO.shapeRelay(i);
         if (g.m.getMachineState(r.machine).relays[r.index]) hot.push(i);
       }
@@ -1667,7 +1667,16 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(rails(), 'T2: rides the wide tap').toEqual([1, 1, 1]);
     expect(botBank(), 'T2 bottom: the single at p+1').toBe(0b0010);
     expect(topBank()).toBe(0b0111);
-    up(); // T2 -> 1x1: the wrap (now checked: T2 uncovers col p — dark here)
+    // 3b-4d: the horizontal I — four wide and FLAT. it joins the same
+    // wide rails the 2- and 3-wide bottoms use (the fan's offsets 1 and
+    // 2) plus its own offset-3 rail, and never touches VMODE or STAG.
+    up(); // T2 -> I
+    expect(shapeAt(), 'T2 steps into the I now, not home').toBe(12);
+    expect(rails(), 'I: wide, not tall, not staggered').toEqual([1, 0, 0]);
+    expect(botBank(), 'I bottom: four columns from p').toBe(0b1111);
+    expect(topBank(), 'a flat piece never feeds the T bank').toBe(0);
+    up(); // I -> 1x1: the wrap (the I's bottom already covers col p, so
+    // this edge carries no delta check at all — the one the T2 wrap had)
     expect(shapeAt()).toBe(0);
     expect(rails()).toEqual([0, 0, 0]);
     expect(topBank()).toBe(0);
@@ -1707,13 +1716,29 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g.tick(); // reset (re-homes the register)
     expect(g.tokenAt()).toEqual([]);
 
-    // the S next: wrap the ring around (11 more UPs — the cycle passes
-    // the upright triples AND the overhang trio now; pre-spawn their
-    // delta checks read dark rails), from pos 1 so every entry conducts;
-    // then walk to pos 2 — bottom 2-3, top 1-2; the bottom pair senses
-    // the Z's top at (6,2)
-    g.pressBtn(TETRIS_IO.right); // re-homed 0 -> 1
-    for (let k = 0; k < 11; k++) up();
+    // the S next: wrap the ring all the way around. the cycle passes
+    // the upright triples, the overhang trio AND the I now, and at FOUR
+    // columns no single column admits the whole ring any more — S needs
+    // column >= 1 and the I's 4-wide bottom fits only at column 0 — so
+    // the walk steers into each next shape's fit range, which is what a
+    // player does. then to pos 2: bottom 2-3, top 1-2, and the bottom
+    // pair senses the Z's top at (6,2)
+    const ringAt = () => {
+      for (let i = 0; i < SHAPES.length; i++) {
+        const r = TETRIS_IO.shapeRelay(i);
+        if (g.m.getMachineState(r.machine).relays[r.index]) return i;
+      }
+      return -1;
+    };
+    let wrap = 0;
+    while (ringAt() !== 4 && wrap++ < 3 * SHAPES.length) {
+      const r = shapeRange(SHAPES[(ringAt() + 1) % SHAPES.length], 4);
+      let st = 0;
+      while (g.posAt() < r.min && st++ < 6) g.pressBtn(TETRIS_IO.right);
+      while (g.posAt() > r.max && st++ < 6) g.pressBtn(TETRIS_IO.left);
+      up();
+    }
+    expect(ringAt(), 'the ring wrapped back to S').toBe(4);
     let guard = 4;
     while (g.posAt() < 2 && guard-- > 0) g.pressBtn(TETRIS_IO.right);
     expect(g.posAt()).toBe(2);
@@ -2184,19 +2209,30 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       return -1;
     };
     const up = () => g.pressBtn(TETRIS_IO.up);
+    // every chooser step keeps the register inside the NEXT shape's fit
+    // range: a transition out of range simply has no branch. at four
+    // columns that is no longer satisfiable by one column — S needs
+    // column >= 1, the I's 4-wide bottom fits only at column 0 — so the
+    // walk steers, exactly as a player would.
+    const stepChooser = () => {
+      const r = shapeRange(SHAPES[(shapeAt() + 1) % NSTATES], 4);
+      let st = 0;
+      while (g.posAt() < r.min && st++ < 6) g.pressBtn(TETRIS_IO.right);
+      while (g.posAt() > r.max && st++ < 6) g.pressBtn(TETRIS_IO.left);
+      up();
+    };
     const walkTo = (target: number) => {
       let guard = 0;
-      while (shapeAt() !== target && guard++ < 2 * NSTATES) up();
+      while (shapeAt() !== target && guard++ < 3 * NSTATES) stepChooser();
       expect(shapeAt(), `walked the chooser to ${target}`).toBe(target);
     };
-    // PRE-SPAWN the chooser still walks every state (S needs pos >= 1)
-    g.pressBtn(TETRIS_IO.right);
+    // PRE-SPAWN the chooser still walks every state
     const cycle: number[] = [];
     for (let k = 0; k < NSTATES; k++) {
-      up();
+      stepChooser();
       cycle.push(shapeAt());
     }
-    expect(cycle, 'the pre-spawn chooser cycles all twelve').toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0]);
+    expect(cycle, 'the pre-spawn chooser cycles all thirteen').toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0]);
 
     // MID-FALL the same button rotates: L1 <-> L2, both directions
     walkTo(6);
@@ -2409,8 +2445,8 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       return -1;
     };
     const shape6 = () => {
-      for (let i = 0; i < 12; i++) {
-        const sl = i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : L.SHR3(i, 2);
+      for (let i = 0; i < SHAPES.length; i++) {
+        const sl = i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : i < 12 ? L.SHR3(i, 2) : L.SHR4(i, 2);
         if (rel(sl)) return i;
       }
       return -1;
@@ -2434,7 +2470,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const walkTo = (ix: number, tp: number) => {
       let g = 0;
       while (shape6() !== ix && g++ < 30) {
-        const r = shapeRange(SHAPES[(shape6() + 1) % 12], COLS6);
+        const r = shapeRange(SHAPES[(shape6() + 1) % SHAPES.length], COLS6);
         let g2 = 0;
         while (pos6() < r.min && g2++ < 8) press6(4, btnMachine);
         while (pos6() > r.max && g2++ < 8) press6(3, btnMachine);
@@ -2485,8 +2521,8 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const rel2 = (i: number) => (m2.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
     const poss2 = () => [...Array(COLS6)].map((_, j) => rel2(L.POSS(j))).join('');
     const shape2 = () => {
-      for (let i = 0; i < 12; i++) {
-        const sl = i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : L.SHR3(i, 2);
+      for (let i = 0; i < SHAPES.length; i++) {
+        const sl = i < 6 ? L.SHR(i, 2) : i < 9 ? L.SHR2(i, 2) : i < 12 ? L.SHR3(i, 2) : L.SHR4(i, 2);
         if (rel2(sl)) return i;
       }
       return -1;
@@ -2507,7 +2543,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const drop2 = (ix: number, p: number) => {
       let g = 0;
       while (shape2() !== ix && g++ < 30) {
-        const r = shapeRange(SHAPES[(shape2() + 1) % 12], COLS6);
+        const r = shapeRange(SHAPES[(shape2() + 1) % SHAPES.length], COLS6);
         let g2 = 0;
         while (pos2() < r.min && g2++ < 8) press2(4, btnMachine);
         while (pos2() > r.max && g2++ < 8) press2(3, btnMachine);
@@ -2532,6 +2568,98 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(row2(7), 'row 7 cleared and row 6 fell in').toBe('111011');
     expect(row2(6), 'row 6 emptied by the collapse').toBe('000000');
     expect(m2.getState().alerts).toEqual([]);
+  });
+
+  // 3b-4d — THE HORIZONTAL I, the seventh tetromino. Flat, so it needs
+  // no new write phase, no new collision term and no new occupancy row:
+  // a 13th ring state, a fourth bottom-fan offset, and the cols-4 bound
+  // class the geometry-derived unions produce on their own. Its rotation
+  // partner is the VERTICAL I, which wants a four-row write engine, so
+  // until that exists the I is a singleton and UP refuses it mid-fall.
+  it('the horizontal I: four wide, its own bound, a rotation singleton (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const COLS = 6;
+    const { wires, layout: L, btnMachine } = tetrisCircuit(12, COLS);
+    assertJackCapacity(wires);
+    const m = new MinivacSimulator(wires, false, L.machines);
+    m.initialize();
+    const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+    const SH = (i: number, p: number) =>
+      i < 6 ? L.SHR(i, p) : i < 9 ? L.SHR2(i, p) : i < 12 ? L.SHR3(i, p) : L.SHR4(i, p);
+    const shape = () => {
+      for (let i = 0; i < SHAPES.length; i++) if (rel(SH(i, 2))) return i;
+      return -1;
+    };
+    const pos = () => {
+      for (let j = 0; j < COLS; j++) if (rel(L.POSS(j))) return j;
+      return -1;
+    };
+    const tok = () => {
+      for (let i = 0; i < 12; i++) if (rel(L.RING(i, 2))) return i;
+      return -1;
+    };
+    const bmask = () => [...Array(COLS)].map((_, j) => rel(L.PIECE(j))).join('');
+    const tmask = () => [...Array(COLS)].map((_, j) => rel(L.PIECET(j))).join('');
+    const row = (r: number) => [...Array(COLS)].map((_, j) => rel(L.CELL(r, j))).join('');
+    const press = (b: number) => {
+      m.pressButton(b, btnMachine);
+      m.releaseButton(b, btnMachine);
+    };
+    const tick = () => {
+      m.setSlide(5, 'right', 1);
+      m.setSlide(5, 'left', 1);
+    };
+
+    // the I is the LAST ring state, so the chooser reaches it in twelve
+    // steps — keeping the register inside each next shape's fit range,
+    // because a transition out of range simply has no branch
+    let guard = 0;
+    while (shape() !== 12 && guard++ < 40) {
+      const r = shapeRange(SHAPES[(shape() + 1) % SHAPES.length], COLS);
+      let g2 = 0;
+      while (pos() < r.min && g2++ < 8) press(4);
+      while (pos() > r.max && g2++ < 8) press(3);
+      press(2);
+    }
+    expect(shape(), 'the chooser reaches the I').toBe(12);
+    expect(shapeRange(SHAPES[12], COLS), 'a 4-wide bottom fits at three columns of six').toEqual({
+      min: 0,
+      max: 2,
+    });
+    let lg = 0;
+    while (pos() > 0 && lg++ < 8) press(3);
+    expect(pos()).toBe(0);
+
+    m.pressButton(6, 1);
+    m.releaseButton(6, 1);
+    expect(shape(), 'the spawn keeps the chosen shape').toBe(12);
+    expect(bmask(), 'the bottom fan lights four columns').toBe('111100');
+    expect(tmask(), 'the top bank stays dark: the I is flat').toBe('000000');
+
+    // the cols-4 bound: two steps right, then the contacts refuse
+    press(4);
+    expect(pos()).toBe(1);
+    expect(bmask(), 'the mask follows the register').toBe('011110');
+    press(4);
+    expect(pos()).toBe(2);
+    expect(bmask()).toBe('001111');
+    press(4);
+    expect(pos(), 'RIGHT refused at max = cols - 4').toBe(2);
+
+    // rotation: no partner state, so no branch, so no clock (the same
+    // refusal the square gives, arrived at the same way)
+    tick();
+    const before = shape();
+    press(2);
+    expect(shape(), 'mid-fall UP refuses: the I is a rotation singleton').toBe(before);
+
+    let t = 0;
+    while (tok() >= 0 && t++ < 40) tick();
+    expect(t, 'the piece reached the floor and locked').toBeLessThan(40);
+    for (let k = 0; k < 3; k++) tick();
+    expect(row(11), 'four cells written in one row').toBe('001111');
+    expect(row(10), 'and nothing above them').toBe('000000');
+    expect(m.getState().alerts).toEqual([]);
   });
 
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
