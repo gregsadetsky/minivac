@@ -139,9 +139,10 @@ for (let i = 0; i < 16; i++) {
 const rSq2 = await rows();
 if (rSq2[11] !== 'OOO.OO' || rSq2[10] !== 'OOO.OO')
   throw new Error('second square wrong: ' + JSON.stringify(rSq2));
-// the cycle passes the staggered pair AND the triples: 2x2 -> S ->
-// Z -> L -> J -> T -> flips -> 1x1; the operator clamps re-position
-// the register per shape along the way.
+// the cycle passes the staggered pair, the triples, the flips AND the
+// horizontal I: 2x2 -> S -> Z -> L -> J -> T -> flips -> I -> 1x1.
+// the operator clamps re-position the register per shape along the way
+// (the I's 4-wide bottom has the narrowest fit range of any shape).
 await page.keyboard.press('ArrowUp');
 const sS = await waitIdle('shapeS');
 if (!/\bS\b/.test(sS)) throw new Error('expected S, got: ' + sS);
@@ -153,6 +154,9 @@ for (const want of [/\bL\b/, /\bJ\b/, /\bT\b/, /L flip/, /J flip/, /T flip/]) {
   const s = await waitIdle('shapeTriple');
   if (!want.test(s)) throw new Error(`cycle expected ${want}, got: ${s}`);
 }
+await page.keyboard.press('ArrowUp');
+const sI = await waitIdle('shapeI');
+if (!/\bI\b/.test(sI)) throw new Error('expected the I, got: ' + sI);
 await page.keyboard.press('ArrowUp');
 const s4 = await waitIdle('shape4');
 if (!s4.includes('1x1')) throw new Error('expected 1x1, got: ' + s4);
