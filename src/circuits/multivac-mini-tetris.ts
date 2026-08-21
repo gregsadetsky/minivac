@@ -2503,8 +2503,21 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   if (upEndTail !== null) w.push(`${upEndTail}/${shrClkCom(0)}`);
   w.push(`${bmS}.2+/${bmS}.2Y`, `${bmS}.2X/${R(UPM, 'E')}`, `${R(UPM, 'F')}/${minusOf(UPM)}`);
   // UPM's clock contact feeds the ring through the 3b-3c transition
-  // legality network (wired below) instead of a plain wire
-  w.push(`${plusOf(UPM)}/${R(UPM, 'H')}`);
+  // legality network (wired below) instead of a plain wire — and its +
+  // rides LKM2's NC, because A LOCK MUST FREEZE THE SHAPE. a lock is
+  // three ticks (press: the bottom write; phase 2: the row above;
+  // reset) and the TOKEN lives through all of them, so NOTOK keeps the
+  // ring's D-feeds aimed at the rotation partner the whole time. an UP
+  // landing between the lock press and phase 2 re-aimed the T fan and
+  // phase 2 wrote the ROTATED shape's top over the already-written
+  // bottom: an L locked as SIX cells instead of four (reproduced before
+  // the gate went in). the page's key queue drains at every settle,
+  // including the ones between a lock's phases, so this was reachable
+  // in ordinary play. LKM2 is the lock-master mirror and is up for
+  // exactly that window — measured across a full drop: low on every
+  // falling tick, high on the lock tick and phase 2, low again from the
+  // reset — so one NC in the clock's supply path is the whole fix.
+  w.push(`${plusOf(LKM2)}/${R(LKM2, 'L')}`, `${R(LKM2, 'N')}/${R(UPM, 'H')}`);
   for (let i = 2; i < NSTATES; i += 2) w.push(`${shrClkCom(i - 2)}/${shrClkCom(i)}`);
   for (let i = 0; i < NSTATES; i++) {
     const c = SH(i, 0), a = SH(i, 1), sl = SH(i, 2);

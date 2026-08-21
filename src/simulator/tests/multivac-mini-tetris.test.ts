@@ -2662,6 +2662,93 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(m.getState().alerts).toEqual([]);
   });
 
+  // A LOCK MUST FREEZE THE SHAPE. A lock is three ticks — press (the
+  // bottom write, and the piece's own row goes into the field), phase 2
+  // (the row above), reset — and the TOKEN stays alive through all of
+  // them, so NOTOK keeps the ring's D-feeds aimed at the rotation
+  // partner. Before the gate, an UP landing between the lock press and
+  // phase 2 re-aimed the T fan and phase 2 wrote the ROTATED shape's
+  // top over the already-written bottom: an L locked as SIX cells
+  // instead of four. The page's key queue drains at every settle,
+  // including the settles between a lock's phases, so this was
+  // reachable in ordinary play. LKM2 (the lock-master mirror) is up for
+  // exactly that window — measured: high on the lock tick and phase 2,
+  // low on every falling tick and after the reset — so the UP clock's +
+  // rides its NC.
+  it('a lock freezes the shape: UP between the phases cannot add cells (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const COLS = 6;
+    const { wires, layout: L, btnMachine } = tetrisCircuit(12, COLS);
+    const play = (pressUpMidLock: boolean) => {
+      const m = new MinivacSimulator(wires, false, L.machines);
+      m.initialize();
+      const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+      const SH = (i: number, p: number) =>
+        i < 6 ? L.SHR(i, p) : i < 9 ? L.SHR2(i, p) : i < 12 ? L.SHR3(i, p) : L.SHR4(i, p);
+      const shape = () => {
+        for (let i = 0; i < SHAPES.length; i++) if (rel(SH(i, 2))) return i;
+        return -1;
+      };
+      const pos = () => {
+        for (let j = 0; j < COLS; j++) if (rel(L.POSS(j))) return j;
+        return -1;
+      };
+      const tok = () => {
+        for (let i = 0; i < 12; i++) if (rel(L.RING(i, 2))) return i;
+        return -1;
+      };
+      const press = (b: number) => {
+        m.pressButton(b, btnMachine);
+        m.releaseButton(b, btnMachine);
+      };
+      const tick = () => {
+        m.setSlide(5, 'right', 1);
+        m.setSlide(5, 'left', 1);
+      };
+      // the L (state 6): a 3-wide bottom with a stem on the left, whose
+      // rotation partner is the L flip — a 1-wide bottom under a 3-wide
+      // top, so a wrong phase-2 write is unmistakable
+      let g = 0;
+      while (shape() !== 6 && g++ < 40) {
+        const r = shapeRange(SHAPES[(shape() + 1) % SHAPES.length], COLS);
+        let g2 = 0;
+        while (pos() < r.min && g2++ < 8) press(4);
+        while (pos() > r.max && g2++ < 8) press(3);
+        press(2);
+      }
+      expect(shape(), 'chose the L').toBe(6);
+      let lg = 0;
+      while (pos() > 0 && lg++ < 8) press(3);
+      m.pressButton(6, 1);
+      m.releaseButton(6, 1);
+      let t = 0;
+      while (t++ < 40) {
+        tick();
+        if (rel(L.LKM) || tok() < 0) break; // the tick that locked it
+      }
+      if (pressUpMidLock) press(2); // <-- between the lock press and phase 2
+      const shapeAfter = shape();
+      tick(); // phase 2
+      tick(); // reset
+      tick();
+      return {
+        shapeAfter,
+        rows: [10, 11].map((r) => [...Array(COLS)].map((_, j) => (rel(L.CELL(r, j)) ? 'X' : '.')).join('')),
+        cells: [...Array(12)].reduce(
+          (n, _, r) => n + [...Array(COLS)].filter((__, j) => rel(L.CELL(r, j))).length,
+          0
+        ),
+      };
+    };
+    const quiet = play(false);
+    const poked = play(true);
+    expect(quiet.rows, 'the L writes its stem over its triple').toEqual(['X.....', 'XXX...']);
+    expect(quiet.cells, 'four cells, which is what an L is').toBe(4);
+    expect(poked.shapeAfter, 'the ring HELD: a lock refuses the rotation clock').toBe(6);
+    expect(poked.rows, 'and the field is identical').toEqual(quiet.rows);
+    expect(poked.cells, 'no cells materialized').toBe(4);
+  });
+
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const auto = (g: ReturnType<typeof makeGame>, on: boolean) =>
