@@ -416,3 +416,54 @@ equivalence becomes a behavioural receipt rather than a diff.
 **F3 IS UNTOUCHED BY THE CHEAPER CONSTRUCTION AND IS NOW THE LARGEST
 UNSOLVED PIECE.** do not start B1 until the third line sense and the
 three-hot collapse seed have a design of their own.
+
+## F3 IS SMALLER THAN THE REVIEW THOUGHT — measured 2026-08-21
+
+the review called the third-row clear the largest unsolved piece: no free
+contacts for a third line-sense chain, and "nowhere to seed a third
+elevator stage" because ELEVA(t).E is 2/2 and comOf(ELEVA(t)) is 4/4 at
+every stage. the second half is wrong, and measuring the hole budget
+showed why.
+
+**the seed costs ZERO new relays.** ELEVA's own jacks are indeed full,
+but you do not have to enter there. measured free at 12x6:
+- `SEEDM2(t)` has its ENTIRE second contact set unused (L, K, N all free)
+- `SEEDM2(t-1).G` — the node that ALREADY drives ELEVA(t-2).E — has one
+  free hole
+
+so a third seed is: tie SEEDM2(t)'s set-2 arm to a CLEARPM3-gated fan tap
+and route its NO into SEEDM2(t-1).G. the one-hot ring makes the shared
+node legal — when the token is at t, SEEDM2(t-1) is OPEN, so the far side
+dead-ends. that is the same argument SEEDM's own fan rests on
+(:1448-1450).
+
+**and the walk works.** tested the premise before designing anything, by
+appending those wires to a stock (8,4) netlist so every double clear
+seeds three stages (wrong for the game, right as a mechanism probe), and
+running the suite's own double-clear scenario with markers placed in the
+columns the falling 2x2 does not occupy:
+
+    control (two-hot, shipped):  markers rows 3,4 -> rows 5,6   dropped 2
+    three-hot (one extra seed):  markers rows 3,4 -> rows 6,7   dropped 3
+
+same completion tick (30), no alerts, no junk, no duplicated rows, both
+markers moving together. the elevator is a shift register and an N-hot
+hole walks as N.
+
+two probe mistakes worth recording so nobody repeats them: the row
+decoder is THREE address bits, so operatorWrite only reaches rows 0..7 —
+at twelve rows the writes silently wrapped and the probe measured
+nothing; and a marker row placed in the falling piece's own columns
+blocks the drop before it reaches the rows under test.
+
+**what is left of F3**, then, is only the SENSE: LINE(j)'s two contact
+sets are genuinely both spent (arm and NO of each, measured), so a third
+series chain needs a LINE3(j) mirror bank off LINE(j).E — `cols` relays —
+plus LINEDLY3 / CPSET3 / CLEARP3 / CLEARPM3 and a fan group. call it
+~10 relays at six wide, not the ~22 the review estimated.
+
+STILL UNVERIFIED, and not to be reported as done: the third clear's own
+latch and its hold through the phase-3 release; and the SCORE, which
+showed 2 here because only two rows actually completed. a genuine triple
+must step the ring three times, and that machinery already scored singles
+twice once (:2318). trace it before wiring.
