@@ -156,6 +156,26 @@ function growLnk(w: Workspace): void {
 
 // ---------------------------------------------------------------------------
 
+// MEASUREMENT ONLY (see _notes/pivot-reuse.md): the pivot-order and
+// symbolic-reuse levers both rest on sparsity patterns REPEATING across
+// solves, and in this simulator every relay flip restamps the matrix.
+// so before building either, count the repeats. off unless enabled.
+export const profStats = {
+  on: false,
+  solves: 0,
+  repeats: 0,
+  sigs: new Map<number, number>(),
+  tSearch: 0,
+  tElim: 0,
+  reset() {
+    this.solves = 0;
+    this.repeats = 0;
+    this.sigs = new Map<number, number>();
+    this.tSearch = 0;
+    this.tElim = 0;
+  },
+};
+
 export class FastCircuit {
   private nodeCount = 0;
   private names: Record<string, number> = {};
@@ -462,6 +482,19 @@ export class FastCircuit {
     };
 
     // ---- sparse gaussian elimination: same pivot policy as SparseCircuit ----
+    if (profStats.on) {
+      // FNV-1a over the row structure — O(nnz), only when profiling
+      let h = 0x811c9dc5;
+      for (let r = 0; r < N; r++) {
+        h = Math.imul(h ^ rowLen[r], 0x01000193);
+        const base = rowStart[r];
+        for (let i = 0; i < rowLen[r]; i++) h = Math.imul(h ^ aCols[base + i], 0x01000193);
+      }
+      profStats.solves++;
+      const seen = profStats.sigs.get(h);
+      profStats.sigs.set(h, (seen ?? 0) + 1);
+      if (seen !== undefined) profStats.repeats++;
+    }
     let orderN = 0;
     for (let step = 0; step < N; step++) {
       while (minNnz <= N && bucketHead[minNnz] === -1) minNnz++;

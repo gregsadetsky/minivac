@@ -58,3 +58,47 @@ real game tick and a clearing lock's cascade.
 - the standing 5000-circuit sweep
 - ~100 spot cases against the original sparse engine (not the world)
 zero mismatches or it does not land.
+
+
+## MEASURED 2026-08-21 — BOTH LEVERS ARE DEAD
+
+instrument: FNV-1a over the post-stamp row structure, counted per dc().
+validated first — four solves driven at an IDENTICAL relay configuration
+collapse to ONE signature (3 repeats), so repeats ARE detectable.
+
+the game, 12x6:
+- one ordinary fall+lock:      91 solves, 91 distinct, **0.0% repeat**
+- a clearing lock + collapse: 182 solves, 180 distinct, **1.1% repeat**
+
+the decision rule written before the run said: repeat rate under ~30%
+means both levers are worthless. it is 0-1%. so:
+- PIVOT-ORDER REUSE: dead. there is nothing to reuse an order FROM.
+- SYMBOLIC FACTORIZATION REUSE: dead for the same reason (it needs the
+  fill pattern to be stable across solves, and the pattern is the thing
+  that changes).
+
+why, mechanically: a closed contact is stamped as a WIRE, so the node
+merges — and therefore the whole matrix structure — change whenever any
+relay flips. a relaxation flips relays by construction (that is what it
+is relaxing), and consecutive game states differ too. the matrix is
+essentially never the same twice.
+
+## what is actually left
+
+- SUBSTRUCTURING (per-machine thevenin reduction at used jacks): the
+  roadmap's "last resort", and now the only surviving structural idea.
+  it rests on a DIFFERENT invariant than pattern-repeat — that most
+  MACHINES are untouched between consecutive solves even though the
+  global pattern changed. that invariant has NOT been measured. do that
+  before building anything: instrument per-machine relay churn between
+  consecutive solves; if the median solve touches only a few machines,
+  the reduction has real headroom, and if it does not, substructuring
+  dies here too and the honest answer is that the solve cost is what it
+  is.
+- reducing the NUMBER of solves is the other axis and is cheaper to
+  explore: a lock costs ~91 solves today. worth a look at whether the
+  owed-tick bookkeeping can settle in fewer relaxation passes.
+
+the instrumentation stays in fast-circuit.ts behind `profStats.on`
+(default false, one boolean test per solve) because the substructuring
+question needs the same kind of evidence.

@@ -732,10 +732,23 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    the rotation also sits where the piece's own top lands one row down,
    so the piece is already resting and written before the turn is
    asked for. the machine was right both times; the model was wrong.
-   NEXT: pivot-order / symbolic-factorization reuse in the fast engine
-   — but MEASURE FIRST (_notes/pivot-reuse.md): the lever only exists
-   if sparsity patterns repeat, and every relay flip changes the
-   pattern. then the I piece + vertical orientations (the 3-row piece
+   PIVOT-ORDER REUSE: MEASURED AND DEAD (2026-08-21). the lever only
+   exists if sparsity patterns repeat across solves; measured on the
+   12x6 game they essentially never do — an ordinary fall+lock is 91
+   solves with 91 DISTINCT patterns (0.0% repeat), a clearing lock plus
+   its collapse cascade is 182 solves with 180 distinct (1.1%). the
+   instrument was validated first (four solves at an identical relay
+   configuration collapse to one signature). mechanically: a closed
+   contact is stamped as a wire, so the node merges — and the whole
+   matrix structure — change whenever any relay flips, which a
+   relaxation does by construction. symbolic-factorization reuse dies
+   with it, since it needs the same stability. recorded in full in
+   _notes/pivot-reuse.md; the decision rule was written down BEFORE the
+   measurement so the answer could not be rationalised after the fact.
+   NEXT: the only surviving structural perf idea is SUBSTRUCTURING
+   (per-machine thevenin reduction), and it rests on a different,
+   UNMEASURED invariant — that most machines are untouched between
+   consecutive solves. measure that before building it. otherwise: then the I piece + vertical orientations (the 3-row piece
    engine), random dealing, and 10 columns.
    (UP steps within the current piece's orientations), random dealing,
    pivot-order reuse in the fast engine (the 7s cascade is solve-bound),
