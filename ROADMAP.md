@@ -757,11 +757,51 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    measurement: only 1% of rows are isolated or dangling. so there is
    NO cheap solver lever; the cascade is near this architecture's
    floor. full numbers and the measurement kit in _notes/pivot-reuse.md.
-   NEXT (game, not solver — that is where the same effort pays): then the I piece + vertical orientations (the 3-row piece
-   engine), random dealing, and 10 columns.
-   (UP steps within the current piece's orientations), random dealing,
-   pivot-order reuse in the fast engine (the 7s cascade is solve-bound),
-   and the 3-row piece engine toward the I piece and verticals.
+   NEXT (game, not solver — that is where the same effort pays): the
+   tall piece engine, then random dealing, then 10 columns.
+
+41. THE "WHY NOT PORT AN FPGA TETRIS" QUESTION, ANSWERED WITH A
+   BACKEND (2026-08-21). built one — scripts/relay-compiler/ — that
+   maps a gate netlist to relays: one relay per input / gate output /
+   DFF half, gate functions as contact networks, fan-out past two
+   changeover sets minting parallel-coil mirrors, a + hole allocator
+   (supplies are per-machine, the six section + jacks are one node).
+   compiled the two hand-wired rungs already in the repo and compared:
+   the 4-bit adder is 15 relays by hand and 32 compiled (2.13x,
+   exhaustive over all 256 pairs), the 8-bit shift register 24 vs 29
+   (1.21x). so DATAPATH is nearly free — my prior of 5-10x was wrong
+   there. CONTROL logic is not: rung 4's 1-of-8 decoder is FOUR relays
+   by hand (a transfer-contact tree whose eight leaves are plain
+   JACKS) and 31 compiled naive / 20 with cones collapsed = 5-8x, of
+   which NINE relays are pure fan-out mirrors. tetris is nearly all
+   control logic, so a port is ~3600 relays and a solve cost that is
+   already the visible pain. VERDICT: keep hand-designing the game;
+   keep the backend for datapath-shaped subproblems. _notes/compiled-relays.md.
+
+42. THE HORIZONTAL I (3b-4d) — the seventh tetromino. flat, so no new
+   write phase, no new collision term, no new occupancy row: a 13th
+   ring state, a fourth bottom-fan offset, and the cols-4 bound class
+   the geometry-derived unions produce for free. the thing the design
+   note did NOT predict, found by measuring: a 4-wide bottom has to
+   join the EXISTING wide rails (WIDB and WID3M) for fan offsets 1 and
+   2 — with neither joined the I masked only columns p and p+3.
+   two consequences worth knowing: at FOUR columns no single column
+   admits the whole ring any more (S needs column >= 1, the I fits only
+   at column 0), so chooser walks steer; and widths 8-10 now exhaust
+   the STPREAD pool, deliberately NOT fixed because stpReadBase is
+   taken mid-sequence and widening it re-hosts every later coil (those
+   widths already carried 6-12 jack violations — only 4 and 6 are
+   clean, and 6 ships).
+
+43. A LIVE BUG, found while designing the tall engine: a lock is three
+   ticks and the TOKEN stays alive through all of them, so the rotation
+   muxes are still aimed at the rotation partner — an UP landing
+   between the lock press and phase 2 re-aimed the T fan and phase 2
+   wrote the ROTATED shape's top over the already-written bottom. an L
+   locked as SIX cells instead of four (reproduced before claiming it).
+   plausibly the user's "new shapes appear? conflicts?" report, since
+   the page's key queue drains at every settle including the ones
+   between a lock's phases.
 
 ## display/input notes
 
