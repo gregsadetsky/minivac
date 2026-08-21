@@ -467,7 +467,7 @@ export interface TetrisLayout {
   LEGINVT: (j: number) => number;
   LEGINVT2: (k: number) => number;
   VMODEM: (p: number) => number;
-  GOM: number; GAMEOVER: number; LKM2: number; LKM3: number;
+  GOM: number; GAMEOVER: number; LKM2: number; LKM3: number; ROW2: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -645,6 +645,13 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // the UP clock's freeze), and the position register needs the same
   // freeze the shape got. appended last, like everything after rotBase.
   const lkm3Base = take(1);
+  // B1a: the write-row changeover, wired INERT for now — its coil is
+  // unfed, so its NCs are permanently closed and phase 2 routes exactly
+  // as before. it exists so the eventual third write row is a changeover
+  // on ONE phase rail rather than a second rail (which would take the
+  // depth-1 cut bank dark mid-write; see the cross-review verdict in
+  // _notes/tall-pieces.md). appended last, like everything after rotBase.
+  const row2Base = take(1);
   return {
     rows,
     cols,
@@ -739,7 +746,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     NOTOK: rotBase, NOTM: k => rotBase + 1 + k, TOKM0: rotBase + 6,
     SHR4: (i, part) => shr4Base + 3 * (i - 12) + part,
     MMIR4: shr4Base + 3, IM: k => shr4Base + 4 + k, FANW4: fanW4Base,
-    LKM3: lkm3Base,
+    LKM3: lkm3Base, ROW2: row2Base,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -861,6 +868,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   claim('SHR4', L8.SHR4(12, 0), L8.SHR4(12, 1), L8.SHR4(12, 2), L8.MMIR4, L8.IM(0), L8.IM(1));
   claim('FANW4', L8.FANW4, L8.FANW4 + 1);
   claim('LKM3', L8.LKM3);
+  claim('ROW2', L8.ROW2);
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -893,7 +901,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
-    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
     MMIR,
@@ -1414,9 +1422,28 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // jack spare hole instead. Backfeed out of that node dead-ends at open
   // contacts in every phase (mirrorA of r-1 is off while the token is at r;
   // the decoder leaf dead-ends at the released WRITE button).
+  // B1a — THE WRITE-ROW CHANGEOVER, INERT. the TOPW feeds used to tap
+  // p2gate/p2break directly; they now tap two SUB-rails that hang off
+  // ROW2's two NCs. ROW2's coil is unwired, so both NCs are closed and
+  // this routes identically — the point is to prove a changeover is SAFE
+  // in the write-trigger path (the failure LKS and P2S exist to prevent)
+  // before anything drives it. when the third write row lands, ROW2's NO
+  // sides feed a TOPW2 bank aimed at row r-2, and the whole third-rail
+  // construction — with its duplicate depth-1 cut bank and its wedge on
+  // P2CLR — is not needed. one contact feeding the whole TOPW bank is a
+  // legal fan by the SEEDM argument: the bank is one-hot on the token row
+  // and every unselected TOPW's arm dead-ends at its unwired NC.
+  const row2gate = takeGroups(grown(2, 1));
+  const row2break = takeGroups(grown(2, 1));
+  for (const g of [row2gate, row2break]) {
+    for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
+  }
+  const r2gUse = { n: 0 }, r2bUse = { n: 0 };
+  w.push(`${tap(p2gate, p2gUse)}/${R(ROW2, 'H')}`, `${R(ROW2, 'J')}/${tap(row2gate, r2gUse)}`);
+  w.push(`${tap(p2break, p2bUse)}/${R(ROW2, 'L')}`, `${R(ROW2, 'N')}/${tap(row2break, r2bUse)}`);
   for (let r = 1; r < rows; r++) {
-    w.push(`${tap(p2gate, p2gUse)}/${R(TOPW(r), 'H')}`, `${R(TOPW(r), 'G')}/${R(W(r - 1, 0), 'E')}`);
-    w.push(`${tap(p2break, p2bUse)}/${R(TOPW(r), 'L')}`, `${R(TOPW(r), 'K')}/${comOf(W(r - 1, nGates))}`); // the breaker com, cols-general
+    w.push(`${tap(row2gate, r2gUse)}/${R(TOPW(r), 'H')}`, `${R(TOPW(r), 'G')}/${R(W(r - 1, 0), 'E')}`);
+    w.push(`${tap(row2break, r2bUse)}/${R(TOPW(r), 'L')}`, `${R(TOPW(r), 'K')}/${comOf(W(r - 1, nGates))}`); // the breaker com, cols-general
   }
 
   // ---------- row collapse (rung 10) C1: the elevator chain + seeding ----

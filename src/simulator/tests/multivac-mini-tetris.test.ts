@@ -2772,6 +2772,67 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(shoved.cells, 'still an L, not a T').toBe(4);
   });
 
+  // B1a — the write-row changeover, wired INERT. the third write row will
+  // be a changeover on ONE phase rail rather than a second rail, because
+  // a second rail takes the depth-1 cut bank DARK while the new write
+  // rails are hot (the cut bank's coils hang on p2railA) and those coils
+  // cannot be shared — a coil jack is a permanent tie, so the wire would
+  // just short the two rails together. this case pins the halfway state:
+  // ROW2 sits in the TOPW feed path, its coil is unwired, and phase 2
+  // must route exactly as it did before. if a later rung drives ROW2, it
+  // is this assertion that should go red first.
+  it('the write-row changeover is inert: ROW2 never rises and phase 2 is unchanged (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const COLS = 6;
+    const { wires, layout: L, btnMachine } = tetrisCircuit(12, COLS);
+    assertJackCapacity(wires);
+    const m = new MinivacSimulator(wires, false, L.machines);
+    m.initialize();
+    const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+    const tok = () => {
+      for (let i = 0; i < 12; i++) if (rel(L.RING(i, 2))) return i;
+      return -1;
+    };
+    const press = (b: number) => {
+      m.pressButton(b, btnMachine);
+      m.releaseButton(b, btnMachine);
+    };
+    const tick = () => {
+      m.setSlide(5, 'right', 1);
+      m.setSlide(5, 'left', 1);
+    };
+    const row = (r: number) => [...Array(COLS)].map((_, j) => (rel(L.CELL(r, j)) ? 'X' : '.')).join('');
+    let everUp = false;
+    const watch = () => {
+      if (rel(L.ROW2)) everUp = true;
+    };
+    // a STAGGERED piece, so the lock actually exercises phase 2's top
+    // write — the very path ROW2 now sits in
+    press(2); // 2 wide
+    press(4); // S needs column >= 1
+    press(2); // 2 tall
+    press(2); // 2x2 square
+    press(2); // S
+    watch();
+    m.pressButton(6, 1);
+    m.releaseButton(6, 1);
+    watch();
+    let t = 0;
+    while (t++ < 40) {
+      tick();
+      watch();
+      if (tok() < 0 && t > 2) break;
+    }
+    for (let k = 0; k < 4; k++) {
+      tick();
+      watch();
+    }
+    expect(everUp, 'ROW2 has no coil feed: it must never rise').toBe(false);
+    expect(row(11), "the S's bottom pair landed at columns 1-2").toBe('.XX...');
+    expect(row(10), 'and phase 2 still wrote its top pair, staggered LEFT').toBe('XX....');
+    expect(m.getState().alerts).toEqual([]);
+  });
+
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const auto = (g: ReturnType<typeof makeGame>, on: boolean) =>
