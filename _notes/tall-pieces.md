@@ -158,3 +158,36 @@ draft of phase machinery written this session was refuted on review
 (the ring reorder, the row-0 NOTOK gap, the root gating that killed
 its own flips). draft it, hand it to a clean-context reviewer with
 the phase-2 source, THEN wire.
+
+## B1's traps, found on paper before any wiring (2026-08-21)
+
+three that a first draft would walk into:
+
+1. **ROT_STATE stops being self-inverse.** every rotation pair today is
+   an involution (1<->2, i<->i+3), which is why `DELTA_SOURCE(t) =
+   ROT_STATE(t)` is correct: the source of the branch into t is the
+   state t rotates back to. give L/J/T four orientations and rotation
+   becomes a 4-CYCLE, so the source of "into t" is the unique s with
+   ROT_STATE(s) === t — a separate ROT_PRED function. reusing
+   ROT_STATE there would aim every branch's delta checks at the wrong
+   shape, and the symptom would be rotations that pass legality they
+   should fail. this is the off-by-one that already bit the MMIR
+   pairing once ("pairing it with t -> t+1 was an off-by-one that
+   walked on the wrong checks").
+2. **the driver's rotation receipt asserts a 2-cycle.** it checks
+   `L -> L flip -> L` on a falling piece. under a 4-cycle that becomes
+   `L -> L vert -> L flip -> L vert2 -> L`. that is a REAL behaviour
+   change, so the receipt gets rewritten deliberately — not quietly
+   widened until it passes.
+3. **a 3-tall piece cannot exist at rows 0 and 1.** phase 2 already
+   handles this by simply not having a TOPW(0) — the top row is not
+   written when the token is at row 0, and game-over latches on any
+   lock at row 0 anyway. phase 3's bank starts at r = 2 for the same
+   reason. worth stating because the natural first draft writes
+   `for (let r = 0; r < rows; r++)` and silently addresses W(-1).
+
+and one thing that is CHEAPER than it looks: the bounds. `shapeRange`
+already derives a shape's legal columns from its geometry, and the step
+trees' bound unions are now derived predicates over `maxCol`. so a
+3-row shape's horizontal limits fall out with nothing hand-laid — that
+is what the union-derivation commit bought.
