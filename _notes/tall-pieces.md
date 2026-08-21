@@ -467,3 +467,63 @@ latch and its hold through the phase-3 release; and the SCORE, which
 showed 2 here because only two rows actually completed. a genuine triple
 must step the ring three times, and that machinery already scored singles
 twice once (:2318). trace it before wiring.
+
+## B1b, READ OFF A REAL TRACE (2026-08-21) — and split in two
+
+the review's cheaper construction says "ROW2 master/slave, TICKM2-clocked,
+exactly like P2S". before wiring any of it, two measurements.
+
+### the lock trace, at BOTH half-ticks (8x4, 2-tall piece, fast engine)
+
+    t7 HI   LKM=1 P2M=1  P2S=0                 row 7 written  (the press)
+    t7 lo   LKM=1 P2M=1  P2S=1                 the transfer
+    t8 HI   P2M=0 P2S=1  P2CLR=1 P2GATE=1      row 6 written  (PHASE 2)
+    t8 lo   P2S=0                              transfer sampled P2M=0
+    t9 HI   RSTM=1, token dies                 (the reset)
+
+three facts that decide the design, none of them guessable:
+
+- **p2railA is TICK-HIGH only.** at t7 lo P2S is already up and P2CLR is
+  still 0 — the rail comes from LKS.G, which the tick feeds. so anything
+  hung on p2railA is a one-half-tick pulse, and ROW2's master CANNOT ride
+  it into the tick-low transfer. it must LATCH, the way P2M latches.
+- **P2M is cleared inside the phase-2 relaxation** (t8 HI: P2CLR=1 and
+  P2M=0 in the same row). so "not (3-tall and ROW2 down)" has to gate
+  P2CLR's COIL, not something downstream of it.
+- **the write and the clear are the same half-tick**, which is why the
+  third row cannot be bolted on as "one more tick" without moving P2CLR.
+
+### the clock has NO free contact set, measured
+
+TICKM2 at 12x6 reads `H:1 J:1 G:1 L:1 N:2 K:1` free HOLES — but set 1 is
+a spent changeover (H at +, G to COLLIDEM2, J to P2M) and set 2 is a spent
+changeover (L at +, K to P2S, N unwired). the free holes are on jacks that
+are already gating something, so using them means FANNING a contact:
+tie TICKM2.J to a second master and, when set 1 opens, P2S's com and the
+new slave's com are bridged through their two masters. that is the
+tie-point law, and it is exactly the bug class this file exists to avoid.
+
+so: a fourth tick mirror, TICKM4, parallel-coil off TICKM3.E (measured
+free: 1 hole). the mirror chain is already TICKM -> TICKM2 -> TICKM3 at
+one node; a fourth coil makes it 4x55R in parallel = 13.75R on that feed,
+so the SECTION CURRENT gets measured before this is called done, not
+assumed from the fact that three already work.
+
+### the split: timing first, routing second
+
+B1b-i — **the fourth tick and the fourth phase, writing NOTHING new.**
+TICKM4 + ROW2M (latched like P2M) + a V3 slide/relay for the 3-tall bit +
+P2CLR's gate. ROW2 rises for exactly one half-tick window and the lock
+takes FOUR ticks instead of three, but with row2gate/row2break's NO sides
+still unwired the fourth tick writes nothing: a 3-tall-flagged lock must
+put down exactly the same two cells as today. that isolates the risky half
+(a changeover moving in the write-trigger path, the failure LKS and P2S
+exist to prevent) from the routing half, and it is a real receipt: ROW2 up
+in the right window, down before the reset, field identical.
+
+B1b-ii — the TOPW2(r) bank (r = 2..rows-1, routing to W(r-2)), coils on
+MIRA(r).E or SEEDM2(r).E (comOf(MIRA(r)) is 4/4 — the draft's tie point
+does not exist), hung off ROW2's NO sides, which measure entirely free
+(`G:2 K:2`). only then does a third row actually get written.
+
+B1a's inert-contract test goes RED at B1b-i, which is the point of it.
