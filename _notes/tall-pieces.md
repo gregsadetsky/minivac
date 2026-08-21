@@ -340,3 +340,79 @@ unbuildable on jack capacity, so the trade would be real risk at the
 shipping width for no gain at an unusable one. the 10-column rung has
 to revisit the pool formula and the jack debt together; this note is
 the pointer.
+
+## THE CROSS-REVIEW VERDICT (2026-08-21) — three FATAL, draft refuted
+
+a clean-context reviewer took the B1 draft apart against a real build at
+the shipping geometry and a tick-by-tick trace of a vertical lock. the
+draft does not survive. recorded in full because the next person needs
+the traces, not the conclusion.
+
+**F1 — phase 3 goes dark on every phase-2 cut.** P2CLR / P2GATE / P2COL /
+P2CUT / CUTBD / CUTB1 / CUTC5 read 1 ONLY on the phase-2 tick: their
+coils hang directly on p2railA (:1369, :1387, :1389) or one hop behind it
+(:2396). the instant P3S diverts LKS.G to p3railA they all de-energize
+WHILE THE PHASE-3 WRITE RAILS ARE HOT — the P2CUT bank drops so the
+collision readback reconnects during a live write (the exact thing that
+bank exists for, :1380), and CUTB drops so the B fan re-bridges colFan
+(the leak CUTB was added to kill, :2364-2369). feeding those coils from
+both rails is FORBIDDEN: a coil jack is a permanent tie, so that wire
+ties the two rails together and deletes the exclusivity the nesting was
+for. nesting therefore forces a DUPLICATE depth-1 bank (~17 relays) the
+draft never counted. note vertical S/Z escape the CUTB half by luck
+(1-wide bottoms bridge nothing); vertical L/J/T do not.
+
+**F2 — "phase 2 is live" has ONE spare contact set in the block, on the
+relay the draft switches off.** every other p2railA rider's sets are
+spent; the only free one is P2CLR's — exactly what the draft inhibits for
+3-tall pieces. wire P3M's set there and a 3-tall lock HANGS: P2CLR
+inhibited -> P2M never breaks (:1357) -> P2S never drops -> LKS.G never
+reaches P2S.J -> the reset rail never energizes -> the token never dies
+and every later tick re-runs phase 2. a new P2LIVE relay is mandatory and
+was not in the budget. (P2SM's free set is not a substitute: it stays up
+THROUGH phase 3 and would re-feed P3M in the same wave P3CLR breaks it.)
+
+**F3 — a third completed row is sensed by nothing, and there is nowhere
+to seed a third elevator stage.** LINE(j)'s two sets are both spent for
+all six columns (the bottom clear's chain :1269-1276, the double clear's
+:1473-1475). even granting a LINE3 mirror bank, the collapse cannot take
+the seed: SEEDM2(t).G lands on ELEVA(t-1).E (:1488), and ELEVA(t).E is
+2/2 with comOf(ELEVA(t)) 4/4 at EVERY t. a row completed by the phase-3
+write stays full forever — the permanent-junk class the double clear rung
+already fixed once.
+
+**fixable, but wrong in the draft:** TOPW2's coil tie point does not
+exist where the draft puts it (comOf(MIRA(r)) is 4/4 at every r; use
+MIRA(r).E or SEEDM2(r).E, E-to-E). the third collision term IS a new bank
+after all (+cols): LEGINVT(1..4) are fully spent, only (0) and (5) have a
+free set. the 3-tall gate must be `+`-fed continuous like STAGM, never
+off p2railA. and TICKM2 is one pair from full — exactly enough for phase
+3 and NOTHING left for a fourth, so vertical I (B3) needs another tick
+mirror.
+
+**budget: ~84 relays, not 40-60.** all appended after fanW4Base. this
+pushes past 180 machines at 12x6, so per-section current wants
+RE-MEASURING, not assuming.
+
+**the cheaper construction the reviewer proposed.** drop the third rail
+entirely. phase 3 differs from phase 2 in exactly two things: which row
+the write routes to, and which fan drives the columns. so keep ONE
+p2railA and one P2GATE/P2CLR/P2CUT/CUTBD bank, and add a single ROW2
+master/slave (TICKM2-clocked, exactly like P2S) whose two changeovers sit
+between p2gate/p2break and TWO TOPW banks: NC -> TOPW(r) as today, NO ->
+a TOPW2(r) fan. both are legal one-contact fans by the SEEDM argument
+(:1448-1450) — the banks are one-hot on the token row and every
+unselected far side dead-ends. T-vs-T2 is one more changeover. this
+deletes ~20 relays and kills F1 and F2 STRUCTURALLY: there is only ever
+one phase rail, so nothing goes dark mid-lock and nothing needs a
+phase-2-live contact. P2CLR's gate becomes "not (3-tall and ROW2 down)",
+read off ROW2 itself — the same bit that decides whether another top
+write is owed, so the two cannot disagree and the wedge is impossible.
+cost: ROW2 moves a branch carrying the write triggers, so it must be
+master/slave and must be trace-tested for the exact failure LKS and P2S
+exist to prevent; and it changes the 2-tall wire list, so 2-tall
+equivalence becomes a behavioural receipt rather than a diff.
+
+**F3 IS UNTOUCHED BY THE CHEAPER CONSTRUCTION AND IS NOW THE LARGEST
+UNSOLVED PIECE.** do not start B1 until the third line sense and the
+three-hot collapse seed have a design of their own.

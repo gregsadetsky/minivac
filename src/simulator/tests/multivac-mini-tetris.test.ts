@@ -2672,11 +2672,11 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
   // exactly that window — measured: high on the lock tick and phase 2,
   // low on every falling tick and after the reset — so the UP clock's +
   // rides its NC.
-  it('a lock freezes the shape: UP between the phases cannot add cells (fast)', { timeout: 1800000 }, () => {
+  it('a lock freezes the shape AND the column: neither UP nor a step can deform the piece (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const COLS = 6;
     const { wires, layout: L, btnMachine } = tetrisCircuit(12, COLS);
-    const play = (pressUpMidLock: boolean) => {
+    const play = (pressUpMidLock: boolean, stepMidLock = false) => {
       const m = new MinivacSimulator(wires, false, L.machines);
       m.initialize();
       const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
@@ -2723,13 +2723,18 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
         tick();
         if (rel(L.LKM) || tok() < 0) break; // the tick that locked it
       }
+      const posAtLock = pos();
       if (pressUpMidLock) press(2); // <-- between the lock press and phase 2
+      if (stepMidLock) press(4); // <-- RIGHT, in the same window
       const shapeAfter = shape();
+      const posAfter = pos();
       tick(); // phase 2
       tick(); // reset
       tick();
       return {
         shapeAfter,
+        posAtLock,
+        posAfter,
         rows: [10, 11].map((r) => [...Array(COLS)].map((_, j) => (rel(L.CELL(r, j)) ? 'X' : '.')).join('')),
         cells: [...Array(12)].reduce(
           (n, _, r) => n + [...Array(COLS)].filter((__, j) => rel(L.CELL(r, j))).length,
@@ -2744,6 +2749,19 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(poked.shapeAfter, 'the ring HELD: a lock refuses the rotation clock').toBe(6);
     expect(poked.rows, 'and the field is identical').toEqual(quiet.rows);
     expect(poked.cells, 'no cells materialized').toBe(4);
+
+    // ...and the COLUMN, which is the other half. LEFT/RIGHT reached the
+    // button mirrors with no lock gate, so a step in the same window
+    // moved the register and phase 2 wrote the top row one column over:
+    // the L landed as '.X....' over 'XXX...' — four cells, but the stem
+    // over the MIDDLE, which is a T. the gate goes on the mirror COILS,
+    // because their set 2 feeds ANYBM, which breaks the register's
+    // one-hot hold: gate only the step path and the break still happens,
+    // leaving the register holding no position at all.
+    const shoved = play(false, true);
+    expect(shoved.posAfter, 'the register HELD: a lock refuses the step').toBe(shoved.posAtLock);
+    expect(shoved.rows, 'the top row landed over the bottom, not beside it').toEqual(quiet.rows);
+    expect(shoved.cells, 'still an L, not a T').toBe(4);
   });
 
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {

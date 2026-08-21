@@ -467,7 +467,7 @@ export interface TetrisLayout {
   LEGINVT: (j: number) => number;
   LEGINVT2: (k: number) => number;
   VMODEM: (p: number) => number;
-  GOM: number; GAMEOVER: number; LKM2: number;
+  GOM: number; GAMEOVER: number; LKM2: number; LKM3: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -641,6 +641,10 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // coil onto other machines, which is what tripped a supply alarm.
   const shr4Base = take(6);
   const fanW4Base = take(2);
+  // a THIRD lock mirror: LKM2's four sets are spent (GOM's set feed and
+  // the UP clock's freeze), and the position register needs the same
+  // freeze the shape got. appended last, like everything after rotBase.
+  const lkm3Base = take(1);
   return {
     rows,
     cols,
@@ -735,6 +739,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     NOTOK: rotBase, NOTM: k => rotBase + 1 + k, TOKM0: rotBase + 6,
     SHR4: (i, part) => shr4Base + 3 * (i - 12) + part,
     MMIR4: shr4Base + 3, IM: k => shr4Base + 4 + k, FANW4: fanW4Base,
+    LKM3: lkm3Base,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -855,6 +860,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   claim('rotation', L8.NOTOK, L8.NOTM(0), L8.NOTM(1), L8.NOTM(2), L8.NOTM(3), L8.NOTM(4), L8.TOKM0);
   claim('SHR4', L8.SHR4(12, 0), L8.SHR4(12, 1), L8.SHR4(12, 2), L8.MMIR4, L8.IM(0), L8.IM(1));
   claim('FANW4', L8.FANW4, L8.FANW4 + 1);
+  claim('LKM3', L8.LKM3);
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -887,7 +893,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
-    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
     MMIR,
@@ -1634,8 +1640,21 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   const bm = `m${btnMachine}`;
   // (3b-4a's NS-CUT lived here for one increment — 4b re-classed the
   // legality trees per top geometry, so triples steer like everyone)
-  w.push(`${bm}.3+/${bm}.3Y`, `${bm}.3X/${R(LEFTM, 'E')}`);
-  w.push(`${bm}.4+/${bm}.4Y`, `${bm}.4X/${R(RIGHTM, 'E')}`);
+  // A LOCK FREEZES THE COLUMN TOO. the shape freeze (LKM2's NC under the
+  // UP clock) was only half of it: a lock is three ticks, the bottom row
+  // is already written by the first, and LEFT/RIGHT reached LEFTM/RIGHTM
+  // with no lock gate anywhere — so a step landing between the lock press
+  // and phase 2 moved the register and phase 2 wrote the TOP row one
+  // column over. an L landed as `.X....` over `XXX...`: four cells, but
+  // the stem over the MIDDLE, which is a T. the gate goes on the COILS,
+  // not on the step path: LEFTM/RIGHTM's set 2 feeds ANYBM, which BREAKS
+  // the register's one-hot hold so a step can re-set it, and gating only
+  // the step leaves the break intact — the register then holds NO
+  // position at all (measured, first attempt). LKM2's four sets are
+  // spent, so LKM3 parallels its coil off LKM2's free E hole.
+  w.push(`${R(LKM2, 'E')}/${R(LKM3, 'E')}`, `${R(LKM3, 'F')}/${minusOf(LKM3)}`);
+  w.push(`${bm}.3+/${bm}.3Y`, `${bm}.3X/${R(LKM3, 'H')}`, `${R(LKM3, 'J')}/${R(LEFTM, 'E')}`);
+  w.push(`${bm}.4+/${bm}.4Y`, `${bm}.4X/${R(LKM3, 'L')}`, `${R(LKM3, 'N')}/${R(RIGHTM, 'E')}`);
   w.push(`${R(LEFTM, 'F')}/${minusOf(LEFTM)}`, `${R(RIGHTM, 'F')}/${minusOf(RIGHTM)}`, `${R(ANYBM, 'F')}/${minusOf(ANYBM)}`);
   w.push(`${plusOf(LEFTM)}/${R(LEFTM, 'L')}`, `${R(LEFTM, 'K')}/${R(ANYBM, 'E')}`);
   w.push(`${plusOf(RIGHTM)}/${R(RIGHTM, 'L')}`, `${R(RIGHTM, 'K')}/${R(ANYBM, 'E')}`);
