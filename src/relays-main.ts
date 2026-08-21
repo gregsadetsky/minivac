@@ -30,6 +30,7 @@ import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator
 import { tetrisCircuit, TETRIS_IO } from './circuits/multivac-mini-tetris';
 import { panelLayout, sectionOrigin, SEC_JACKS, CONTACT_SETS, SEC_W, SEC_H, COIL_BOX } from './relays/panel-layout';
 import { buildWirePaths, type WireStyle, type WirePaths } from './relays/wire-paths';
+import { circuitBlocks, ownerMap } from './relays/blocks';
 
 const ROWS = 12;
 const COLS = 6;
@@ -75,7 +76,11 @@ root.innerHTML = `
         <option value="droopy">droopy</option>
       </select>
       <label><input type="checkbox" id="rv-current" checked> colour by current</label>
+      harness: <input type="range" id="rv-dim" min="1" max="10" value="6" style="width:70px">
       <label><input type="checkbox" id="rv-rails" checked> supply stubs</label>
+      <span class="rv-sep"></span>
+      part: <select id="rv-block"></select>
+      <label><input type="checkbox" id="rv-io"> only its i/o</label>
       <span class="rv-sep"></span>
       <button id="rv-tick">tick</button>
       <button id="rv-run">run</button>
@@ -95,6 +100,17 @@ const cbArms = document.getElementById('rv-arms') as HTMLInputElement;
 const cbCurrent = document.getElementById('rv-current') as HTMLInputElement;
 const selWires = document.getElementById('rv-wires') as HTMLSelectElement;
 const cbRails = document.getElementById('rv-rails') as HTMLInputElement;
+const selBlock = document.getElementById('rv-block') as HTMLSelectElement;
+const cbIO = document.getElementById('rv-io') as HTMLInputElement;
+const rngDim = document.getElementById('rv-dim') as HTMLInputElement;
+/** the dead harness was drawn at #232c3a on #0b0e13 and read as invisible:
+ *  all 4782 wires were there, only ~117 amber ones showed. brightness is a
+ *  control now, and the HUD reports how many were actually stroked. */
+const harnessColour = () => {
+  const t = +rngDim.value / 10;
+  const c = Math.round(30 + t * 95);
+  return `rgb(${Math.round(c * 0.72)},${Math.round(c * 0.85)},${c})`;
+};
 
 // ------------------------------------------------------------- the machine
 setSolverEngine('fast');
@@ -119,6 +135,15 @@ const paths: Record<WireStyle, WirePaths> = {
 };
 const current = new Float32Array(terms.length);
 
+// ---- the parts of the circuit, read off the layout's own accessors ----
+const BLOCKS = circuitBlocks(built.layout, ROWS, COLS);
+selBlock.innerHTML =
+  '<option value="-2">off</option><option value="-1">all parts</option>' +
+  BLOCKS.map((b, i) => `<option value="${i}" title="${b.note}">${b.name}</option>`).join('');
+selBlock.value = '-2';
+/** -2 no tint, -1 every part tinted, >=0 focus one part */
+const blockMode = () => parseInt(selBlock.value, 10);
+
 /** relay state, read once per frame into a flat array */
 const nSections = built.layout.machines * 6;
 const energized = new Uint8Array(nSections);
@@ -127,6 +152,38 @@ function readRelays(): void {
     const st = sim.getMachineState(m).relays;
     for (let s = 0; s < 6; s++) energized[m * 6 + s] = st[s] ? 1 : 0;
   }
+}
+
+const owner = ownerMap(BLOCKS, nSections);
+/** which section a jack name belongs to, so a wire can be attributed */
+const sectionOfNode = (name: string): number => {
+  const g = /^(?:m(\d+)\.)?(?:Relay(\d)|Common_(\d)|Capacitor_(\d)|Slide(\d)|Button(\d))/.exec(name);
+  if (!g) return -1;
+  const mach = g[1] === undefined ? 0 : +g[1];
+  const sec = +(g[2] ?? g[3] ?? g[4] ?? g[5] ?? g[6]);
+  return Number.isFinite(sec) && sec >= 1 ? mach * 6 + (sec - 1) : -1;
+};
+/** per wire: the block at each end, -1 for rails and unowned relays */
+const wireBlockA = new Int8Array(terms.length).fill(-1);
+const wireBlockB = new Int8Array(terms.length).fill(-1);
+for (let i = 0; i < terms.length; i++) {
+  const sa = sectionOfNode(terms[i][0]);
+  const sb = sectionOfNode(terms[i][1]);
+  wireBlockA[i] = sa >= 0 && sa < nSections ? owner[sa] : -1;
+  wireBlockB[i] = sb >= 0 && sb < nSections ? owner[sb] : -1;
+}
+
+/**
+ * With a part focused and "only its i/o" on, the picture drops to that
+ * part's CROSSINGS — wires with exactly one end inside it. That is the
+ * visual6502 reading of a block's interface: what it listens to and what
+ * it drives, with its internal wiring taken out of the way.
+ */
+function wireShown(i: number): boolean {
+  const mode = blockMode();
+  if (mode < 0 || !cbIO.checked) return true;
+  const a = wireBlockA[i] === mode, b = wireBlockB[i] === mode;
+  return a !== b;
 }
 
 // -------------------------------------------------------------- the camera
@@ -149,11 +206,15 @@ let staticLayer: HTMLCanvasElement | null = null;
 let staticDirty = true;
 let staticKey = '';
 
-function drawSectionBody(g: CanvasRenderingContext2D, x: number, y: number): void {
-  g.fillStyle = '#1b2230';
-  g.strokeStyle = '#2b3648';
-  g.lineWidth = 1;
+function drawSectionBody(g: CanvasRenderingContext2D, x: number, y: number, tint: string | null, focus = false): void {
+  // the part tint is a WASH, not a fill: the relay has to stay readable
+  g.fillStyle = tint ?? '#1b2230';
+  if (tint) g.globalAlpha = focus ? 0.42 : 0.2;
   g.fillRect(x, y, SEC_W, SEC_H);
+  g.globalAlpha = 1;
+  if (!tint) g.fillStyle = '#1b2230';
+  g.strokeStyle = tint ?? '#2b3648';
+  g.lineWidth = 1;
   g.strokeRect(x + 0.5, y + 0.5, SEC_W - 1, SEC_H - 1);
 
   // the coil: a bobbin with windings, so it reads as a coil and not a box
@@ -228,12 +289,15 @@ function renderStatic(): void {
   const style = selWires.value as WireStyle | 'none';
   if (style !== 'none') {
     const p = paths[style];
-    g.strokeStyle = '#232c3a';
+    g.strokeStyle = harnessColour();
     g.lineWidth = Math.max(0.6, 1.1 / zoom);
     g.beginPath();
     const showRails = cbRails.checked;
+    drawnWires = 0;
     for (let i = 0; i < p.count; i++) {
       if (railKind[i] !== 0 && !showRails) continue;
+      if (!wireShown(i)) continue;
+      drawnWires++;
       const s = p.start[i], e = p.start[i + 1];
       if (e <= s) continue;
       g.moveTo(p.pts[s], p.pts[s + 1]);
@@ -280,7 +344,11 @@ function renderStatic(): void {
       }
       for (let s = 1; s <= 6; s++) {
         const [sx, sy] = sectionOrigin(s);
-        drawSectionBody(g, mx + sx, my + sy);
+        const b = owner[m * 6 + (s - 1)];
+        const mode = blockMode();
+        const tint =
+          mode === -2 || b < 0 ? null : mode === -1 || mode === b ? BLOCKS[b].colour : '#2a3242';
+        drawSectionBody(g, mx + sx, my + sy, tint, mode >= 0 && b === mode);
       }
     }
   }
@@ -293,6 +361,7 @@ let lastSolveMs = 0;
 let lastWireMs = 0;
 let lastDrawMs = 0;
 let liveWires = 0;
+let drawnWires = 0;
 
 function draw(): void {
   const t0 = performance.now();
@@ -303,7 +372,7 @@ function draw(): void {
     canvas.height = Math.round(ch * dpr);
     staticDirty = true;
   }
-  const key = `${zoom}|${panX}|${panY}|${selWires.value}|${cbRelays.checked}|${cbRails.checked}|${cw}x${ch}`;
+  const key = `${zoom}|${panX}|${panY}|${selWires.value}|${cbRelays.checked}|${cbRails.checked}|${selBlock.value}|${cbIO.checked}|${rngDim.value}|${cw}x${ch}`;
   if (staticDirty || key !== staticKey) {
     renderStatic();
     staticKey = key;
@@ -330,6 +399,7 @@ function draw(): void {
     for (let i = 0; i < p.count; i++) {
       if (Math.abs(current[i]) < 0.05) continue;
       if (railKind[i] !== 0 && !showRails) continue;
+      if (!wireShown(i)) continue;
       const s = p.start[i], e = p.start[i + 1];
       if (e <= s) continue;
       live++;
@@ -342,6 +412,7 @@ function draw(): void {
     lastWireMs = 0;
     liveWires = 0;
   }
+  if (selWires.value === 'none') drawnWires = 0;
 
   // ---- the armatures: the whole point of the view ----
   if (cbRelays.checked && cbArms.checked) {
@@ -395,7 +466,7 @@ function draw(): void {
   for (let i = 0; i < nSections; i++) up += energized[i];
   hud.textContent =
     `${built.layout.machines} machines / ${nSections} relays (${up} pulled) · ` +
-    `${terms.length} wires (${railStubs} to rails)${unplaced ? ` (${unplaced} unplaced)` : ''}` +
+    `${terms.length} wires (${drawnWires} drawn, ${railStubs} to rails)${unplaced ? `, ${unplaced} UNPLACED` : ''}` +
     `${liveWires ? `, ${liveWires} live` : ''} · ` +
     `draw ${lastDrawMs.toFixed(1)}ms · wire currents ${lastWireMs.toFixed(2)}ms · solve ${lastSolveMs.toFixed(0)}ms`;
 }
@@ -446,7 +517,7 @@ runBtn.addEventListener('click', () => {
     tick();
   }, 120);
 });
-for (const el of [cbRelays, cbArms, cbCurrent, cbRails, selWires]) {
+for (const el of [cbRelays, cbArms, cbCurrent, cbRails, selWires, selBlock, cbIO, rngDim]) {
   el.addEventListener('change', () => {
     staticDirty = true;
     schedule();
