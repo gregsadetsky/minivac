@@ -469,6 +469,8 @@ export interface TetrisLayout {
   VMODEM: (p: number) => number;
   GOM: number; GAMEOVER: number; LKM2: number; LKM3: number; ROW2: number;
   TICKM4: number; V3M: number; ROW2M: number; ROW2X: number;
+  /** r = 2..rows-1: routes the third write to row r-2 */
+  TOPW2: (r: number) => number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -669,6 +671,13 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const tickm4Base = take(1);
   const v3Base = take(1);
   const row2mBase = take(2);
+  // B1b-ii: the third write row's selector bank. TOPW2(r) is TOPW(r)'s
+  // twin one row further up — same coil net (the token row), but its
+  // contacts route the triggers into row r-2 instead of r-1, and its
+  // arms hang off ROW2's NO sides so only the fourth phase tick reaches
+  // them. r = 2..rows-1: rows 0 and 1 have nowhere to write to, exactly
+  // as row 0 has no TOPW.
+  const topw2Base = take(Math.max(0, rows - 2));
   return {
     rows,
     cols,
@@ -765,6 +774,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     MMIR4: shr4Base + 3, IM: k => shr4Base + 4 + k, FANW4: fanW4Base,
     LKM3: lkm3Base, ROW2: row2Base,
     TICKM4: tickm4Base, V3M: v3Base, ROW2M: row2mBase, ROW2X: row2mBase + 1,
+    TOPW2: r => topw2Base + (r - 2),
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -888,6 +898,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   claim('LKM3', L8.LKM3);
   claim('ROW2', L8.ROW2);
   claim('B1b-i', L8.TICKM4, L8.V3M, L8.ROW2M, L8.ROW2X);
+  for (let r = 2; r <= 7; r++) claim('TOPW2', L8.TOPW2(r));
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -920,7 +931,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
-    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, TICKM4, V3M, ROW2M, ROW2X, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, TICKM4, V3M, ROW2M, ROW2X, TOPW2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
     MMIR,
@@ -1529,6 +1540,47 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // for tick-high); this is the same arm's NC, so the two are exclusive.
   w.push(`${R(TICKM4, 'J')}/${R(ROW2M, 'H')}`, `${R(ROW2M, 'G')}/${comOf(ROW2)}`);
   w.push(`${plusOf(TICKM4)}/${R(TICKM4, 'L')}`, `${R(TICKM4, 'K')}/${R(ROW2X, 'L')}`, `${R(ROW2X, 'K')}/${comOf(ROW2)}`);
+
+  // ---------- B1b-ii: the third write row actually gets written -------
+  // ROW2's NO sides feed two more sub-rails and a TOPW2(r) bank that is
+  // TOPW(r)'s twin one row further up: same coil net (MIRA(r)'s, so it
+  // tracks the token row exactly), contacts routing to row r-2.
+  //
+  // WHERE IT ENTERS is the part that had to be measured rather than
+  // copied. TOPW's own entry jacks into a row's write-trigger nets —
+  // W(x,0).E and comOf(W(x,nGates)) — are FULL at every row and both
+  // geometries, so TOPW2 cannot use them. But those nets are coil nets
+  // chained E-to-E, and a coil jack is a permanent tie, so any jack on
+  // the net does. Measured, one spare hole each:
+  //   breaker net: W(x, 2*nGates-1).E — the last breaker, general
+  //   gate net:    W(x, nGates-1).E at 6 cols, MIRA(x).G at 4 — NOT
+  //                general, because at 4 cols the gate chain is short
+  //                enough that both gate coils are spent (W0.E carries
+  //                TOPW(x+1), W1.E the collapse alpha trigger) and the
+  //                hole is on MIRA(x).G, while at 6 cols MIRA(x).G is
+  //                itself spent sourcing W2.E. assertJackCapacity at
+  //                both widths is what keeps this honest.
+  // The fan is legal: the gate net then has three sources — the press
+  // path, TOPW(x+1) and TOPW2(x+2) — and no two are ever closed at once.
+  // TOPW(x+1) and TOPW2(x+2) are one-hot on DIFFERENT token rows, and
+  // beyond that their arms sit on the two sides of ROW2's changeover, so
+  // they are exclusive twice over. Backfeed out of MIRA(x).G at 4 cols
+  // dead-ends too: MIRA(x) is open whenever the token is at x+2.
+  const row3gate = takeGroups(grown(2, 1));
+  const row3break = takeGroups(grown(2, 1));
+  for (const g of [row3gate, row3break]) {
+    for (let i = 1; i < g.length; i++) w.push(`${g[i - 1]}/${g[i]}`);
+  }
+  const r3gUse = { n: 0 }, r3bUse = { n: 0 };
+  w.push(`${R(ROW2, 'G')}/${tap(row3gate, r3gUse)}`);
+  w.push(`${R(ROW2, 'K')}/${tap(row3break, r3bUse)}`);
+  const gateEntry = (x: number) => (nGates > 2 ? R(W(x, nGates - 1), 'E') : R(MIRA(x), 'G'));
+  const brkEntry = (x: number) => R(W(x, 2 * nGates - 1), 'E');
+  for (let r = 2; r < rows; r++) {
+    w.push(`${R(MIRA(r), 'E')}/${R(TOPW2(r), 'E')}`, `${R(TOPW2(r), 'F')}/${minusOf(TOPW2(r))}`);
+    w.push(`${tap(row3gate, r3gUse)}/${R(TOPW2(r), 'H')}`, `${R(TOPW2(r), 'G')}/${gateEntry(r - 2)}`);
+    w.push(`${tap(row3break, r3bUse)}/${R(TOPW2(r), 'L')}`, `${R(TOPW2(r), 'K')}/${brkEntry(r - 2)}`);
+  }
 
   // ---------- row collapse (rung 10) C1: the elevator chain + seeding ----
   // Stage t = "the hole is at row t". The chain is the ring pattern chained

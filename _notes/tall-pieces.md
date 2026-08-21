@@ -619,3 +619,49 @@ are one-hot on DIFFERENT token rows, and beyond that their far sides
 are exclusive twice over.
 
 STILL UNVERIFIED and not to be reported as done: none of this is wired.
+
+## B1b-ii LANDED (2026-08-21) — the third row is written
+
+`rows - 2` relays (TOPW2(r), r = 2..rows-1) plus two sub-rails off ROW2's
+NO sides. TOPW2(r) is TOPW(r)'s twin one row up: same coil net
+(MIRA(r).E, so it tracks the token row exactly), contacts routing to row
+r-2. measured trace, 8x4, 2-tall piece, V3 up:
+
+    t9 HI   P2CLR=1 ROW2=1     rows 5,6,7 written  (was 6,7)
+
+**the entry jacks had to be measured, not copied.** TOPW's own entries
+into a row's write-trigger nets — `W(x,0).E` and `comOf(W(x,nGates))` —
+are FULL at every row and both geometries. those nets are coil nets
+chained E-to-E, so any jack on the net works, and there is exactly one
+spare hole on each: the breaker's generalizes (`W(x, 2*nGates-1).E`, the
+last breaker coil), the gate's does not — `MIRA(x).G` at 4 cols,
+`W(x, nGates-1).E` at 6 — because at 4 cols the gate chain is short
+enough that both gate coils are spent and at 6 cols MIRA(x).G is itself
+spent sourcing W2.E. assertJackCapacity at both widths is the guard.
+
+**receipts:**
+- V3-DOWN behaviour is IDENTICAL to the b1b-i circuit, tick by tick,
+  field by field, at both (8,4) and (12,6) — compared against the
+  committed previous file, driving each build with ITS OWN btnMachine
+  (the first attempt drove the baseline with the new build's button
+  machine and produced a nonsense diff: the same class of error as the
+  /relays/ bug, twice in one day).
+- jack capacity clean at (8,4) and (12,6), zero undefined nodes.
+- peak supply current UNCHANGED: 2.536 A at 8x4, 2.938 A at 12x6, both
+  still on I(m1.V_POWER). TOPW2's coils sit on the per-row MIRA nets,
+  which are spread across machines and never touch the tick machine.
+- machines 126 -> 127 at 8x4, 181 -> 183 at 12x6.
+- the test goes red on an off-by-one in the routing (aim TOPW2 at r-1
+  instead of r-2: "expected 2 to be 3").
+
+**WHAT IS NOT TRUE YET, and is not asserted as if it were:** the third
+row repeats the SECOND row's column mask. there is no third-row mask fan,
+so with the V3 slide up the machine writes a 3-tall BAR of the top mask,
+not a tetromino. that fan (the phase-3 analogue of colFan/colFanT) is the
+next increment, and so is teaching the shape ring which states are 3
+tall — today V3 is an operator slide and nothing else.
+
+also still owed: the row-0/1 guard. a 3-tall piece locking at row 1 aims
+phase 3 at row -1; TOPW2 starts at r=2 so no relay is selected and
+nothing is written, which is the right behaviour by construction rather
+than by a refusal in the collision term. that wants a test of its own.

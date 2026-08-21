@@ -2834,25 +2834,30 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(m.getState().alerts).toEqual([]);
   });
 
-  // B1b-i — THE FOURTH PHASE, WHICH WRITES NOTHING YET.
+  // B1b — THE THIRD WRITE ROW.
   //
-  // This is the risky half of the third write row, isolated on purpose:
+  // With the V3 slide up a vertical lock is FOUR ticks instead of three,
+  // and the fourth writes row r-2 through the TOPW2 bank on ROW2's NO
+  // sides. The risky part is not the extra row, it is the extra tick:
   // ROW2 is a changeover sitting in the write-trigger path, and a
   // changeover that MOVES while the triggers are live is the exact
-  // failure LKS and P2S exist to prevent. So with the V3 slide up a lock
-  // takes FOUR ticks instead of three and still puts down EXACTLY the
-  // same two cells — the routing (a TOPW2 bank aimed at row r-2) is
-  // B1b-ii. What this case pins:
+  // failure LKS and P2S exist to prevent. What this case pins:
   //   - the fourth tick exists and the reset is one tick later
+  //   - it writes ONE more row, directly above the other two, and the
+  //     rest of the field is untouched
   //   - ROW2 is DOWN through the phase-2 write and UP through the third
   //   - ROW2 never changes state during a tick-HIGH solve, i.e. it moves
   //     only while p2gate/p2break are cold (break before make)
-  //   - the field is identical to the same lock with the slide down
+  //   - with the slide DOWN nothing moves and nothing changes
+  // NOT yet true, and deliberately not asserted as if it were: the third
+  // row repeats the SECOND row's column mask, because the fan that would
+  // give it its own mask is a later increment. A 3-tall bar is a routing
+  // receipt, not a tetromino.
   // The first cut of this wiring hung the gate chain on p2railA and the
   // machine WEDGED: ROW2M's latch backfed through its own set path into
   // the rail and held phase 2 on forever. The chain is +-sourced now,
   // like P2M's, and that is what this test would catch again.
-  it('B1b-i: the V3 slide adds a fourth phase tick that writes nothing new (fast)', { timeout: 1800000 }, () => {
+  it('B1b: the V3 slide adds a fourth phase tick that writes a third row (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const COLS = 4;
     const ROWS = 8;
@@ -2893,10 +2898,21 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const off = drop(false);
     const on = drop(true);
 
-    // the lock is one tick longer, and that tick is the only difference
+    // the lock is one tick longer, and it writes exactly one more row
     expect(on.ticks, 'the V3 slide makes the lock a tick longer').toBe(off.ticks + 1);
-    expect(on.field, 'B1b-i routes NOTHING new: the same two cells').toEqual(off.field);
-    expect(off.field.filter((r) => r.includes('X')).length, 'a 2-tall piece writes two rows').toBe(2);
+    const filled = (f: string[]) => f.map((r, i) => [i, r] as const).filter(([, r]) => r.includes('X'));
+    const offRows = filled(off.field);
+    const onRows = filled(on.field);
+    expect(offRows.length, 'a 2-tall piece writes two rows').toBe(2);
+    expect(onRows.length, 'and with the V3 slide up, three').toBe(3);
+    // the two the 2-tall lock wrote are untouched, and the new one sits
+    // directly above them
+    expect(onRows.slice(1), 'the first two rows are exactly the 2-tall lock').toEqual(offRows);
+    expect(onRows[0][0], 'the third row is directly above them').toBe(offRows[0][0] - 1);
+    // every row the lock did NOT write must still be empty
+    on.field.forEach((r, i) => {
+      if (!onRows.some(([k]) => k === i)) expect(r, `row ${i} must be untouched`).toBe('.'.repeat(COLS));
+    });
 
     // ROW2 rises for exactly one tick-high window, and it is not the one
     // that carries the phase-2 write
