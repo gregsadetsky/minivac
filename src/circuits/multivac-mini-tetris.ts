@@ -1904,25 +1904,40 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     const cs = stBanks[0].request('gate');
     return { relay: cs.relay, arm: cs.arm, no: cs.no };
   };
-  const uB0 = mkUnion('B0', [0, 2, 10]); // right bottom d0
-  const uB1 = mkUnion('B1', [1, 3, 4, 5, 11], [
+  // the union memberships are DERIVED from the geometry, not listed:
+  //   rightBottom(i) = bOff + bW - 1   (the bottom's rightmost cell)
+  //   rightTop(i)    = tOff + tW - 1   (the top's rightmost, if any)
+  //   leftTop(i)     = tOff            (the top's leftmost)
+  //   the two bound unions are literally "this shape's max column"
+  // hand-laid lists were correct but froze the ring at twelve states —
+  // a thirteenth (the I piece, whose 4-wide bottom introduces a NEW
+  // bound class at cols-4) would have needed every list re-derived by
+  // hand. these predicates give the same members in the same order.
+  const rightBottom = (i: number) => SHAPES[i].bOff + SHAPES[i].bW - 1;
+  const rightTop = (i: number) => (SHAPES[i].tW > 0 ? SHAPES[i].tOff + SHAPES[i].tW - 1 : null);
+  const leftTop = (i: number) => (SHAPES[i].tW > 0 ? SHAPES[i].tOff : null);
+  const states = Array.from({ length: NSTATES }, (_, i) => i);
+  const where = (pred: (i: number) => boolean) => states.filter(pred);
+  const maxCol = (i: number) => shapeRange(SHAPES[i], cols).max;
+  const uB0 = mkUnion('B0', where(i => rightBottom(i) === 0)); // right bottom d0
+  const uB1 = mkUnion('B1', where(i => rightBottom(i) === 1), [
     [{ relay: WIDM3, arm: 'H', no: 'G' }, leg1x1()], // legacy wide
   ]); // right bottom d1
-  const uB2 = mkUnion('B2', [6, 7, 8, 9]); // right bottom d2
-  const uT0 = mkUnion('T0', [2, 4, 6], [
+  const uB2 = mkUnion('B2', where(i => rightBottom(i) === 2)); // right bottom d2
+  const uT0 = mkUnion('T0', where(i => rightTop(i) === 0), [
     [{ relay: VMODEM(0), arm: 'H', no: 'G' }, leg1x1()], // legacy tall
   ]); // right top d0
-  const uT1 = mkUnion('T1', [3, 8], [
+  const uT1 = mkUnion('T1', where(i => rightTop(i) === 1), [
     // the legacy 2x2 (tall AND wide slides): top delta is c+1
     [{ relay: VMODEM(1), arm: 'H', no: 'G' }, { relay: WIDM4, arm: 'H', no: 'G' }, leg1x1()],
   ]); // right top d1
-  const uT2 = mkUnion('T2', [5, 7, 9, 10, 11]); // right top d2
-  const uT0L = mkUnion('T0L', [2, 3, 6, 9, 10, 11], [
+  const uT2 = mkUnion('T2', where(i => rightTop(i) === 2)); // right top d2
+  const uT0L = mkUnion('T0L', where(i => leftTop(i) === 0), [
     [{ relay: VMODEM(0), arm: 'L', no: 'K' }, leg1x1()], // legacy tall, left
   ]); // left top d0
-  const uT1L = mkUnion('T1L', [5, 8]); // left top d1
-  const uHIB = mkUnion('HIB', [5, 6, 7, 8, 9, 10, 11]); // max == cols-3
-  const uWALLB = mkUnion('WALLB', [1, 3, 4], [
+  const uT1L = mkUnion('T1L', where(i => leftTop(i) === 1)); // left top d1
+  const uHIB = mkUnion('HIB', where(i => maxCol(i) === cols - 3)); // max == cols-3
+  const uWALLB = mkUnion('WALLB', where(i => maxCol(i) === cols - 2), [
     [{ relay: WIDM3, arm: 'L', no: 'K' }, leg1x1()], // legacy wide wall
   ]); // max == cols-2
   const stpPool = new GatedReadPool({ name: 'STPREAD', source: null, base: L.STPREAD, capacity: L.STPREAD_CAP, w, R, minusOf });
