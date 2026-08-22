@@ -2938,6 +2938,76 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(off.alerts).toEqual([]);
   });
 
+  // KNOWN DEFECT, pinned rather than described. it.fails() passes while
+  // the body still throws and goes RED the day someone fixes it — which
+  // is the point: this must not be quietly forgotten.
+  //
+  // With the V3 slide up AND a line clear in flight, the phase-3 row is
+  // WIPED instead of written, and it takes pre-existing content with it.
+  // Reproduced: rows 6 and 7 complete and clear; row 5 holds '.XX.',
+  // which cannot complete. With the slide DOWN those two cells survive
+  // and collapse to the floor (correct). With it UP they are gone.
+  //
+  // NOT reachable in shipped gameplay: the only slides either page sets
+  // are m1.5 (tick) and the oscillator's, and V3M's slide is on a relay
+  // machine no page touches — verified by grepping every setSlide call.
+  // The V3 path is opt-in and half-built (the third row still repeats
+  // the second row's mask), so this is a defect in unfinished work, not
+  // a regression of the game.
+  //
+  // The real fix is the third line sense (a LINE3(j) mirror bank off
+  // LINE(j).E, plus LINEDLY3/CPSET3/CLEARP3/CLEARPM3) so row r-2's
+  // fullness is actually sensed instead of the clear machinery being
+  // aimed at whatever row the write path currently selects.
+  it.fails('KNOWN BAD: a V3 lock during a clear destroys the third row (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const ROWS = 8;
+    const COLS = 4;
+    const survivors = (v3: boolean) => {
+      const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS, COLS);
+      const m = new MinivacSimulator(wires, false, L.machines);
+      m.initialize();
+      const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+      const tok = () => {
+        for (let i = 0; i < ROWS; i++) if (rel(L.RING(i, 2))) return i;
+        return -1;
+      };
+      const ow = (r: number, v: number) => {
+        m.setSlide(TETRIS_IO.wid.slide, 'left', btnMachine);
+        m.setSlide(1, r & 1 ? 'right' : 'left', 0);
+        m.setSlide(2, r & 2 ? 'right' : 'left', 0);
+        m.setSlide(3, r & 4 ? 'right' : 'left', 0);
+        for (let j = 0; j < 4; j++) m.setSlide(j + 1, (v >> j) & 1 ? 'right' : 'left', 1);
+        m.pressButton(4, 0);
+        m.releaseButton(4, 0);
+        for (let j = 0; j < 4; j++) m.setSlide(j + 1, 'left', 1);
+      };
+      // rows 6 and 7 complete on the lock; row 5's two cells cannot
+      ow(7, 0b1110);
+      ow(6, 0b1110);
+      ow(5, 0b0110);
+      if (v3) m.setSlide((L.V3M % 6) + 1, 'right', Math.floor(L.V3M / 6));
+      for (let k = 0; k < 2; k++) {
+        m.pressButton(2, btnMachine);
+        m.releaseButton(2, btnMachine);
+      }
+      m.pressButton(6, 1);
+      m.releaseButton(6, 1);
+      for (let t = 0; t < 40; t++) {
+        m.setSlide(5, 'right', 1);
+        m.setSlide(5, 'left', 1);
+        if (t > 2 && tok() < 0 && !rel(L.LKS) && !rel(L.P2S) && !rel(L.LANE)) break;
+      }
+      let n = 0;
+      for (let r = 0; r < ROWS; r++) for (let j = 0; j < COLS; j++) if (rel(L.CELL(r, j))) n++;
+      return n;
+    };
+    // with the slide down the two uncompletable cells survive the clear
+    expect(survivors(false), 'slide down: the two cells collapse to the floor').toBe(2);
+    // and they must survive with it up too. TODAY THEY DO NOT (0 cells).
+    expect(survivors(true), 'slide up: the same two cells must survive').toBe(2);
+  });
+
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const auto = (g: ReturnType<typeof makeGame>, on: boolean) =>

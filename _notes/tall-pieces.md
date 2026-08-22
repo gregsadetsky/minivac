@@ -665,3 +665,59 @@ also still owed: the row-0/1 guard. a 3-tall piece locking at row 1 aims
 phase 3 at row -1; TOPW2 starts at r=2 so no relay is selected and
 nothing is written, which is the right behaviour by construction rather
 than by a refusal in the collision term. that wants a test of its own.
+
+## A DEFECT IN B1b-ii, FOUND AFTER SHIPPING IT (2026-08-22)
+
+going to build B1c I probed the severity of having no third line sense,
+and found something worse than the missing sense: **with the V3 slide up
+AND a line clear in flight, the phase-3 row is WIPED instead of written,
+and it takes pre-existing content with it.**
+
+the case matrix, 8x4, 2-tall piece dropped at column 0:
+
+    pre                        v3-off                v3-ON
+    r7 .XXX  r6 .XXX  r5 .XX.  -> .XX. survives      -> 0 cells left
+    r7 .XXX  r6 .XXX  r5 .XXX  -> .XXX survives      -> empty, score 2 (should be 3)
+    r7 .XXX           r5 .XX.  -> both survive       -> both survive
+    no completion at all       -> 2 rows written     -> 3 rows written
+
+the first row is the damning one: two cells that CANNOT complete a line
+are destroyed. the tick trace shows row 5's content gone at the phase-2
+release, before phase 3 ever writes, and the phase-3 write then cleared
+again at its own release — so the clear machinery is being aimed at
+whatever row the write path currently selects, and ROW2 has moved that
+to r-2.
+
+**it is not reachable in shipped gameplay, verified rather than assumed:**
+the only slides either page sets are `m1.5` (tick) and the oscillator's
+`m116.6` — grepped every setSlide call in both pages — and V3M's slide is
+`m178.2`, on a relay machine no page touches. only two wires in the whole
+netlist reach that slide and both are V3M's own. the V3 path is opt-in
+and half-built anyway (the third row still repeats the second row's
+mask), so this is a defect in unfinished work, not a regression: the
+V3-down behaviour is byte-verified identical to the pre-B1b circuit.
+
+pinned with `it.fails('KNOWN BAD: a V3 lock during a clear destroys the
+third row')`, which passes while the bug is present and goes RED the day
+it is fixed. that is deliberate — a comment can be skimmed past, a test
+that flips cannot.
+
+**the real fix is the third line sense**, which the cross-review already
+named as F3's remaining half: a LINE3(j) mirror bank off LINE(j).E
+(LINE(j)'s own two sets are spent changeovers — measured, only the NC
+sides have holes, so fanning them is the tie-point trap), plus
+LINEDLY3 / CPSET3 / CLEARP3 / CLEARPM3 and a fan group. ~cols + 5 relays.
+the block has room: CPSET, CPSET2, LINEDLY, LINEDLY2 and SCPM all have an
+ENTIRELY free second contact set (measured L:2 N:2 K:2 at both
+geometries).
+
+**ordering correction to the roadmap.** B1c was written as "the phase-3
+column mask fan". that is not the next rung. the third row's mask only
+matters for shapes whose three rows DIFFER (vertical S/Z/L/J/T); the
+cheapest real 3-tall piece is the vertical 3-BAR, whose three rows are
+identical, so the current repeat-the-second-mask behaviour is already
+correct for it. so:
+  1. the third line sense (this defect's fix, and F3's remainder)
+  2. the vertical 3-bar as a 14th ring state — the first real 3-tall
+     piece, needing no new mask fan at all
+  3. only then the general third-mask fan, for the shapes that need it

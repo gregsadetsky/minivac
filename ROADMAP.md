@@ -831,6 +831,27 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    the floor: rows 8,9,10,11").
 
 
+45. THE THIRD WRITE ROW (B1b), and a defect found right after shipping
+   it. B1b-i added a fourth phase tick that writes nothing (TICKM4, V3M,
+   ROW2M, ROW2X); B1b-ii added the TOPW2 bank that makes it write row
+   r-2. two things had to be measured rather than reasoned: p2railA is
+   TICK-HIGH ONLY, so ROW2's master cannot ride it into the tick-low
+   transfer and must latch like P2M; and the first cut of the gate chain
+   hung on that rail and WEDGED the machine, because the latch backfed
+   through its own set path and held phase 2 on forever. RULE: a latched
+   relay's set path must dead-end at a supply, never at a driven rail.
+   TOPW2's output jacks had to be measured too — TOPW's own entries into
+   a row's write-trigger nets are full at every row, and the spare hole
+   is elsewhere on the same coil net (general for the breaker, width-
+   conditional for the gate).
+   THE DEFECT: with the V3 slide up and a line clear in flight, the
+   phase-3 row is wiped instead of written and destroys pre-existing
+   content. in main, pinned by an it.fails() case, and NOT reachable
+   from either page (verified: the only slides they set are m1.5 and the
+   oscillator's; V3M is on a relay machine). the fix is the third line
+   sense, which is now the next rung ahead of the mask fan.
+
+
 ## display/input notes
 
 - the canvas viewer reads relay states directly as pixels — the playfield does
