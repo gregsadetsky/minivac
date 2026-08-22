@@ -474,6 +474,8 @@ export interface TetrisLayout {
   /** the third line sense: a mirror of LINE(j), since LINE's sets are spent */
   LINE3: (j: number) => number;
   LINEDLY3: number; CPSET3: number; CLEARP3: number; RSTM3: number; CLEARPM3: number;
+  /** ROW2Y mirrors ROW2 with its arm at +; ROW2Z latches "phase 3 began" */
+  ROW2Y: number; ROW2Z: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -691,6 +693,14 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // RSTM2's NC would bridge two clear latches' coil nets.
   const line3Base = take(cols);
   const clr3Base = take(5); // LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3
+  // the SCORE's third step needs the top clear's pulse to end when phase
+  // 3 begins, and to STAY ended. gating it live on ROW2 is not enough —
+  // ROW2 falls again at the phase-3 release and the pulse re-rises,
+  // scoring a double as three (measured). so: ROW2Y mirrors ROW2 with its
+  // arm at + (ROW2's own contacts are fed from tick-high rails and are
+  // dead at the tick-low where ROW2 moves), and ROW2Z latches off it and
+  // holds to the reset.
+  const row2yBase = take(2); // ROW2Y (the +-armed mirror), ROW2Z (the latch)
   return {
     rows,
     cols,
@@ -791,6 +801,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     LINE3: j => line3Base + j,
     LINEDLY3: clr3Base, CPSET3: clr3Base + 1, CLEARP3: clr3Base + 2,
     RSTM3: clr3Base + 3, CLEARPM3: clr3Base + 4,
+    ROW2Y: row2yBase, ROW2Z: row2yBase + 1,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -917,6 +928,7 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let r = 2; r <= 7; r++) claim('TOPW2', L8.TOPW2(r));
   for (let j = 0; j < 4; j++) claim('LINE3', L8.LINE3(j));
   claim('B1c', L8.LINEDLY3, L8.CPSET3, L8.CLEARP3, L8.RSTM3, L8.CLEARPM3);
+  claim('score3', L8.ROW2Y, L8.ROW2Z);
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -950,7 +962,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
     MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, TICKM4, V3M, ROW2M, ROW2X, TOPW2,
-    LINE3, LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    LINE3, LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3, ROW2Y, ROW2Z, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
     MMIR,
@@ -2588,7 +2600,32 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(CLEARPM2B)}/${R(CLEARPM2B, 'H')}`, `${R(CLEARPM2B, 'G')}/${R(P2SM2, 'H')}`);
   w.push(`${R(P2SM2, 'J')}/${R(SCPM, 'E')}`, `${R(SCPM, 'F')}/${minusOf(SCPM)}`);
   w.push(`${plusOf(SCPM)}/${R(SCPM, 'H')}`, `${R(SCPM, 'G')}/${scrClkCom(8)}`);
-  w.push(`${plusOf(CLEARPM2)}/${R(CLEARPM2, 'L')}`, `${R(CLEARPM2, 'K')}/${scrClkCom(0)}`); // com(0)'s hole freed by the removed tie
+  // THE SCORE STEPS ONCE PER CLOCK CYCLE, so a third clear only counts if
+  // the clock actually FALLS before it. Traced: CLEARPM2 held the clock
+  // high from the phase-2 tick straight through the phase-3 tick, so
+  // CLEARPM3 rising inside that window was not a new cycle and a triple
+  // scored two. The bottom pulse already solves this shape one phase
+  // earlier (SCPM = "CLEARP signal AND NOT phase 2").
+  //
+  // The naive version of that — gate the top pulse on ROW2's NC — scores
+  // the triple right and then OVER-counts, because ROW2 is two-edged: it
+  // falls again at the phase-3 release, the pulse re-rises, and a double
+  // scores three (measured 2->3, top-only 1->2). The cut has to be
+  // LATCHED. ROW2's own contacts cannot set that latch: their arms are
+  // fed from the tick-high phase rails and are dead at the tick-low where
+  // ROW2 actually moves. So ROW2Y mirrors ROW2 with its arm at +, and
+  // ROW2Z latches off it and holds through RSTM3 to the reset.
+  w.push(`${R(ROW2X, 'E')}/${R(ROW2Y, 'E')}`, `${R(ROW2Y, 'F')}/${minusOf(ROW2Y)}`);
+  w.push(`${plusOf(ROW2Y)}/${R(ROW2Y, 'H')}`, `${R(ROW2Y, 'G')}/${comOf(ROW2Z)}`);
+  w.push(`${comOf(ROW2Z)}/${R(ROW2Z, 'E')}`, `${R(ROW2Z, 'F')}/${minusOf(ROW2Z)}`);
+  w.push(`${plusOf(RSTM3)}/${R(RSTM3, 'L')}`, `${R(RSTM3, 'N')}/${R(ROW2Z, 'H')}`, `${R(ROW2Z, 'G')}/${comOf(ROW2Z)}`);
+  // the top pulse now passes only while ROW2Z is down
+  w.push(`${plusOf(CLEARPM2)}/${R(CLEARPM2, 'L')}`, `${R(CLEARPM2, 'K')}/${R(ROW2Z, 'L')}`);
+  w.push(`${R(ROW2Z, 'N')}/${scrClkCom(0)}`); // com(0)'s hole freed by the removed tie
+  // and the third pulse. Every score clock COM is full (measured, all
+  // five, both geometries), but each clock relay's E jack is the SAME
+  // node — a coil jack is a permanent tie — and has one hole.
+  w.push(`${plusOf(CLEARPM3)}/${R(CLEARPM3, 'L')}`, `${R(CLEARPM3, 'K')}/${R(SCR(2, 0), 'E')}`);
   // SCBOOT must latch away on a TOP-ONLY first clear too (CLEARPM's own
   // set only covers bottom clears): CLEARPM2C parallels CLEARP2's com
   w.push(`${R(CLEARPM2, 'E')}/${R(CLEARPM2C, 'E')}`, `${R(CLEARPM2C, 'F')}/${minusOf(CLEARPM2C)}`);

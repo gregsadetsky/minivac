@@ -813,3 +813,30 @@ another mirror coil.
 reverted rather than shipped: an over-count on doubles is worse than the
 under-count on triples that is already pinned. `it.fails('a triple clear
 still scores two')` stays.
+
+**SECOND ATTEMPT, LANDED.** the cut has to be latched, and the reason
+ROW2 cannot set that latch is worth stating plainly because it is the
+general lesson: ROW2's own contacts hang off p2gate/p2break, which are
+TICK-HIGH rails, so they are dead at exactly the tick-low where ROW2
+moves. a signal that changes at a tick-low can only be read through a
+contact whose arm is at + . so two relays:
+
+  ROW2Y  a mirror of ROW2 with its arm at + (coil off ROW2X.E, 1 hole)
+  ROW2Z  latched by ROW2Y.G, held through its own NO against RSTM3's NC,
+         and its NC is the top pulse's gate
+
+the third pulse lands on `SCR(2,0).E` — every score clock COM is full at
+both geometries, but a clock relay's E jack is the same node and has a
+hole.
+
+every depth now counts right in both slide positions:
+
+    depth      v3-off   v3-ON   (naive live gate, for contrast)
+    triple       2        3      3
+    double       2        2      3   <- was the over-count
+    single       1        1      1
+    top-only     1        1      2   <- was the over-count
+
+negative control: point the gate back at ROW2Y's live NC instead of
+ROW2Z's latched one and the case goes red with
+"expected [ 3, 3, 1, 2 ] to deeply equal [ 3, 2, 1, 1 ]".

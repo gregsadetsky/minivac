@@ -3065,17 +3065,19 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(rows.indexOf('..X.'), 'the stack above fell by three rows').toBe(5);
   });
 
-  // THE SCORE'S THIRD STEP, pinned rather than described. it.fails()
-  // passes while the body still throws and goes RED the day the score
-  // learns to count a triple — the flip cannot be skipped.
+  // THE SCORE'S THIRD STEP. The ring steps once per clock CYCLE, and
+  // CLEARPM2 used to hold the clock high from the phase-2 tick straight
+  // through the phase-3 tick, so CLEARPM3 rising inside that window was
+  // not a new cycle and a triple scored two.
   //
-  // B1c makes all three rows CLEAR correctly and the stack walk three,
-  // but the ring still steps twice: a triple scores 2. The score clock is
-  // its own small tangle (CLEARPM2 drives scrClkCom(0), SCPM drives
-  // scrClkCom(8), the even coms chain) and it has mis-counted before —
-  // it once scored singles twice — so the third step gets its own trace
-  // and its own rung rather than being tacked on here.
-  it.fails('KNOWN BAD: a triple clear still scores two (fast)', { timeout: 1800000 }, () => {
+  // Gating the top pulse live on ROW2 fixes the triple and then OVER-
+  // counts: ROW2 falls again at the phase-3 release, the pulse re-rises,
+  // and a double scores three. So the cut is LATCHED — ROW2Y mirrors
+  // ROW2 with its arm at + (ROW2's own contacts hang off tick-high rails
+  // and are dead at the tick-low where it moves) and ROW2Z holds the cut
+  // to the reset. This case checks EVERY depth, in both slide positions,
+  // because the failure mode was an over-count on the shallow ones.
+  it('the score counts every clear depth, slide up or down (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const ROWS = 8;
     const COLS = 4;
@@ -3097,24 +3099,61 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       m.releaseButton(4, 0);
       for (let j = 0; j < 4; j++) m.setSlide(j + 1, 'left', 1);
     };
-    ow(7, 0b1110);
-    ow(6, 0b1110);
-    ow(5, 0b1110);
-    m.setSlide((L.V3M % 6) + 1, 'right', Math.floor(L.V3M / 6));
-    for (let k = 0; k < 2; k++) {
-      m.pressButton(2, btnMachine);
-      m.releaseButton(2, btnMachine);
-    }
-    m.pressButton(6, 1);
-    m.releaseButton(6, 1);
-    for (let t = 0; t < 40; t++) {
-      m.setSlide(5, 'right', 1);
-      m.setSlide(5, 'left', 1);
-      if (t > 2 && tok() < 0 && !rel(L.LKS) && !rel(L.P2S) && !rel(L.LANE)) break;
-    }
-    let score = -1;
-    for (let i = 0; i < 10; i++) if (rel(L.SCR(i, 2))) score = i;
-    expect(score, 'a triple must step the ring three times').toBe(3);
+    void ow;
+    void tok;
+    void rel;
+    void m;
+    const depth = (pre: Array<[number, number]>, v3: boolean) => {
+      const b = tetrisCircuit(ROWS, COLS);
+      const sim = new MinivacSimulator(b.wires, false, b.layout.machines);
+      sim.initialize();
+      const r2 = (i: number) => (sim.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+      const tk = () => {
+        for (let i = 0; i < ROWS; i++) if (r2(b.layout.RING(i, 2))) return i;
+        return -1;
+      };
+      const write = (row: number, v: number) => {
+        sim.setSlide(TETRIS_IO.wid.slide, 'left', b.btnMachine);
+        sim.setSlide(1, row & 1 ? 'right' : 'left', 0);
+        sim.setSlide(2, row & 2 ? 'right' : 'left', 0);
+        sim.setSlide(3, row & 4 ? 'right' : 'left', 0);
+        for (let j = 0; j < 4; j++) sim.setSlide(j + 1, (v >> j) & 1 ? 'right' : 'left', 1);
+        sim.pressButton(4, 0);
+        sim.releaseButton(4, 0);
+        for (let j = 0; j < 4; j++) sim.setSlide(j + 1, 'left', 1);
+      };
+      for (const [row, v] of pre) write(row, v);
+      if (v3) sim.setSlide((b.layout.V3M % 6) + 1, 'right', Math.floor(b.layout.V3M / 6));
+      for (let k = 0; k < 2; k++) {
+        sim.pressButton(2, b.btnMachine);
+        sim.releaseButton(2, b.btnMachine);
+      }
+      sim.pressButton(6, 1);
+      sim.releaseButton(6, 1);
+      for (let t = 0; t < 50; t++) {
+        sim.setSlide(5, 'right', 1);
+        sim.setSlide(5, 'left', 1);
+        if (t > 2 && tk() < 0 && !r2(b.layout.LKS) && !r2(b.layout.P2S) && !r2(b.layout.LANE)) break;
+      }
+      for (let i = 0; i < 10; i++) if (r2(b.layout.SCR(i, 2))) return i;
+      return -1;
+    };
+    const TRIPLE: Array<[number, number]> = [[7, 0b1110], [6, 0b1110], [5, 0b1110]];
+    const DOUBLE: Array<[number, number]> = [[7, 0b1110], [6, 0b1110]];
+    const SINGLE: Array<[number, number]> = [[7, 0b1110]];
+    const TOPONLY: Array<[number, number]> = [[6, 0b1110]];
+    // the slide DOWN is the shipped game and must not move at all
+    expect(
+      [depth(TRIPLE, false), depth(DOUBLE, false), depth(SINGLE, false), depth(TOPONLY, false)],
+      'slide down: a 2-tall lock clears at most its own two rows'
+    ).toEqual([2, 2, 1, 1]);
+    // and with it up, the triple counts three without inflating the rest.
+    // before the latch these read [3, 3, 1, 2] — the triple right and the
+    // double and top-only over-counted.
+    expect(
+      [depth(TRIPLE, true), depth(DOUBLE, true), depth(SINGLE, true), depth(TOPONLY, true)],
+      'slide up: three for a triple, and no inflation below it'
+    ).toEqual([3, 2, 1, 1]);
   });
 
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
