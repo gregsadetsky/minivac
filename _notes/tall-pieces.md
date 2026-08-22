@@ -765,3 +765,51 @@ drives scrClkCom(8), the even coms chain — and it has mis-counted before
 (it once scored singles twice), so the third step gets its own trace and
 its own rung. `it.fails('KNOWN BAD: a triple clear still scores two')`
 holds the place and goes red the day it is fixed.
+
+## THE SCORE'S THIRD STEP: attempted, TRACED, and REVERTED (2026-08-22)
+
+not shipped. what the attempt established, so the next one does not start
+from a guess:
+
+**why a triple scores two.** the score ring steps once per clock CYCLE,
+and every clock com is one chained node. two pulse sources feed it: SCPM
+(the bottom clear, deliberately ended when phase 2 rises — "CLEARP signal
+AND NOT phase 2") and CLEARPM2 (the top clear). traced across a triple:
+
+    t8 HI  CLK=1 CP=1 CP2=1 CPM2=1              sc2
+    t9 HI  CLK=1 CP3=1 CPM3=1  <- still high    sc2
+    t10 HI CLK=0                                sc2
+
+CLEARPM2 holds the clock high from the phase-2 tick straight through the
+phase-3 tick, so CLEARPM3 rising inside that window is not a new cycle.
+the third clear needs the clock to FALL first.
+
+**the obvious fix over-counts, and here is exactly why.** gate the top
+pulse on ROW2's NC — the same shape SCPM uses one phase earlier — and the
+triple scores 3 correctly. but ROW2 is a two-edged signal: it goes up at
+the phase-2 release and DOWN again at the phase-3 release, so with a
+double (V3 up, only two rows completing) the top pulse falls at t8 lo and
+RE-RISES at t9 lo, giving a third cycle for two rows. measured:
+
+    depth      v3-off   v3-ON with the naive gate   want
+    triple       2            3                      3   ok
+    double       2            3                      2   OVER
+    top-only     1            2                      1   OVER
+
+so the cut has to be LATCHED — up from the phase-2 release until the
+reset — not live-gated on ROW2. and that is where it stops being cheap:
+ROW2's and ROW2X's contact sets are all spent, so nothing can SET such a
+latch, and ROW2M is cleared at the phase-3 tick so it cannot be it either.
+a latch needs both a set contact off ROW2 (none free) and a break off the
+reset, i.e. at least one more relay AND a free ROW2 contact that does not
+exist. that is a design problem, not a wiring one.
+
+useful hole facts found on the way: every score clock COM is full (all
+five, both geometries), but each clock relay's E jack has one hole and is
+the same node — a coil jack is a permanent tie — so a third pulse HAS
+somewhere to land once the timing is solved. ROW2X.E has one free hole for
+another mirror coil.
+
+reverted rather than shipped: an over-count on doubles is worse than the
+under-count on triples that is already pinned. `it.fails('a triple clear
+still scores two')` stays.
