@@ -881,3 +881,23 @@ known and acceptable, matching existing behaviour rather than new
 wrongness: at token rows 0 and 1 the third row is clipped, because TOPW2
 starts at r=2 — the same clip row 0 already has for the 2-tall's top
 cell. game over still measures a spawn as if it needed two rows.
+
+### the 3-bar's bill of materials, measured (2026-08-22)
+
+- **the rotation mux pool is EXACTLY full: 12 of 12 sets, both
+  geometries, zero spare.** NOTOK plus NOTM(0..4) give two sets each and
+  all twelve are spent on the thirteen states' D-feeds. a fourteenth
+  state therefore needs NOTM(5) — one more parallel coil on the NOTOK
+  chain, the documented extension (`for k < 5` becomes `k < 6`). without
+  it the build throws "rotation mux contacts exhausted", which is at
+  least a loud failure rather than a silent one.
+- V3M.E has one free hole: the splice for the ring's 3-tall union, the
+  same shape the 2-tall union uses at VMODEM(cols-1).E.
+- the slave's own sets are spent stepping the ring, as everywhere in this
+  block, so raising V3 needs a mirror coil off SHR5(13,2).E.
+
+so the bill is SIX relays — SHR5 x3, MMIR5 (the into-13 transition gate,
+chained off MMIR4.H), V3IM (the mirror that raises V3M), NOTM(5) —
+exactly RUNG A's size. and unlike RUNG A there are no fan rails to join:
+a 1-wide bottom at offset 0 needs no WIDB and no WID3M, because it is
+character-for-character the 1x1's mask.
