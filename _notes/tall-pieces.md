@@ -721,3 +721,47 @@ correct for it. so:
   2. the vertical 3-bar as a 14th ring state — the first real 3-tall
      piece, needing no new mask fan at all
   3. only then the general third-mask fan, for the shapes that need it
+
+## B1c LANDED (2026-08-22) — the third line sense and the third seed
+
+`cols + 5` relays: LINE3(j) per column, LINEDLY3, CPSET3, CLEARP3, RSTM3,
+CLEARPM3. a row the phase-3 write completes now clears, and the elevator
+walks a three-hot hole.
+
+**traced before wiring, because the design rests on it:** during the
+phase-3 tick the data rails really do carry row r-2's post-write content.
+probed LINE(j) at every half-tick of a triple-completion drop and all
+four read 1 exactly when row r-2 goes full (t9 HI). had that been false
+the whole bank would have sensed the wrong row.
+
+**two mirrors, both forced by the tie-point law rather than chosen:**
+- LINE(j)'s two contact sets are spent changeovers (measured: only the NC
+  sides have holes), so a third chain needs LINE3(j), a coil in parallel
+  with LINE(j) off its E jack (1 free hole at every column).
+- RSTM2's two NCs already break CLEARP's and CLEARP2's latches, and its +
+  jack is full (0 holes), so a third latch cannot share it. fanning one NC
+  would bridge two clear latches' coil nets the moment the contact opens.
+  RSTM3 parallels RSTM2's coil off its E jack (1 free hole).
+
+the seed cost zero extra relays beyond CLEARPM3, exactly as measured back
+in the F3 note: SEEDM2(t)'s entire second contact set is free at every
+index, and SEEDM2(t-1).G — already driving ELEVA(t-2).E — has one hole.
+
+**receipts:**
+- triple (rows 5,6,7 all complete): 4 cells of junk -> 0. all three clear.
+- collapse depth: a marker two rows above falls 2->5 with the slide up
+  and 2->4 with it down. before the seed it fell 2->4 either way, leaving
+  the stack floating one row high.
+- the '.XX. survives' case is unchanged at ['XXX.'] — the third sense
+  correctly does NOT fire on a row that is not full.
+- jack capacity clean at (8,4) and (12,6), zero undefined nodes.
+- machines 127 -> 129 at 8x4, 183 -> 185 at 12x6.
+- negative control: delete the seed loop and the case goes red with
+  "the stack above fell by three rows: expected 4 to be 5".
+
+**STILL WRONG, and pinned rather than described:** a triple scores TWO.
+the score clock is its own tangle — CLEARPM2 drives scrClkCom(0), SCPM
+drives scrClkCom(8), the even coms chain — and it has mis-counted before
+(it once scored singles twice), so the third step gets its own trace and
+its own rung. `it.fails('KNOWN BAD: a triple clear still scores two')`
+holds the place and goes red the day it is fixed.

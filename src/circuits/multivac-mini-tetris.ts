@@ -471,6 +471,9 @@ export interface TetrisLayout {
   TICKM4: number; V3M: number; ROW2M: number; ROW2X: number;
   /** r = 2..rows-1: routes the third write to row r-2 */
   TOPW2: (r: number) => number;
+  /** the third line sense: a mirror of LINE(j), since LINE's sets are spent */
+  LINE3: (j: number) => number;
+  LINEDLY3: number; CPSET3: number; CLEARP3: number; RSTM3: number; CLEARPM3: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -678,6 +681,16 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // them. r = 2..rows-1: rows 0 and 1 have nowhere to write to, exactly
   // as row 0 has no TOPW.
   const topw2Base = take(Math.max(0, rows - 2));
+  // B1c: THE THIRD LINE SENSE. A row completed by the phase-3 write is
+  // sensed by nothing today, so it stays full as permanent junk. LINE(j)
+  // cannot carry a third chain — both its contact sets are spent
+  // changeovers (measured: only the NC sides have holes, and fanning a
+  // gated contact is the tie-point trap), so each column gets a mirror
+  // whose coil parallels LINE(j)'s. RSTM3 exists for the same reason:
+  // CLEARP3's latch needs its OWN break contact, because fanning
+  // RSTM2's NC would bridge two clear latches' coil nets.
+  const line3Base = take(cols);
+  const clr3Base = take(5); // LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3
   return {
     rows,
     cols,
@@ -775,6 +788,9 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     LKM3: lkm3Base, ROW2: row2Base,
     TICKM4: tickm4Base, V3M: v3Base, ROW2M: row2mBase, ROW2X: row2mBase + 1,
     TOPW2: r => topw2Base + (r - 2),
+    LINE3: j => line3Base + j,
+    LINEDLY3: clr3Base, CPSET3: clr3Base + 1, CLEARP3: clr3Base + 2,
+    RSTM3: clr3Base + 3, CLEARPM3: clr3Base + 4,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -899,6 +915,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   claim('ROW2', L8.ROW2);
   claim('B1b-i', L8.TICKM4, L8.V3M, L8.ROW2M, L8.ROW2X);
   for (let r = 2; r <= 7; r++) claim('TOPW2', L8.TOPW2(r));
+  for (let j = 0; j < 4; j++) claim('LINE3', L8.LINE3(j));
+  claim('B1c', L8.LINEDLY3, L8.CPSET3, L8.CLEARP3, L8.RSTM3, L8.CLEARPM3);
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -931,7 +949,8 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     TG2M, TG2S, CUTC3, CUTC4,
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
-    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, TICKM4, V3M, ROW2M, ROW2X, TOPW2, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, TICKM4, V3M, ROW2M, ROW2X, TOPW2,
+    LINE3, LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
     MMIR,
@@ -1580,6 +1599,60 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${R(MIRA(r), 'E')}/${R(TOPW2(r), 'E')}`, `${R(TOPW2(r), 'F')}/${minusOf(TOPW2(r))}`);
     w.push(`${tap(row3gate, r3gUse)}/${R(TOPW2(r), 'H')}`, `${R(TOPW2(r), 'G')}/${gateEntry(r - 2)}`);
     w.push(`${tap(row3break, r3bUse)}/${R(TOPW2(r), 'L')}`, `${R(TOPW2(r), 'K')}/${brkEntry(r - 2)}`);
+  }
+
+  // ---------- B1c: THE THIRD LINE SENSE ----------
+  // A row the phase-3 write COMPLETES was sensed by nothing: rows r and
+  // r-1 cleared on their own latches and the third stayed full forever,
+  // scoring 2 for what should be 3. This is the third copy of a shape
+  // the file already has twice — a delay relay meaning "this phase is
+  // live", a series chain of one contact per column reading the data
+  // rails, then CPSET -> CLEARP -> that phase's breaker rail.
+  //
+  // TRACED before wiring: during the phase-3 tick the rails really do
+  // carry row r-2's post-write content — probed LINE(j) at every
+  // half-tick and all of them read 1 exactly when row r-2 goes full.
+  // Without that the whole bank would sense the wrong row.
+  //
+  // Two mirrors, both forced by the tie-point law rather than chosen:
+  // LINE(j)'s two contact sets are spent changeovers (measured — only
+  // the NC sides have holes), so a third chain needs LINE3(j), a coil in
+  // parallel with LINE(j); and RSTM2's NCs already break CLEARP's and
+  // CLEARP2's latches, so fanning one for a third would bridge two clear
+  // latches' coil nets when the contact opens.
+  for (let j = 0; j < cols; j++) {
+    w.push(`${R(LINE(j), 'E')}/${R(LINE3(j), 'E')}`, `${R(LINE3(j), 'F')}/${minusOf(LINE3(j))}`);
+  }
+  // one relay behind the phase-3 gate rail, exactly as LINEDLY sits
+  // behind the press chain and LINEDLY2 behind P2COL: the delay is what
+  // keeps a stale readback from latching the clear a wave too early
+  w.push(`${tap(row3gate, r3gUse)}/${R(LINEDLY3, 'E')}`, `${R(LINEDLY3, 'F')}/${minusOf(LINEDLY3)}`);
+  w.push(`${plusOf(LINEDLY3)}/${R(LINEDLY3, 'H')}`, `${R(LINEDLY3, 'G')}/${R(LINE3(0), 'H')}`);
+  for (let j = 1; j < cols; j++) w.push(`${R(LINE3(j - 1), 'G')}/${R(LINE3(j), 'H')}`);
+  w.push(`${R(LINE3(cols - 1), 'G')}/${comOf(CPSET3)}`);
+  w.push(`${comOf(CPSET3)}/${R(CPSET3, 'E')}`, `${R(CPSET3, 'F')}/${minusOf(CPSET3)}`);
+  w.push(`${plusOf(CPSET3)}/${R(CPSET3, 'H')}`, `${R(CPSET3, 'G')}/${comOf(CLEARP3)}`);
+  w.push(`${comOf(CLEARP3)}/${R(CLEARP3, 'E')}`, `${R(CLEARP3, 'F')}/${minusOf(CLEARP3)}`);
+  w.push(`${R(RSTM2, 'E')}/${R(RSTM3, 'E')}`, `${R(RSTM3, 'F')}/${minusOf(RSTM3)}`);
+  w.push(`${plusOf(RSTM3)}/${R(RSTM3, 'H')}`, `${R(RSTM3, 'J')}/${R(CLEARP3, 'L')}`, `${R(CLEARP3, 'K')}/${comOf(CLEARP3)}`);
+  // and the pulse goes to row3break, which TOPW2 already aims at r-2
+  w.push(`${plusOf(CLEARP3)}/${R(CLEARP3, 'H')}`, `${R(CLEARP3, 'G')}/${tap(row3break, r3bUse)}`);
+  w.push(`${comOf(CLEARP3)}/${R(CLEARPM3, 'E')}`, `${R(CLEARPM3, 'F')}/${minusOf(CLEARPM3)}`);
+  // ...and the THIRD SEED, so the elevator walks a three-hot hole. The
+  // chain is a shift register and an N-hot hole walks as N — probed on a
+  // stock netlist before any of this was designed. ELEVA's own jacks are
+  // full at every stage, but you do not have to enter there: SEEDM2(t)'s
+  // whole second contact set is free (measured, every index), and
+  // SEEDM2(t-1).G — the node that ALREADY drives ELEVA(t-2).E — has one
+  // hole. The shared node is legal by the same one-hot argument SEEDM's
+  // own fan rests on: with the token at t, SEEDM2(t-1) is open, so the
+  // far side dead-ends.
+  const seedFan3 = takeGroups(grown(2, 1));
+  for (let i = 1; i < seedFan3.length; i++) w.push(`${seedFan3[i - 1]}/${seedFan3[i]}`);
+  const sf3Use = { n: 0 };
+  w.push(`${plusOf(CLEARPM3)}/${R(CLEARPM3, 'H')}`, `${R(CLEARPM3, 'G')}/${tap(seedFan3, sf3Use)}`);
+  for (let t = 3; t <= rows - 1; t++) {
+    w.push(`${tap(seedFan3, sf3Use)}/${R(SEEDM2(t), 'L')}`, `${R(SEEDM2(t), 'K')}/${R(SEEDM2(t - 1), 'G')}`);
   }
 
   // ---------- row collapse (rung 10) C1: the elevator chain + seeding ----

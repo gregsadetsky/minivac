@@ -3002,23 +3002,19 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(survivors(true), 'slide up: they survive, plus the third row cell').toEqual(['XXX.']);
   });
 
-  // THE REMAINING F3 GAP, pinned rather than described. it.fails() passes
-  // while the body still throws and goes RED the day the third line sense
-  // lands — which is the point: the flip cannot be skipped.
+  // B1c — THE THIRD LINE SENSE, and the third collapse seed.
   //
-  // When the phase-3 write COMPLETES row r-2, nothing senses it. Rows r
-  // and r-1 clear on their own latches; the third stays full forever and
-  // collapses to the floor as permanent junk, and the score counts 2 for
-  // what should be 3. That is F3's remaining half from the cross-review:
-  // LINE(j)'s two contact sets are both spent changeovers (measured: only
-  // the NC sides have holes, so fanning them is the tie-point trap), so
-  // it needs a LINE3(j) mirror bank off LINE(j).E plus
-  // LINEDLY3/CPSET3/CLEARP3/CLEARPM3 and a fan group.
+  // A row the phase-3 write COMPLETES used to be sensed by nothing: rows
+  // r and r-1 cleared on their own latches and the third stayed full
+  // forever as permanent junk. It needed a LINE3(j) mirror bank off
+  // LINE(j).E — LINE(j)'s own two sets are spent changeovers, measured,
+  // so a third chain has nowhere to go — plus LINEDLY3/CPSET3/CLEARP3,
+  // an RSTM3 mirror so CLEARP3's latch has its own break contact, and
+  // CLEARPM3 driving a third elevator seed through SEEDM2's free set.
   //
-  // Not reachable in shipped gameplay: the only slides either page sets
-  // are m1.5 (tick) and the oscillator's, and V3M's slide is on a relay
-  // machine no page touches — verified by grepping every setSlide call.
-  it.fails('KNOWN BAD: a third row completed by phase 3 is never sensed (fast)', { timeout: 1800000 }, () => {
+  // This case pins the whole chain: three completed rows all clear, and
+  // the stack above them walks down by THREE, not two.
+  it('B1c: a third row completed by phase 3 clears, and the stack walks three (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const ROWS = 8;
     const COLS = 4;
@@ -3040,7 +3036,67 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       m.releaseButton(4, 0);
       for (let j = 0; j < 4; j++) m.setSlide(j + 1, 'left', 1);
     };
-    // all three rows the 3-tall lock touches will complete
+    // all three rows the 3-tall lock touches will complete, and a marker
+    // sits two rows above them in a column the piece never occupies
+    ow(7, 0b1110);
+    ow(6, 0b1110);
+    ow(5, 0b1110);
+    ow(2, 0b0100);
+    m.setSlide((L.V3M % 6) + 1, 'right', Math.floor(L.V3M / 6));
+    for (let k = 0; k < 2; k++) {
+      m.pressButton(2, btnMachine);
+      m.releaseButton(2, btnMachine);
+    }
+    m.pressButton(6, 1);
+    m.releaseButton(6, 1);
+    for (let t = 0; t < 40; t++) {
+      m.setSlide(5, 'right', 1);
+      m.setSlide(5, 'left', 1);
+      if (t > 2 && tok() < 0 && !rel(L.LKS) && !rel(L.P2S) && !rel(L.LANE)) break;
+    }
+    const rows = [...Array(ROWS)].map((_, r) =>
+      [...Array(COLS)].map((_, j) => (rel(L.CELL(r, j)) ? 'X' : '.')).join('')
+    );
+    // all three completed rows clear: only the marker is left standing.
+    // before B1c this was ['..X.', 'XXXX'] — a full row of junk.
+    expect(rows.filter((r) => r.includes('X')), 'nothing survives but the marker').toEqual(['..X.']);
+    // and the elevator walked a THREE-hot hole: the marker fell 2 -> 5,
+    // not 2 -> 4. a shift register walks an N-hot hole as N.
+    expect(rows.indexOf('..X.'), 'the stack above fell by three rows').toBe(5);
+  });
+
+  // THE SCORE'S THIRD STEP, pinned rather than described. it.fails()
+  // passes while the body still throws and goes RED the day the score
+  // learns to count a triple — the flip cannot be skipped.
+  //
+  // B1c makes all three rows CLEAR correctly and the stack walk three,
+  // but the ring still steps twice: a triple scores 2. The score clock is
+  // its own small tangle (CLEARPM2 drives scrClkCom(0), SCPM drives
+  // scrClkCom(8), the even coms chain) and it has mis-counted before —
+  // it once scored singles twice — so the third step gets its own trace
+  // and its own rung rather than being tacked on here.
+  it.fails('KNOWN BAD: a triple clear still scores two (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const ROWS = 8;
+    const COLS = 4;
+    const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS, COLS);
+    const m = new MinivacSimulator(wires, false, L.machines);
+    m.initialize();
+    const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+    const tok = () => {
+      for (let i = 0; i < ROWS; i++) if (rel(L.RING(i, 2))) return i;
+      return -1;
+    };
+    const ow = (r: number, v: number) => {
+      m.setSlide(TETRIS_IO.wid.slide, 'left', btnMachine);
+      m.setSlide(1, r & 1 ? 'right' : 'left', 0);
+      m.setSlide(2, r & 2 ? 'right' : 'left', 0);
+      m.setSlide(3, r & 4 ? 'right' : 'left', 0);
+      for (let j = 0; j < 4; j++) m.setSlide(j + 1, (v >> j) & 1 ? 'right' : 'left', 1);
+      m.pressButton(4, 0);
+      m.releaseButton(4, 0);
+      for (let j = 0; j < 4; j++) m.setSlide(j + 1, 'left', 1);
+    };
     ow(7, 0b1110);
     ow(6, 0b1110);
     ow(5, 0b1110);
@@ -3056,14 +3112,9 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       m.setSlide(5, 'left', 1);
       if (t > 2 && tok() < 0 && !rel(L.LKS) && !rel(L.P2S) && !rel(L.LANE)) break;
     }
-    let cells = 0;
-    for (let r = 0; r < ROWS; r++) for (let j = 0; j < COLS; j++) if (rel(L.CELL(r, j))) cells++;
     let score = -1;
     for (let i = 0; i < 10; i++) if (rel(L.SCR(i, 2))) score = i;
-    // three completed rows must all clear, and the ring must step three
-    // times. TODAY: 4 cells left (a full row of junk) and a score of 2.
-    expect(cells, 'all three completed rows clear').toBe(0);
-    expect(score, 'and the score counts three').toBe(3);
+    expect(score, 'a triple must step the ring three times').toBe(3);
   });
 
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
