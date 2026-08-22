@@ -840,3 +840,44 @@ every depth now counts right in both slide positions:
 negative control: point the gate back at ROW2Y's live NC instead of
 ROW2Z's latched one and the case goes red with
 "expected [ 3, 3, 1, 2 ] to deeply equal [ 3, 2, 1, 1 ]".
+
+## THE NEXT RUNG, scoped (2026-08-22): the VERTICAL 3-BAR, not the mask fan
+
+I wrote a check-in telling myself to build the phase-3 column mask fan
+before teaching the ring about 3-tall states. that is backwards, and the
+earlier F3 note already said why — recording it again because I walked
+past it twice.
+
+the third row's own mask only matters for shapes whose three rows DIFFER
+(vertical S/Z/L/J/T). the cheapest real 3-tall piece is the vertical
+3-BAR — 1 wide, 3 tall — whose three rows are identical, so
+"the third row repeats the second row's mask" is already exactly right
+for it. no mask fan needed at all.
+
+**and it is cheap for a second reason**: a 3-bar's BOTTOM mask is 1 wide
+at offset 0, which is character-for-character the 1x1's. so its fan, its
+legality trees, its collision term and its fit range are all the 1x1's
+already. the ONLY thing that distinguishes state 13 from state 0 is that
+it raises V3.
+
+so the rung is:
+  - a SHAPES entry with a third row pair (t2Off/t2W, 0-width on all
+    twelve existing shapes)
+  - an SHR5 block (clk/master/slave) plus its into-gate mirror, ~4 relays,
+    appended LAST like every block since rotBase
+  - ROT_STATE(13) = 13: a singleton like O and the I, so UP refuses it
+    mid-fall and it is a chooser-only state for now
+  - the union: SHR5(13,2) into V3M.E — measured, ONE free hole, which is
+    the same splice the 2-tall union uses at VMODEM(cols-1).E
+  - ringPart() gains a fifth branch (and still throws on unmapped)
+
+**it also makes six deploys of invisible work visible for free.** every
+part of the 3-tall path shipped tonight sits behind an operator slide on
+m178.2 that no page can reach, so none of it can be seen. once the ring
+has the state, /relays/'s existing shape picker offers it by name and the
+whole thing is hand-checkable without touching either page.
+
+known and acceptable, matching existing behaviour rather than new
+wrongness: at token rows 0 and 1 the third row is clipped, because TOPW2
+starts at r=2 — the same clip row 0 already has for the 2-tall's top
+cell. game over still measures a spawn as if it needed two rows.
