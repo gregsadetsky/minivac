@@ -3156,6 +3156,103 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     ).toEqual([3, 2, 1, 1]);
   });
 
+  // THE VERTICAL 3-BAR — the first piece that uses the third write row,
+  // and the first one reachable without touching an operator slide.
+  //
+  // It comes before the phase-3 mask fan on purpose: its three rows are
+  // IDENTICAL, so "the third row repeats the second row's mask" is
+  // already right for it, and its BOTTOM mask is character-for-character
+  // the 1x1's, so the B fan, the legality trees, the collision term and
+  // the fit range all already handle it. Six relays: SHR5 x3, MMIR5,
+  // V3IM, and NOTM(5) — the rotation mux pool was EXACTLY full at 12 of
+  // 12 sets, so a fourteenth state's D-feed had nowhere to go.
+  //
+  // The ring walk is what caught the one thing the design missed: state
+  // 13 raised V3 but NOT VMODE, because the tall union is hand-listed
+  // rather than derived from tW. Without VMODE there is no phase 2 at
+  // all and the piece would have written its bottom row alone.
+  it('the vertical 3-bar: a 14th ring state that writes three rows (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const ROWS = 8;
+    const COLS = 4;
+    const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS, COLS);
+    assertJackCapacity(wires);
+    const m = new MinivacSimulator(wires, false, L.machines);
+    m.initialize();
+    const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+    const pos = () => {
+      for (let j = 0; j < COLS; j++) if (rel(L.POSS(j))) return j;
+      return -1;
+    };
+    const tok = () => {
+      for (let i = 0; i < ROWS; i++) if (rel(L.RING(i, 2))) return i;
+      return -1;
+    };
+    const hot = () => {
+      const h: number[] = [];
+      for (let i = 0; i < SHAPES.length; i++) if (rel(ringPart(L, i, 2))) h.push(i);
+      return h;
+    };
+    const step = (b: number) => {
+      m.pressButton(b, btnMachine);
+      m.releaseButton(b, btnMachine);
+    };
+    const steer = (t: number) => {
+      for (let g = 0; pos() !== t && g < COLS; g++) {
+        const was = pos();
+        step(pos() < t ? 4 : 3);
+        if (pos() === was) break;
+      }
+    };
+    // walk the chooser all the way round, clamping into each target's fit
+    // range the way an operator would
+    const seen: string[] = [];
+    for (let k = 0; k < SHAPES.length; k++) {
+      const cur = hot();
+      expect(cur.length, `the ring must stay ONE-hot (step ${k}, hot=${JSON.stringify(cur)})`).toBe(1);
+      const next = (cur[0] + 1) % SHAPES.length;
+      const r = shapeRange(SHAPES[next], COLS);
+      steer(Math.min(r.max, Math.max(r.min, pos())));
+      step(2);
+      seen.push(SHAPES[hot()[0]].label);
+    }
+    // the chooser reaches every state and wraps
+    expect(seen[seen.length - 2], 'the 3-bar sits after the I').toBe('3 tall');
+    expect(seen[seen.length - 1], 'and the ring wraps back to the 1x1').toBe('1x1');
+
+    // now select it and check the MODE bits: 3-tall implies 2-tall, or
+    // phase 2 never runs and the middle row is never written
+    for (let k = 0; k < SHAPES.length; k++) {
+      if (SHAPES[hot()[0]].label === '3 tall') break;
+      const next = (hot()[0] + 1) % SHAPES.length;
+      const r = shapeRange(SHAPES[next], COLS);
+      steer(Math.min(r.max, Math.max(r.min, pos())));
+      step(2);
+    }
+    expect(SHAPES[hot()[0]].label, 'parked on the 3-bar').toBe('3 tall');
+    expect(rel(L.V3M), 'it raises V3').toBe(1);
+    expect(rel(L.VMODE), 'and VMODE too — a 3-tall piece is also 2-tall').toBe(1);
+
+    // drop it: three cells in one column, on the floor
+    m.pressButton(6, 1);
+    m.releaseButton(6, 1);
+    for (let t = 0; t < 24; t++) {
+      m.setSlide(5, 'right', 1);
+      m.setSlide(5, 'left', 1);
+      if (t > 2 && tok() < 0 && !rel(L.LKS) && !rel(L.P2S) && !rel(L.LANE)) break;
+    }
+    const rowsOut = [...Array(ROWS)].map((_, r) =>
+      [...Array(COLS)].map((_, j) => (rel(L.CELL(r, j)) ? 'X' : '.')).join('')
+    );
+    expect(rowsOut.filter((r) => r.includes('X')), 'three stacked cells on the floor').toEqual([
+      'X...',
+      'X...',
+      'X...',
+    ]);
+    expect(rowsOut.indexOf('X...'), 'and they sit at rows 5-7').toBe(5);
+    expect(m.getState().alerts).toEqual([]);
+  });
+
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const auto = (g: ReturnType<typeof makeGame>, on: boolean) =>

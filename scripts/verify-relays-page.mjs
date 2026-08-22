@@ -103,7 +103,7 @@ console.log('boot:', await status());
   const labels = await page.$$eval('#rv-deal option', (os) =>
     os.map((o) => [o.value, o.textContent]).filter(([v]) => +v >= 0)
   );
-  if (labels.length !== 13) fail(`dealer lists ${labels.length} shapes, expected 13`);
+  if (labels.length !== 14) fail(`dealer lists ${labels.length} shapes, expected 14`);
   let dealt = 0;
   for (const [value, label] of labels) {
     await page.selectOption('#rv-deal', value);

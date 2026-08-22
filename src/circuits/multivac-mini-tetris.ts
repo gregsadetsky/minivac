@@ -34,7 +34,7 @@ export const minusOf = (n: number) => `m${Math.floor(n / 6)}.${(n % 6) + 1}-`;
 // source now (wider-well phase C shifts bank sizes; literals would
 // break). the inline comments document each bank; jack ranges in
 // them describe TODAY'S map and move with the allocator.
-export const NSTATES = 13; // ring states (the page's cycle length)
+export const NSTATES = 14; // ring states (the page's cycle length)
 // the shape set — geometry per ring state as (bottom offset/width, top
 // offset/width): the bottom row sits at register position p+bOff, the
 // top at p+tOff. Order MUST match the ring (the L/J/T triples appended
@@ -42,24 +42,34 @@ export const NSTATES = 13; // ring states (the page's cycle length)
 // TRUTH: the page renders from it and the wider-well emitter derives
 // its step/reshape check tables from it (_notes/wider-well.md).
 export const SHAPES = [
-  { label: '1x1', bOff: 0, bW: 1, tOff: 0, tW: 0 },
-  { label: '2 wide', bOff: 0, bW: 2, tOff: 0, tW: 0 },
-  { label: '2 tall', bOff: 0, bW: 1, tOff: 0, tW: 1 },
-  { label: '2x2 square', bOff: 0, bW: 2, tOff: 0, tW: 2 },
-  { label: 'S', bOff: 0, bW: 2, tOff: -1, tW: 2 },
-  { label: 'Z', bOff: 0, bW: 2, tOff: 1, tW: 2 },
-  { label: 'L', bOff: 0, bW: 3, tOff: 0, tW: 1 },
-  { label: 'J', bOff: 0, bW: 3, tOff: 2, tW: 1 },
-  { label: 'T', bOff: 0, bW: 3, tOff: 1, tW: 1 },
-  { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3 },
-  { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3 },
-  { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3 },
+  { label: '1x1', bOff: 0, bW: 1, tOff: 0, tW: 0, t2Off: 0, t2W: 0 },
+  { label: '2 wide', bOff: 0, bW: 2, tOff: 0, tW: 0, t2Off: 0, t2W: 0 },
+  { label: '2 tall', bOff: 0, bW: 1, tOff: 0, tW: 1, t2Off: 0, t2W: 0 },
+  { label: '2x2 square', bOff: 0, bW: 2, tOff: 0, tW: 2, t2Off: 0, t2W: 0 },
+  { label: 'S', bOff: 0, bW: 2, tOff: -1, tW: 2, t2Off: 0, t2W: 0 },
+  { label: 'Z', bOff: 0, bW: 2, tOff: 1, tW: 2, t2Off: 0, t2W: 0 },
+  { label: 'L', bOff: 0, bW: 3, tOff: 0, tW: 1, t2Off: 0, t2W: 0 },
+  { label: 'J', bOff: 0, bW: 3, tOff: 2, tW: 1, t2Off: 0, t2W: 0 },
+  { label: 'T', bOff: 0, bW: 3, tOff: 1, tW: 1, t2Off: 0, t2W: 0 },
+  { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3, t2Off: 0, t2W: 0 },
+  { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3, t2Off: 0, t2W: 0 },
+  { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3, t2Off: 0, t2W: 0 },
   // 3b-4d — the horizontal I: 4 wide and FLAT (tW 0, so every top path
   // stays dark and no new write phase or collision term is needed). its
   // rotation partner is the VERTICAL I, which wants a four-row write
   // engine, so until that exists I is a ring singleton and UP refuses
   // it mid-fall exactly like O.
-  { label: 'I', bOff: 0, bW: 4, tOff: 0, tW: 0 },
+  { label: 'I', bOff: 0, bW: 4, tOff: 0, tW: 0, t2Off: 0, t2W: 0 },
+  // the VERTICAL 3-BAR: the first piece that uses the third write row.
+  // its three rows are IDENTICAL, which is the whole reason it comes
+  // before the phase-3 mask fan — "the third row repeats the second
+  // row's mask" is already correct for it. and its BOTTOM mask is
+  // character-for-character the 1x1's (1 wide at offset 0), so the B
+  // fan, the legality trees, the collision term and the fit range all
+  // already handle it. the only thing separating state 13 from state 0
+  // is that it raises V3. a chooser-only singleton for now: ROT_STATE
+  // leaves it alone, so UP refuses it mid-fall exactly like O and the I.
+  { label: '3 tall', bOff: 0, bW: 1, tOff: 0, tW: 1, t2Off: 0, t2W: 1 },
 ] as const;
 if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
 // legal register positions for a shape at a given width (both rows fit)
@@ -510,6 +520,8 @@ export interface TetrisLayout {
   FANMIR: number; FANMIR_CAP: number;
   NOTOK: number; NOTM: (k: number) => number; TOKM0: number;
   SHR4: (i: number, part: number) => number; MMIR4: number; IM: (k: number) => number;
+  /** state 13, the vertical 3-bar */
+  SHR5: (i: number, part: number) => number; MMIR5: number; V3IM: number;
   FANW4: number;
   MIRBX: (r: number, k: number) => number; MIRBX_CAP: number;
   MIRCX: (r: number, k: number) => number; MIRCX_CAP: number;
@@ -538,6 +550,7 @@ export function ringPart(L: TetrisLayout, i: number, part: number): number {
   if (i < 9) return L.SHR2(i, part);
   if (i < 12) return L.SHR3(i, part);
   if (i < 13) return L.SHR4(i, part);
+  if (i < 14) return L.SHR5(i, part);
   throw new Error(`ring state ${i} belongs to no block (NSTATES = ${NSTATES})`);
 }
 
@@ -648,6 +661,17 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // reason verbatim: relays taken mid-sequence re-host every later
   // coil onto other machines, which is what tripped a supply alarm.
   const shr4Base = take(6);
+  // the 14th state (the vertical 3-bar): clk/master/slave, its into-13
+  // transition gate, and the mirror that raises V3 — the slave's own
+  // sets are spent stepping the ring, as everywhere in this block.
+  // appended LAST, like everything after rotBase.
+  const shr5Base = take(5);
+  // ...and a SIXTH rotation-mux mirror. NOTOK + NOTM(0..4) give twelve
+  // contact sets and the thirteen-state ring spent EXACTLY twelve
+  // (measured), so a fourteenth state's D-feed has nowhere to go and the
+  // build throws. NOTM(5) cannot live at rotBase+6 — that is TOKM0 — so
+  // it is appended here and the accessor special-cases k >= 5.
+  const notm5Base = take(1);
   const fanW4Base = take(2);
   // a THIRD lock mirror: LKM2's four sets are spent (GOM's set feed and
   // the UP clock's freeze), and the position register needs the same
@@ -792,8 +816,10 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     FANPOS: fanPosBase, FANPOS_CAP: 4 * cols,
     FANRAIL: fanRailBase, FANRAIL_CAP: 4,
     FANMIR: fanMirBase, FANMIR_CAP: 6 * Math.ceil(cols / 2) + 8,
-    NOTOK: rotBase, NOTM: k => rotBase + 1 + k, TOKM0: rotBase + 6,
+    NOTOK: rotBase, NOTM: k => (k < 5 ? rotBase + 1 + k : notm5Base + (k - 5)), TOKM0: rotBase + 6,
     SHR4: (i, part) => shr4Base + 3 * (i - 12) + part,
+    SHR5: (i, part) => shr5Base + 3 * (i - 13) + part,
+    MMIR5: shr5Base + 3, V3IM: shr5Base + 4,
     MMIR4: shr4Base + 3, IM: k => shr4Base + 4 + k, FANW4: fanW4Base,
     LKM3: lkm3Base, ROW2: row2Base,
     TICKM4: tickm4Base, V3M: v3Base, ROW2M: row2mBase, ROW2X: row2mBase + 1,
@@ -921,6 +947,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let k = 0; k < L8.FANMIR_CAP; k++) claim('FANMIR', L8.FANMIR + k);
   claim('rotation', L8.NOTOK, L8.NOTM(0), L8.NOTM(1), L8.NOTM(2), L8.NOTM(3), L8.NOTM(4), L8.TOKM0);
   claim('SHR4', L8.SHR4(12, 0), L8.SHR4(12, 1), L8.SHR4(12, 2), L8.MMIR4, L8.IM(0), L8.IM(1));
+  claim('SHR5', L8.SHR5(13, 0), L8.SHR5(13, 1), L8.SHR5(13, 2), L8.MMIR5, L8.V3IM);
+  claim('NOTM5', L8.NOTM(5));
   claim('FANW4', L8.FANW4, L8.FANW4 + 1);
   claim('LKM3', L8.LKM3);
   claim('ROW2', L8.ROW2);
@@ -969,7 +997,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     SHR2, MMIR2, TRP, TRPM, L1M, J1M, T1M, WID3M,
     ZJT, SLJ, ZM2, SM2, J1M2, J1M3, T1M2,
     SHR3, MMIR3, TT, TTM, BCUT, BCUTM, L2M, J2M, T2M,
-    SHR4, MMIR4, IM,
+    SHR4, MMIR4, IM, SHR5, MMIR5, V3IM,
     TOSC, TDRV,
   } = L;
   // buttons/slides live on the layout's dedicated relay-free machine:
@@ -2157,6 +2185,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     SHR(0, 2), I2WM, I2TM, OM, SM2, ZG(3),
     L1M(1), J1M3, T1M2, L2M(2), J2M, T2M(2),
     IM(1),
+    V3IM, // state 13: the 3-bar's slave mirror chain tail
   ];
   const stBanks: MirrorBank[] = [];
   {
@@ -2173,7 +2202,10 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     const capg = Math.max(0, cols - 4);
     // state 12 (I): two union memberships (B3, HIB2) + the B fan's
     // offset-3 rail feed. one spare set for the bank's own assert.
-    const caps = [4, 1, 2, 3, 4 + capg, 3, 3, 3 + capg, 3, 6 + capg, 4, 7 + capg, 2];
+    // state 13 (the 3-bar) joins the DERIVED unions automatically: it has
+    // tW > 0 so the tall union picks it up, which is right — phase 2 must
+    // run for it. its bottom is 1 wide so it joins no width rail.
+    const caps = [4, 1, 2, 3, 4 + capg, 3, 3, 3 + capg, 3, 6 + capg, 4, 7 + capg, 2, 2];
     let off = 0;
     for (let i = 0; i < NSTATES; i++) {
       stBanks.push(
@@ -2522,7 +2554,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       const s2 = SHAPES[t];
       const r1 = shapeRange(s1, cols);
       const r2 = shapeRange(s2, cols);
-      const mm = t < 6 ? MMIR(t) : t < 9 ? MMIR2(t) : t < 12 ? MMIR3(t) : MMIR4;
+      const mm = t < 6 ? MMIR(t) : t < 9 ? MMIR2(t) : t < 12 ? MMIR3(t) : t < 13 ? MMIR4 : MMIR5;
       let armChain: string | null = null;
       for (let p = r1.min; p <= r1.max; p++) {
         if (p < r2.min || p > r2.max) continue;
@@ -2805,10 +2837,10 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     notChain = R(SEEDM(t), 'N');
   }
   w.push(`${notChain}/${R(NOTOK, 'E')}`, `${R(NOTOK, 'F')}/${minusOf(NOTOK)}`);
-  for (let k = 0; k < 5; k++)
+  for (let k = 0; k < 6; k++)
     w.push(`${k === 0 ? R(NOTOK, 'E') : R(NOTM(k - 1), 'E')}/${R(NOTM(k), 'E')}`, `${R(NOTM(k), 'F')}/${minusOf(NOTM(k))}`);
   const notSets: Array<{ relay: number; arm: string; no: string; nc: string }> = [];
-  for (const rel of [NOTOK, NOTM(0), NOTM(1), NOTM(2), NOTM(3), NOTM(4)]) {
+  for (const rel of [NOTOK, NOTM(0), NOTM(1), NOTM(2), NOTM(3), NOTM(4), NOTM(5)]) {
     notSets.push({ relay: rel, arm: 'H', no: 'G', nc: 'J' });
     notSets.push({ relay: rel, arm: 'L', no: 'K', nc: 'N' });
   }
@@ -3062,6 +3094,24 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(SHR4(12, 1), 'E')}/${R(MMIR4, 'E')}`);
   for (const m of [MMIR4, IM(0), IM(1)]) w.push(`${R(m, 'F')}/${minusOf(m)}`);
   w.push(`${R(MMIR3(11), 'H')}/${R(MMIR4, 'H')}`); // the master-mirror arm chain
+  // ---------- the vertical 3-bar's coils ----------
+  // MMIR5 continues the master-mirror arm chain; V3IM is the mirror that
+  // raises V3, spliced into V3M.E — the coil net the V3 slide already
+  // feeds, exactly the shape the 2-tall union uses at VMODEM(cols-1).E.
+  // measured: V3M.E had exactly one free hole.
+  w.push(`${R(SHR5(13, 1), 'E')}/${R(MMIR5, 'E')}`, `${R(MMIR5, 'F')}/${minusOf(MMIR5)}`);
+  w.push(`${R(MMIR4, 'H')}/${R(MMIR5, 'H')}`);
+  w.push(`${R(SHR5(13, 2), 'E')}/${R(V3IM, 'E')}`, `${R(V3IM, 'F')}/${minusOf(V3IM)}`);
+  w.push(`${plusOf(V3IM)}/${R(V3IM, 'H')}`, `${R(V3IM, 'G')}/${R(V3M, 'E')}`);
+  // ...and the 3-bar is ALSO at-least-2-tall, so it has to raise VMODE
+  // or phase 2 never runs and its middle row is never written. the tall
+  // union is hand-listed, not derived from tW — the ring walk showed
+  // v3m=1 and vmode=0 on state 13, which would have written the bottom
+  // row alone. every VMODEM(p).E is full, so this joins the CHAIN at
+  // I2TM.G (one free hole), which is the documented wired-OR entry: the
+  // one-hot ring means every inactive member dead-ends at its own open
+  // state contact.
+  w.push(`${plusOf(V3IM)}/${R(V3IM, 'L')}`, `${R(V3IM, 'K')}/${R(I2TM, 'G')}`);
   // a 4-wide bottom needs the fan's offsets 0,1,2,3, so the I joins the
   // SAME rails the 2-wide and 3-wide states use rather than minting
   // parallel per-column taps: WIDB (= 2wide|O|S|Z, whose chain ends at

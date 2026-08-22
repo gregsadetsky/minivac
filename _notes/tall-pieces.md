@@ -901,3 +901,40 @@ chained off MMIR4.H), V3IM (the mirror that raises V3M), NOTM(5) —
 exactly RUNG A's size. and unlike RUNG A there are no fan rails to join:
 a 1-wide bottom at offset 0 needs no WIDB and no WID3M, because it is
 character-for-character the 1x1's mask.
+
+## THE VERTICAL 3-BAR LANDED (2026-08-22) — a real 3-tall piece
+
+state 13. six relays as costed: SHR5 x3, MMIR5, V3IM, NOTM(5). the ring
+walk now reaches "3 tall" after the I and wraps to the 1x1, V3 comes up
+on that state and nowhere else, and a drop writes three stacked cells on
+the floor with no alerts. THIS IS THE FIRST PIECE THAT USES THE THIRD
+WRITE ROW, and the first part of the whole 3-tall arc reachable without
+an operator slide.
+
+**two things the plan missed, both found by running rather than reading.**
+
+1. `mirrorTailOf` and `caps` are hardcoded THIRTEEN-element arrays feeding
+   the per-state step-mirror banks. state 13 got `source: undefined` and
+   `capacity: undefined`, and MirrorBank's guard is `mirror >= capacity`,
+   which is false against undefined — so instead of throwing it minted
+   `R(undefined)` and emitted the wire `mNaN.NaNE/m94.1E`. the netlist
+   scan for the literal 'undefined' did not catch it because NaN
+   stringifies differently; the PARSER caught it, three steps later, as
+   "Invalid section number: m". worth a note: capacity guards that
+   compare against a possibly-undefined bound fail open.
+
+2. **state 13 raised V3 but not VMODE.** the tall union is HAND-LISTED
+   (I2TM|OM|SM|ZM), not derived from tW as I had assumed when scoping
+   this. without VMODE there is no phase 2 at all, so the 3-bar would
+   have written its bottom row alone — silently, since nothing asserts
+   the mode bits. the ring walk printed `v3m=1 vmode=0` and that is the
+   only reason it was caught. every VMODEM(p).E is full, so the join
+   enters the CHAIN at I2TM.G (one free hole), the documented wired-OR
+   entry: the one-hot ring dead-ends every inactive member.
+
+negative control: delete the VMODE join and the case goes red with
+"and VMODE too — a 3-tall piece is also 2-tall: expected +0 to be 1".
+
+/relays/'s dealer now lists fourteen shapes, so the whole 3-tall path is
+finally hand-checkable in a browser. its driver's shape-count assertion
+moved 13 -> 14.
