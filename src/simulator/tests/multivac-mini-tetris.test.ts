@@ -2938,28 +2938,21 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(off.alerts).toEqual([]);
   });
 
-  // KNOWN DEFECT, pinned rather than described. it.fails() passes while
-  // the body still throws and goes RED the day someone fixes it — which
-  // is the point: this must not be quietly forgotten.
+  // THE TOP CLEAR MUST NOT FOLLOW THE WRITE'S DIVERSION.
   //
-  // With the V3 slide up AND a line clear in flight, the phase-3 row is
-  // WIPED instead of written, and it takes pre-existing content with it.
-  // Reproduced: rows 6 and 7 complete and clear; row 5 holds '.XX.',
-  // which cannot complete. With the slide DOWN those two cells survive
-  // and collapse to the floor (correct). With it UP they are gone.
+  // CLEARP2's clear pulse used to inject into p2break. That was fine
+  // until B1a put ROW2's changeover downstream of that whole rail: with
+  // ROW2 up, the clear followed the phase-3 write to row r-2 and WIPED
+  // it, destroying cells that could never complete a line. Traced to one
+  // wire and fixed by injecting at ROW2's NC jack instead, which is on
+  // the row2break net directly — identical while ROW2 is down, still
+  // aimed at row r-1 when it is up.
   //
-  // NOT reachable in shipped gameplay: the only slides either page sets
-  // are m1.5 (tick) and the oscillator's, and V3M's slide is on a relay
-  // machine no page touches — verified by grepping every setSlide call.
-  // The V3 path is opt-in and half-built (the third row still repeats
-  // the second row's mask), so this is a defect in unfinished work, not
-  // a regression of the game.
-  //
-  // The real fix is the third line sense (a LINE3(j) mirror bank off
-  // LINE(j).E, plus LINEDLY3/CPSET3/CLEARP3/CLEARPM3) so row r-2's
-  // fullness is actually sensed instead of the clear machinery being
-  // aimed at whatever row the write path currently selects.
-  it.fails('KNOWN BAD: a V3 lock during a clear destroys the third row (fast)', { timeout: 1800000 }, () => {
+  // The case: rows 6 and 7 complete and clear; row 5 holds '.XX.', which
+  // cannot complete. Slide down, those two cells survive and collapse to
+  // the floor. Slide up, they must survive too — plus the phase-3 write
+  // adds its own cell. Before the fix: zero cells.
+  it('the top clear stays on row r-1 when ROW2 diverts the write (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const ROWS = 8;
     const COLS = 4;
@@ -2998,14 +2991,79 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
         m.setSlide(5, 'left', 1);
         if (t > 2 && tok() < 0 && !rel(L.LKS) && !rel(L.P2S) && !rel(L.LANE)) break;
       }
-      let n = 0;
-      for (let r = 0; r < ROWS; r++) for (let j = 0; j < COLS; j++) if (rel(L.CELL(r, j))) n++;
-      return n;
+      return [...Array(ROWS)]
+        .map((_, r) => [...Array(COLS)].map((_, j) => (rel(L.CELL(r, j)) ? 'X' : '.')).join(''))
+        .filter((row) => row.includes('X'));
     };
-    // with the slide down the two uncompletable cells survive the clear
-    expect(survivors(false), 'slide down: the two cells collapse to the floor').toBe(2);
-    // and they must survive with it up too. TODAY THEY DO NOT (0 cells).
-    expect(survivors(true), 'slide up: the same two cells must survive').toBe(2);
+    // slide down: the two uncompletable cells collapse to the floor
+    expect(survivors(false), 'slide down: .XX. survives the clear').toEqual(['.XX.']);
+    // slide up: the SAME two survive, and the phase-3 write adds column 0.
+    // before the fix this was [] — the clear had wiped the row.
+    expect(survivors(true), 'slide up: they survive, plus the third row cell').toEqual(['XXX.']);
+  });
+
+  // THE REMAINING F3 GAP, pinned rather than described. it.fails() passes
+  // while the body still throws and goes RED the day the third line sense
+  // lands — which is the point: the flip cannot be skipped.
+  //
+  // When the phase-3 write COMPLETES row r-2, nothing senses it. Rows r
+  // and r-1 clear on their own latches; the third stays full forever and
+  // collapses to the floor as permanent junk, and the score counts 2 for
+  // what should be 3. That is F3's remaining half from the cross-review:
+  // LINE(j)'s two contact sets are both spent changeovers (measured: only
+  // the NC sides have holes, so fanning them is the tie-point trap), so
+  // it needs a LINE3(j) mirror bank off LINE(j).E plus
+  // LINEDLY3/CPSET3/CLEARP3/CLEARPM3 and a fan group.
+  //
+  // Not reachable in shipped gameplay: the only slides either page sets
+  // are m1.5 (tick) and the oscillator's, and V3M's slide is on a relay
+  // machine no page touches — verified by grepping every setSlide call.
+  it.fails('KNOWN BAD: a third row completed by phase 3 is never sensed (fast)', { timeout: 1800000 }, () => {
+    setSolverEngine('fast');
+    const ROWS = 8;
+    const COLS = 4;
+    const { wires, layout: L, btnMachine } = tetrisCircuit(ROWS, COLS);
+    const m = new MinivacSimulator(wires, false, L.machines);
+    m.initialize();
+    const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
+    const tok = () => {
+      for (let i = 0; i < ROWS; i++) if (rel(L.RING(i, 2))) return i;
+      return -1;
+    };
+    const ow = (r: number, v: number) => {
+      m.setSlide(TETRIS_IO.wid.slide, 'left', btnMachine);
+      m.setSlide(1, r & 1 ? 'right' : 'left', 0);
+      m.setSlide(2, r & 2 ? 'right' : 'left', 0);
+      m.setSlide(3, r & 4 ? 'right' : 'left', 0);
+      for (let j = 0; j < 4; j++) m.setSlide(j + 1, (v >> j) & 1 ? 'right' : 'left', 1);
+      m.pressButton(4, 0);
+      m.releaseButton(4, 0);
+      for (let j = 0; j < 4; j++) m.setSlide(j + 1, 'left', 1);
+    };
+    // all three rows the 3-tall lock touches will complete
+    ow(7, 0b1110);
+    ow(6, 0b1110);
+    ow(5, 0b1110);
+    m.setSlide((L.V3M % 6) + 1, 'right', Math.floor(L.V3M / 6));
+    for (let k = 0; k < 2; k++) {
+      m.pressButton(2, btnMachine);
+      m.releaseButton(2, btnMachine);
+    }
+    m.pressButton(6, 1);
+    m.releaseButton(6, 1);
+    for (let t = 0; t < 40; t++) {
+      m.setSlide(5, 'right', 1);
+      m.setSlide(5, 'left', 1);
+      if (t > 2 && tok() < 0 && !rel(L.LKS) && !rel(L.P2S) && !rel(L.LANE)) break;
+    }
+    let cells = 0;
+    for (let r = 0; r < ROWS; r++) for (let j = 0; j < COLS; j++) if (rel(L.CELL(r, j))) cells++;
+    let score = -1;
+    for (let i = 0; i < 10; i++) if (rel(L.SCR(i, 2))) score = i;
+    // three completed rows must all clear, and the ring must step three
+    // times. TODAY: 4 cells left (a full row of junk) and a score of 2.
+    expect(cells, 'all three completed rows clear').toBe(0);
+    expect(score, 'and the score counts three').toBe(3);
   });
 
   it('the oscillator gaps: START and the AUTO slide need the tick-low beat (fast)', { timeout: 1800000 }, () => {

@@ -1646,7 +1646,18 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(CPSET2)}/${R(CPSET2, 'H')}`, `${R(CPSET2, 'G')}/${comOf(CLEARP2)}`);
   w.push(`${comOf(CLEARP2)}/${R(CLEARP2, 'E')}`, `${R(CLEARP2, 'F')}/${minusOf(CLEARP2)}`);
   w.push(`${plusOf(RSTM2)}/${R(RSTM2, 'L')}`, `${R(RSTM2, 'N')}/${R(CLEARP2, 'L')}`, `${R(CLEARP2, 'K')}/${comOf(CLEARP2)}`);
-  w.push(`${plusOf(CLEARP2)}/${R(CLEARP2, 'H')}`, `${R(CLEARP2, 'G')}/${tap(p2break, p2bUse)}`);
+  // THE TOP CLEAR MUST NOT FOLLOW THE WRITE'S DIVERSION. This pulse used
+  // to inject into p2break, which was fine until B1a put ROW2's
+  // changeover downstream of that whole rail: with ROW2 up, CLEARP2's
+  // clear followed the phase-3 write to row r-2 and WIPED it, taking
+  // cells that could never complete a line with it (rows 6+7 clearing
+  // while row 5 held '.XX.' left zero cells instead of two — reproduced
+  // before this line changed). Injecting at ROW2's NC jack instead puts
+  // the pulse on the row2break net directly: identical while ROW2 is
+  // down (the NC is closed, so p2break sees it exactly as before), and
+  // still aimed at row r-1 when ROW2 is up. ROW2.N is the one free hole
+  // on that net, so this costs no rail growth.
+  w.push(`${plusOf(CLEARP2)}/${R(CLEARP2, 'H')}`, `${R(CLEARP2, 'G')}/${R(ROW2, 'N')}`);
   w.push(`${comOf(CLEARP2)}/${R(CLEARPM2, 'E')}`, `${R(CLEARPM2, 'F')}/${minusOf(CLEARPM2)}`);
   const seedFan2 = takeGroups(grown(2, 1));
   for (let i = 1; i < seedFan2.length; i++) w.push(`${seedFan2[i - 1]}/${seedFan2[i]}`);
