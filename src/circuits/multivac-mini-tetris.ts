@@ -499,6 +499,10 @@ export interface TetrisLayout {
   LINEDLY3: number; CPSET3: number; CLEARP3: number; RSTM3: number; CLEARPM3: number;
   /** ROW2Y mirrors ROW2 with its arm at +; ROW2Z latches "phase 3 began" */
   ROW2Y: number; ROW2Z: number;
+  /** phase-3 line guard: NC gates LINEDLY2's coil off during the phase-3 tick */
+  P3LG: number;
+  /** CLEARP3 mirror: latches SCBOOT away on an r-2-ONLY first clear */
+  CLEARPM3B: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -724,6 +728,17 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // dead at the tick-low where ROW2 moves), and ROW2Z latches off it and
   // holds to the reset.
   const row2yBase = take(2); // ROW2Y (the +-armed mirror), ROW2Z (the latch)
+  // the phase-3 LINE GUARD: LINEDLY2's coil rides P2COL.G, and P2COL is
+  // hot on BOTH phase ticks — so an r-2-ONLY completion used to latch
+  // CLEARP2 during the phase-3 tick and its pulse held row r-1's
+  // breakers to the reset: the incomplete row was WIPED (found by the
+  // B1 design review, reproduced in phase3-line-sense-probe.test.ts).
+  // P3LG parallels ROW2's coil net; its NC sits in series ahead of
+  // LINEDLY2's coil: closed for every phase-2 sense (identical
+  // behavior), open for the whole phase-3 tick (CLEARP3's own bank owns
+  // that row's sense).
+  const p3lgBase = take(1);
+  const clearpm3bBase = take(1); // CLEARPM3B: SCBOOT's phase-3-only latch path
   return {
     rows,
     cols,
@@ -825,6 +840,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     LINEDLY3: clr3Base, CPSET3: clr3Base + 1, CLEARP3: clr3Base + 2,
     RSTM3: clr3Base + 3, CLEARPM3: clr3Base + 4,
     ROW2Y: row2yBase, ROW2Z: row2yBase + 1,
+    P3LG: p3lgBase,
+    CLEARPM3B: clearpm3bBase,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -952,6 +969,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let j = 0; j < 4; j++) claim('LINE3', L8.LINE3(j));
   claim('B1c', L8.LINEDLY3, L8.CPSET3, L8.CLEARP3, L8.RSTM3, L8.CLEARPM3);
   claim('score3', L8.ROW2Y, L8.ROW2Z);
+  claim('P3LG', L8.P3LG);
+  claim('CLEARPM3B', L8.CLEARPM3B);
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -985,7 +1004,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
     MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, TICKM4, V3M, ROW2M, ROW2X, TOPW2,
-    LINE3, LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3, ROW2Y, ROW2Z, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    LINE3, LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3, ROW2Y, ROW2Z, P3LG, CLEARPM3B, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
     MMIR,
@@ -1746,7 +1765,20 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // a shift register, walks the pair as a TWO-HOT hole: copy-down-by-
   // two with a one-tick duplicate the beta wave kills (trace-verified
   // in the sim before wiring). design cross-reviewed 2026-08-20.
-  w.push(`${plusOf(P2COL)}/${R(P2COL, 'H')}`, `${R(P2COL, 'G')}/${R(LINEDLY2, 'E')}`, `${R(LINEDLY2, 'F')}/${minusOf(LINEDLY2)}`);
+  // THE PHASE-3 LINE GUARD (B1 review finding, reproduced before fixing):
+  // P2COL is hot on BOTH phase ticks, so this coil used to pick up during
+  // phase 3 too — an r-2-only completion then latched CLEARP2 off row
+  // r-2's rail content and its pulse held row r-1's breakers to the
+  // reset: the incomplete row was WIPED (plus a spurious ELEVA(t-1)
+  // seed). P3LG parallels ROW2's coil net (chained off ROW2Y.E's one
+  // free hole); its NC ahead of LINEDLY2's coil is closed for every
+  // phase-2 sense — zero waves added, contacts are instant — and open
+  // for the whole phase-3 tick, whose row belongs to CLEARP3's bank.
+  // The far side dead-ends at the open NC in phase 3 and at P2COL's
+  // open NO between phases: no new tie.
+  w.push(`${R(ROW2Y, 'E')}/${R(P3LG, 'E')}`, `${R(P3LG, 'F')}/${minusOf(P3LG)}`);
+  w.push(`${plusOf(P2COL)}/${R(P2COL, 'H')}`, `${R(P2COL, 'G')}/${R(P3LG, 'H')}`);
+  w.push(`${R(P3LG, 'J')}/${R(LINEDLY2, 'E')}`, `${R(LINEDLY2, 'F')}/${minusOf(LINEDLY2)}`);
   w.push(`${plusOf(LINEDLY2)}/${R(LINEDLY2, 'H')}`, `${R(LINEDLY2, 'G')}/${R(LINE(0), 'L')}`);
   for (let j = 1; j < cols; j++) w.push(`${R(LINE(j - 1), 'K')}/${R(LINE(j), 'L')}`);
   w.push(`${R(LINE(cols - 1), 'K')}/${comOf(CPSET2)}`);
@@ -2669,6 +2701,15 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // set only covers bottom clears): CLEARPM2C parallels CLEARP2's com
   w.push(`${R(CLEARPM2, 'E')}/${R(CLEARPM2C, 'E')}`, `${R(CLEARPM2C, 'F')}/${minusOf(CLEARPM2C)}`);
   w.push(`${plusOf(CLEARPM2C)}/${R(CLEARPM2C, 'H')}`, `${R(CLEARPM2C, 'G')}/${R(SCBOOT, 'G')}`); // E is full and the com is NOT the coil node here — the G jack's permanent tie to E carries the feed
+  // ... and on an R-2-ONLY first clear (found via the P3LG probe: with
+  // neither CLEARP nor CLEARP2 latched, SCBOOT stayed seeded and the
+  // third pulse left the digit TWO-HOT, 1100000000). CLEARPM3's own four
+  // sets are spent (seed fan 3 + the third pulse), so CLEARPM3B parallels
+  // its coil net (CLEARPM3.E had the one free hole) and its NO enters the
+  // SCBOOT latch net through CLEARPM2C.G's free hole — every arm on that
+  // net is at +, every idle throw open: the tie audit is CLEARPM2C's own.
+  w.push(`${R(CLEARPM3, 'E')}/${R(CLEARPM3B, 'E')}`, `${R(CLEARPM3B, 'F')}/${minusOf(CLEARPM3B)}`);
+  w.push(`${plusOf(CLEARPM3B)}/${R(CLEARPM3B, 'H')}`, `${R(CLEARPM3B, 'G')}/${R(CLEARPM2C, 'G')}`);
   for (let i = 2; i < 10; i += 2) w.push(`${scrClkCom(i - 2)}/${scrClkCom(i)}`);
   for (let i = 0; i < 10; i++) {
     const c = SCR(i, 0), a = SCR(i, 1), sl = SCR(i, 2);

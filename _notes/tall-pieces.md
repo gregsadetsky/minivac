@@ -840,3 +840,185 @@ every depth now counts right in both slide positions:
 negative control: point the gate back at ROW2Y's live NC instead of
 ROW2Z's latched one and the case goes red with
 "expected [ 3, 3, 1, 2 ] to deeply equal [ 3, 2, 1, 1 ]".
+
+## B1 CONCRETE WIRING PLAN, second draft (2026-08-26) — REVIEW BEFORE WIRING
+
+goal: ring states 13 (S vert) and 14 (Z vert), driving the LANDED phase-3
+engine (B1b-i/ii + B1c are in main, slide-driven via V3M). geometry, in
+machine rows (bottom-first, off/w relative to pos p):
+  S vert = [{0,1},{0,2},{1,1}]  bottom X at p,   mid XX at p..p+1, top X at p+1
+  Z vert = [{1,1},{0,2},{0,1}]  bottom X at p+1, mid XX at p..p+1, top X at p
+(these are the NRS verticals of the machine's S and Z, mechanically
+verified as true quarter turns in tetris-reference.test.ts; landing order
+matches TARGET_SHAPES 13/14.)
+
+### increments, each with its own receipt
+
+B1-0 (prerequisite, byte-identical): SHAPES entries become
+  { label, rows: [{off,w},...] } with bOff/bW/tOff/tW as DERIVED getters
+  so every existing consumer (emitters, page, driver, tests) reads on
+  unchanged. receipt: netlist byte-identical at (8,4) and (12,6).
+
+B1-1 (states + mode rails): NSTATES 15; ring hardware per the rung-A
+  edit list (clk/master/slave + MMIR tail + NOTM extension + state
+  mirrors SVM2/ZVM2); unions gain the new memberships:
+  - VMODE: both (they have a phase-2 row)
+  - V3: both — the union splices at V3M.E exactly as VMODEM's splices,
+    per B1b-i's own comment ("when the ring learns the tall shapes")
+  - STAG: both (mid mask != bottom mask, phase 2 must read the T fan)
+  - WIDM: NEITHER (1-wide bottoms)
+  - Z vert's bottom is the OFFSET single at p+1 = T2's bottom pattern
+    verbatim: BCUT suppresses the base, the WIDM-tap-alone carries p+1
+  - S vert's bottom is the plain base at p
+  T fan: both states' MID mask {p, p+1} — new private series pairs into
+  PIECET(p)/PIECET(p+1), same emitter shape as S/Z's branches.
+
+B1-2 (the third fan + phase-3 mask): a PIECET2(j) bank + colFanT2 node
+  group; the phase-3 column feed diverts there through a NEW parallel
+  mirror ROW2W (coil on ROW2's coil net, since ROW2's own sets are the
+  write changeover and ROW2X's four are spent): P2COL.K -> ROW2W.H;
+  ROW2W.J (NC, phase 2) -> STAGM.H (the existing changeover, so phase 2
+  is bit-identical); ROW2W.G (NO, phase 3) -> colFanT2. PIECET2 branches:
+  state 13 -> {p+1}, state 14 -> {p}, private per state x pos.
+  RECEIPT: a 3-tall lock writes three DIFFERENT row masks where the
+  verticals demand it, and the V3-slide-only tests stay green (slide-up
+  with no vert state = old behavior: PIECET2 dark, but ROW2W diverts the
+  feed... SEE OPEN QUESTION 1).
+
+B1-3 (collision: the top row rests on content): new term
+  PIECET2(j).set2 AND occupied(tok-1, j) — the tok-1 occupancy SOURCES
+  exist (the MIRCT-gated rails). entry into the collide node: the com's
+  spare hole went to LEGB (3b-2), so the new branches need another
+  entry — candidate: chain off the LEGB branch net's tail (they are
+  series branches into the same node; a tail extension is one more
+  parallel branch). AUDIT NEEDED.
+
+B1-4 (rotation + selection): ROT_STATE grows 4<->13, 5<->14 (still
+  involutions — ROT_PRED is a B2 problem, not B1). the rotation muxes:
+  S/Z's mux NCs are wired NOWHERE today (singletons); they now aim at
+  13/14 mid-fall, and the new states' muxes aim back. transition
+  branches into 13/14 read the delta cells; sel edges 12->13->14->0
+  rewire the chooser wrap (the 12->0 D-feed moves to 14->0).
+
+### the two SEAMS B1 ships with (page-guarded, documented, like 3a did)
+
+the machine cannot read row tok-2 (no third occupancy bank): so
+  (a) LATERAL steering of a vertical checks bottom+mid rows in contacts;
+      the top-row cell is a page guard until a B1-5 adds MIRCT2/LEGINVT3
+  (b) ROTATION into a vertical checks its tok-1 delta in contacts; the
+      tok-2 delta is the same page guard
+precedent: increments 2 -> 3a shipped exactly this shape for the 2-tall.
+
+### OPEN QUESTIONS for the reviewer (refute freely)
+
+1. ROW2W diverts phase 3's column feed to colFanT2 UNCONDITIONALLY when
+   ROW2 is up — but the V3-SLIDE path (no vert state, PIECET2 dark) then
+   writes an EMPTY mask in phase 3?! B1b's tests expect the slide-up
+   phase 3 to write the B/T mask (the '3 rows same mask' receipts).
+   options: (i) accept and REWRITE those tests (the slide becomes a
+   service switch whose phase-3 mask is empty unless a vert state is up
+   — but then B1b's 'V3 adds a third row' receipt loses its content);
+   (ii) ROW2W's NO feeds colFanT2 AND the old path stays through a
+   PIECET2-default... no — two rails on one contact output is the
+   tie-point law. (iii) make the slide-up case ALSO populate PIECET2
+   via a slide-driven default branch (a V3M set feeding PIECET2 from
+   the B mask columns) so the old receipts keep meaning. leaning (iii).
+2. is the collide-node entry for B1-3 real? count the holes.
+3. the T fan for mid {p,p+1}: S/Z states imply wide bottoms and their
+   fan gates on pos mirrors directly — the vert states' mid needs the
+   same two columns but their WIDM union is OFF. does the existing
+   T-fan emitter shape carry a 2-column top for a state with no wide
+   rail, or does it assume tOff/tW only? (the emitters read the 2-row
+   record; the ROWS array's third row is invisible to them — how much
+   is hand-laid vs derived must be pinned per site.)
+4. reset timing: ROW2M's arm is gated on V3M.G (LIVE rail, not
+   press-sampled). the lock freezes the shape (LKM2/LKM3), so the V3
+   union is stable through a lock — is that enough, or does phase-count
+   sampling need a P2M-style latch at the press?
+5. anything about CLEARP2/CLEARP3 and the score's ROW2Y/Z that assumes
+   "phase 3 mask == phase 2 mask"? B1c's LINE3 senses the rails during
+   the phase-3 tick — with a DIFFERENT mask on the rails the sense is
+   still the true row content (rails = mask OR readback), but check the
+   double/triple-clear collapse seeding for mask assumptions.
+
+## B1 REVIEW VERDICT (clean-context adversarial review, 2026-08-26)
+
+the second draft was refuted in four places. full review kept with the
+session log; the load-bearing... the DECISIVE findings, folded in:
+
+- Q1 -> a FOURTH option wins: the phase-3 diversion is VERT-GATED, not
+  unconditional. ROW2W's coil = + -> ROW2Y.L (its set 2 is FREE — only
+  set 1 is spent on the score latch) -> a vert-union contact -> ROW2W.E.
+  slide-only phase 3 keeps the NC path and writes the bar exactly as
+  today: B1b/B1c receipts stay green untouched. ROW2W's second set then
+  hosts the cut-chain split below.
+- B1-2 was REFUTED twice: (1) diverting the FEED does not sever the
+  GATES — CUTC5/6 ride p2railA and are closed during phase 3, so the
+  continuous T fan's closed gates bridge rail p to rail p+1 through
+  colFanT and S vert's phase 3 writes a FIFTH cell. the cut chain must
+  split: CUTC5/6 become (CUTBD AND ROW2-down), new CUTC7/8 for the
+  colFanT2 gates become (CUTBD AND ROW2-up), riding ROW2W's second set.
+  (2) the T2 fan's pos taps OVERFLOW FANPOS (7/8 used at cols 0-1
+  already): it needs its OWN appended pos bank + rail relays.
+- B1-4 was REFUTED as fatal-at-load: upResourceCounts asserts the
+  selection edge and rotation edge share one branch with identical pos
+  ranges; appended at 13/14 with selection prev = I, the ranges diverge
+  (and at 4 cols the ring would WEDGE at I: I lives only at pos 0, the
+  into-Sv branch only at pos >= 1).
+  THE FIX (post-review synthesis): the SELECTION CYCLE IS JUST D-FEED
+  WIRING, not index order (the rotation rung's own lesson: "the D-feed
+  wires ARE the map"). so the chooser becomes
+    ... 3 O -> 4 S -> 13 S vert -> 5 Z -> 14 Z vert -> 6 L ... 12 I -> 0
+  with 13/14 physically appended (no spine surgery). then every new
+  edge's selection predecessor IS its rotation partner (or has an
+  identical range): prev(13)=4=rot(13); prev(5)=13, rot-src(5)=14, and
+  Sv/Zv ranges are identical; prev(14)=5=rot(14); prev(6)=14 vs
+  rot-src(6)=9 — both intersect L's range identically. the assert holds
+  at 4 and 6 (CHECK MECHANICALLY in upResourceCounts before wiring).
+  COST: NSTATES stops being the selection order — the circuit exports
+  SELECTION_NEXT and the reference/page/driver read it (the reference's
+  (i+1)%n dies).
+- B1-1's union bullet contradicted itself: Z vert needs WIDB membership
+  (the T2 tap mechanism needs BOTH nets) or its bottom locks EMPTY.
+  splice holes, counted by the review: BCUT interior full -> enter at
+  L2M(0).K; STAG chain -> SM(3).G; VMODE chain -> I2TM.G; V3 -> V3M.E.
+- B1-3's entry: the LEGB tail is FULL; the real hole is COLLIDE.E
+  (1 free). reads = a new LEGBT bank paralleling LEGINVT(j).E (exactly
+  1 free hole per column). MIRCT covers r=1..rows-2: token at rows-1
+  reads dark (benign, floor lock — say so in the test).
+- NEW TRAPS from the review: T4 — Z vert's LEFT step tree needs a
+  14-gated bypass + d1 read (the T2/L2 bypasses are hand-laid per
+  state; without it Zv false-refuses AND can step INTO stored content).
+  T7 — a 3-tall lock at row 1 clips its top silently with no game-over
+  (TOPW2 starts at r=2; GOM is row-0 only): declared-limit test needed.
+  T2 — LINEDLY2 is live on the phase-3 tick (coil on P2COL.G, P2COL on
+  p2gate, hot both phases): an r-2-ONLY completion latches CLEARP2 too,
+  whose pulse holds row r-1's breakers = the wipe class, PLUS a spurious
+  ELEVA(t-1) seed. LIKELY LATENT IN MAIN TODAY (slide-only, no page
+  reaches it); B1 makes it common. trace first, then fix (a ROW2-down
+  series contact in LINEDLY2's feed — but note during a NON-tall lock
+  ROW2 is down and must stay conducting; the gate must distinguish
+  "phase 3 live" not "vert piece", i.e. ROW2X/ROW2Y state).
+- B1-0 is sound and lands first, with shapeRange (and homeColumn)
+  generalized to ALL rows in the same increment (correct-by-coincidence
+  for S/Z vert, wrong for B2's vert J), byte-identical receipt.
+
+## T2 WAS REAL, AND IT HAD A SECOND FACE (fixed 2026-08-26, pre-B1)
+
+the probe (phase3-line-sense-probe.test.ts: an r-2-ONLY completion by a
+slide-driven 3-tall bar) reproduced the review's wipe on the first run:
+row r-1 came back ZERO. and fixing the wipe exposed a second gap in the
+same untested case: the SCORE read 0 — SCBOOT's latch paths only covered
+bottom (CLEARPM.K) and top (CLEARPM2C) clears, so a phase-3-only first
+clear left the boot seed live and the ring TWO-HOT (digits 1100000000).
+
+the fix, two appended relays, both entries hole-counted:
+- P3LG parallels ROW2's coil net (ROW2Y.E's free hole); its NC sits
+  ahead of LINEDLY2's coil. phase-2 sense identical (closed NC, zero
+  waves added); the phase-3 tick can no longer reach CLEARP2.
+- CLEARPM3B parallels CLEARP3's com net (CLEARPM3.E's free hole); its
+  NO enters the SCBOOT latch net through CLEARPM2C.G's free hole.
+both pinned by the probe test (which was red before each half).
+NOTE for B1: the review earmarked ROW2Y's set 2 for ROW2W's coil gate —
+P3LG used only ROW2Y's COIL-NET hole (E), not the set. the set is still
+free for B1.

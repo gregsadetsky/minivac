@@ -898,6 +898,30 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    counter or input-clocked stepping, i.e. a real design round, before
    it replaces the dice.
 
+49. THE R-2-ONLY CLEAR, TWO LATENT BUGS IN ONE UNTESTED CASE (2026-08-26,
+   found by the B1 design review's static trace, both reproduced before
+   fixing, both pinned by phase3-line-sense-probe.test.ts):
+   (1) LINEDLY2's coil rode P2COL.G, which is hot on BOTH phase ticks —
+   a lock whose only completed row was r-2 latched CLEARP2 off the
+   phase-3 rails and its pulse held row r-1's breakers to the reset:
+   the incomplete row was WIPED. fix: P3LG, a ROW2-net mirror whose NC
+   gates LINEDLY2's coil (phase-2 sense identical, phase-3 blocked).
+   (2) with the wipe fixed, the same case scored ZERO: SCBOOT's latch
+   paths covered bottom and top clears only, so the boot seed stayed
+   live and the score ring went two-hot. fix: CLEARPM3B (a CLEARP3-com
+   mirror) latching SCBOOT through CLEARPM2C.G's free hole.
+   latent in main (slide-only; no page raises V3), but B1's ring-driven
+   verticals would have made it every third-row clear.
+   B1 DESIGN STATUS: second draft written and adversarially reviewed —
+   two increments refuted (the phase-3 colFanT bridge; the appended
+   states' selection-branch divergence, fatal at load), a fourth option
+   found for the mask diversion (vert-gated ROW2W off ROW2Y's free
+   set), and a post-review synthesis for the ring: the SELECTION cycle
+   is D-feed wiring, so the chooser can run S -> S vert -> Z -> Z vert
+   with the verticals physically appended — every new edge's selection
+   predecessor becomes its rotation partner and the shared-branch
+   invariant holds. full ledger at the end of _notes/tall-pieces.md.
+
 NEXT (the remaining knobs, in order): B1 vertical S/Z on the landed
    phase-3 engine (third mask fan PIECET2 + collision term + two ring
    states), then B2 vertical L/J/T (ROT_PRED — rotation stops being
