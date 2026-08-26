@@ -167,9 +167,16 @@ SELECTION_CYCLE.forEach((s, k) => {
 });
 export const SELECTION_NEXT = (i: number) => SEL_NEXT[i];
 export const SELECTION_PREV = (i: number) => SEL_PREV[i];
-// the state whose deltas the target's branch checks (the mid-fall
-// source when one exists, else the selection predecessor)
-export const DELTA_SOURCE = (t: number) => (ROT_STATE(t) !== t ? ROT_STATE(t) : SELECTION_PREV(t));
+// the state whose deltas the target's branch checks: the state that
+// ROTATES INTO t when one exists, else the selection predecessor.
+// B2-1: this is ROT_PRED, not ROT_STATE — identical while every
+// rotation is an involution, WRONG the moment the L/J/T 4-cycles land
+// (the forward map reads the state t rotates TO; the ranges coincide
+// so nothing would throw — the review's T-B, guarded by the load
+// assert in upResourceCounts).
+const ROT_PRED: number[] = [];
+for (let i = 0; i < NSTATES; i++) if (ROT_STATE(i) !== i) ROT_PRED[ROT_STATE(i)] = i;
+export const DELTA_SOURCE = (t: number) => ROT_PRED[t] ?? SELECTION_PREV(t);
 
 export function upResourceCounts(cols: number) {
   const span = (o: number, w2: number, p: number) => Array.from({ length: w2 }, (_, k) => p + o + k);
