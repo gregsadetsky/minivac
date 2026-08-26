@@ -143,22 +143,19 @@ if (rSq2[11] !== 'OOO.OO' || rSq2[10] !== 'OOO.OO')
   throw new Error('second square wrong: ' + JSON.stringify(rSq2));
 // the cycle passes the staggered pair AND THEIR VERTICALS (B1: the
 // chooser runs S -> S vert -> Z -> Z vert), then the triples, the
-// flips and the horizontal I, back to 1x1. the operator clamps
-// re-position the register per shape along the way.
+// flips, the horizontal I and (B3) the I VERT, back to 1x1. the
+// operator clamps re-position the register per shape along the way.
 await page.keyboard.press('ArrowUp');
 const sS = await waitIdle('shapeS');
 if (!/\bS\b/.test(sS)) throw new Error('expected S, got: ' + sS);
-for (const want of [/S vert/, /\bZ\b/, /Z vert/, /\bL\b/, /L vert R/, /L flip/, /L vert L/, /\bJ\b/, /J vert R/, /J flip/, /J vert L/, /\bT\b/, /T vert R/, /T flip/, /T vert L/]) {
+for (const want of [/S vert/, /\bZ\b/, /Z vert/, /\bL\b/, /L vert R/, /L flip/, /L vert L/, /\bJ\b/, /J vert R/, /J flip/, /J vert L/, /\bT\b/, /T vert R/, /T flip/, /T vert L/, /\bI\b/, /I vert/]) {
   await page.keyboard.press('ArrowUp');
-  const s = await waitIdle('shapeTriple');
+  const s = await waitIdle('shapeCycle');
   if (!want.test(s)) throw new Error(`cycle expected ${want}, got: ${s}`);
 }
 await page.keyboard.press('ArrowUp');
-const sI = await waitIdle('shapeI');
-if (!/\bI\b/.test(sI)) throw new Error('expected the I, got: ' + sI);
-await page.keyboard.press('ArrowUp');
 const s4 = await waitIdle('shape4');
-if (!s4.includes('1x1')) throw new Error('expected 1x1, got: ' + s4);
+if (!s4.includes('1x1')) throw new Error('expected 1x1 after the 22-wrap, got: ' + s4);
 // walk to the wall deterministically (the cycle's clamps left the
 // register at a shape-dependent column), then 3 rights = col 3 exactly
 for (let i = 0; i < 5; i++) {
@@ -433,7 +430,7 @@ const modelKey = (key) => {
     }
     // the circuit's SELECTION_CYCLE: the verticals sit next to their
     // rotation partners (B1)
-    const SEL = { 0:1, 1:2, 2:3, 3:4, 4:13, 13:5, 5:14, 14:6, 6:15, 15:9, 9:16, 16:7, 7:17, 17:10, 10:18, 18:8, 8:19, 19:11, 11:20, 20:12, 12:0 };
+    const SEL = { 0:1, 1:2, 2:3, 3:4, 4:13, 13:5, 5:14, 14:6, 6:15, 15:9, 9:16, 16:7, 7:17, 17:10, 10:18, 18:8, 8:19, 19:11, 11:20, 20:12, 12:21, 21:0 };
     m.shapeIx = SEL[m.shapeIx];
     return;
   }

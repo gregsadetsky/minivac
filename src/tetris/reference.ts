@@ -207,6 +207,14 @@ export interface RefConfig {
   selectionNext?: (i: number) => number;
   /** spawn/re-home column; defaults to homeColumn(cols). the machine today homes at 0 */
   home?: number;
+  /** THE DECLARED tok-3 SEAM (B3, 2026-08-26): the circuit has no
+   * occupancy bank for the row three above the token, so a mid-fall
+   * move whose only conflict is a k=3 cell (rotating the I upright
+   * under an overhang; steering the upright I sideways under one) is
+   * ALLOWED by the contacts. true = model that blindness, so the
+   * lockstep is exact-with-one-asterisk. the MIRCT3 rung deletes this
+   * knob — the last compat knob standing. */
+  tok3Blind?: boolean;
 }
 
 export interface RefSnapshot {
@@ -245,6 +253,7 @@ export class TetrisReference {
   readonly home: number;
   private readonly rot: (i: number) => number;
   private readonly selNext: (i: number) => number;
+  private readonly tok3Blind: boolean;
   field: boolean[][]; // [row][col], row 0 = top
   shapeIx = 0;
   pos: number;
@@ -267,6 +276,7 @@ export class TetrisReference {
       this.rot = (i) => TARGET_ROT[i];
     }
     this.selNext = cfg.selectionNext ?? ((i) => (i + 1) % this.nShapes);
+    this.tok3Blind = cfg.tok3Blind ?? false;
     this.pos = this.home;
     this.field = Array.from({ length: this.rows }, () => Array<boolean>(this.cols).fill(false));
   }
@@ -286,12 +296,18 @@ export class TetrisReference {
     return out;
   }
 
-  // in bounds and not overlapping stored cells (clipped rows don't count)
-  private fits(ix: number, pos: number, bottomRow: number): boolean {
+  // in bounds and not overlapping stored cells (clipped rows don't count).
+  // blindK3: skip the occupancy check three rows above the token — the
+  // circuit's declared tok-3 seam (mid-fall MOVES only; falls and locks
+  // stay strict, because the machine's descent needs no tok-3 read: a
+  // single-column fourth row only ever enters cells its lower rows vacate)
+  private fits(ix: number, pos: number, bottomRow: number, blindK3 = false): boolean {
     const { min, max } = refShapeRange(this.shape(ix), this.cols);
     if (pos < min || pos > max) return false;
     if (bottomRow >= this.rows) return false;
-    return this.cells(ix, pos, bottomRow).every(([r, c]) => !this.field[r][c]);
+    return this.cells(ix, pos, bottomRow).every(
+      ([r, c]) => (blindK3 && bottomRow - r === 3) || !this.field[r][c]
+    );
   }
 
   key(k: RefKey): void {
@@ -307,7 +323,7 @@ export class TetrisReference {
       case 'right': {
         const np = this.pos + (k === 'left' ? -1 : 1);
         if (this.tokenRow >= 0) {
-          if (this.fits(this.shapeIx, np, this.tokenRow)) this.pos = np;
+          if (this.fits(this.shapeIx, np, this.tokenRow, this.tok3Blind)) this.pos = np;
         } else {
           // pre-spawn: occupancy rails are dark, only the fit bounds
           // refuse — and they gate the TARGET position (the ring's entry
@@ -323,7 +339,7 @@ export class TetrisReference {
         if (next === this.shapeIx) return; // singleton refusal
         if (next >= this.nShapes) return; // partner not built yet (compat)
         if (this.tokenRow >= 0) {
-          if (this.fits(next, this.pos, this.tokenRow)) this.shapeIx = next;
+          if (this.fits(next, this.pos, this.tokenRow, this.tok3Blind)) this.shapeIx = next;
         } else {
           // a chooser branch exists only where the position is legal for
           // BOTH endpoints (the machine's shared entering branches cover

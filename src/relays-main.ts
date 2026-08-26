@@ -572,6 +572,10 @@ function draw(): void {
           if (r === tr) live = rel(built.layout.PIECE(j));
           else if (r === tr - 1) live = rel(built.layout.PIECET(j));
           else if (r === tr - 2) live = rel(built.layout.PIECET2(j)); // B1: the third row
+          // B3: the I-vert's fourth row IS the third row's mask
+          // (rows[3] === rows[2] — the generator's load assert), and
+          // only state 21 has one, so gate on its slave directly
+          else if (r === tr - 3) live = rel(ringPart(built.layout, 21, 2)) && rel(built.layout.PIECET2(j));
         }
         if (!stored && !live) continue;
         const x = ox + pad + j * cell, y = oy + pad + r * cell;

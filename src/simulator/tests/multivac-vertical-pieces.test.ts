@@ -31,6 +31,7 @@ import {
   PIECE,
   PIECET,
   GAMEOVER,
+  SCR,
   SHAPES,
   NSTATES,
   SELECTION_NEXT,
@@ -395,19 +396,166 @@ describe('B2: the L/J/T verticals — rotation is a true 4-cycle', () => {
     expect(g.m.getState().alerts).toEqual([]);
   });
 
-  it('the 21-state chooser wraps; singletons still refuse (fast)', { timeout: 1800000 }, () => {
+  it('the 22-state chooser wraps; the I ROTATES now (the B3 flip)', { timeout: 1800000 }, () => {
     const g = rig();
     g.start();
-    g.select(20); // T vert L — the last new state before the I
-    g.select(0); // ... through the I and the wrap
+    g.select(20); // T vert L — then through the I, the I-vert and the wrap
+    g.select(0);
     expect(g.shapeAt()).toBe(0);
-    // O still refuses mid-fall; the I still refuses (its partner is B3)
+    // B3 flipped this receipt: "the I is a singleton until B3" held from
+    // 3b-4d through B2 — now UP mid-fall walks 12 -> 21 -> 12 in the
+    // contacts (the last rotation edge; NSTATES == TARGET_NSTATES)
     g.select(12);
     g.steer(0);
     g.tick(); // spawn the I
     g.tick();
     g.up();
-    expect(g.shapeAt(), 'the I is a singleton until B3').toBe(12);
+    expect(g.shapeAt(), 'the I stands up').toBe(21);
+    g.up();
+    expect(g.shapeAt(), 'and lies back down').toBe(12);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+});
+
+describe('B3: the vertical I — the last state', () => {
+  it('the FIVE-tick lock writes four cells in one column (fast)', { timeout: 1800000 }, () => {
+    // press (tok) + phase 2 (tok-1) + phase 3 (tok-2) + phase 4 (tok-3)
+    // + reset: the first four-row write. un-steered at pos 0 the column
+    // is p+2 = 2 (WID3 tap alone, base cut — L2's bottom pattern).
+    const g = rig();
+    g.start();
+    g.select(21);
+    g.steer(0);
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick(); // fall to the floor
+    expect(g.tok()).toBe(7);
+    g.settle();
+    for (let r = 4; r <= 7; r++) expect(g.row(r), `row ${r}: the beam's cell`).toBe(0b0100);
+    for (let r = 0; r <= 3; r++) expect(g.row(r), `row ${r}: empty`).toBe(0);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  it('a 3-tall lock NEVER raises ROW3 (the equivalence receipt)', { timeout: 1800000 }, () => {
+    // the whole phase-4 block is dead for the eight 3-tall states — V4
+    // down opens ROW3X's feed, so ROW3M can never arm. watched through
+    // a full S-vert drop and lock, tick by tick.
+    const g = rig();
+    g.start();
+    g.select(13);
+    g.steer(1);
+    g.tick();
+    for (let n = 0; n < 30 && (g.tok() >= 0 || g.rel(LKS) || g.rel(LANE)); n++) {
+      expect(g.rel(g.L.ROW3), 'ROW3 stays down for a 3-tall lock').toBe(0);
+      g.tick();
+    }
+    expect(g.row(7), 'S vert bottom').toBe(0b0010);
+    expect(g.row(6), 'S vert mid').toBe(0b0110);
+    expect(g.row(5), 'S vert top').toBe(0b0100);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  it('THE QUAD: four rows clear at once and score four (fast)', { timeout: 1800000 }, () => {
+    // tetris's namesake move, and the four-hot elevator probe the
+    // review demanded (the three-hot walk was probed at B1c; this
+    // walks FOUR seeds through the real CLEARP/2/3/4 latches).
+    const g = rig();
+    g.start();
+    // operator-fill rows 4..7 at columns {0,1,3} — column 2 stays open
+    const addr: Array<[string, string, string]> = [
+      ['left', 'left', 'right'], // row 4
+      ['right', 'left', 'right'], // row 5
+      ['left', 'right', 'right'], // row 6
+      ['right', 'right', 'right'], // row 7
+    ];
+    for (const [s1, s2, s3] of addr) {
+      g.m.setSlide(1, s1, 0);
+      g.m.setSlide(2, s2, 0);
+      g.m.setSlide(3, s3, 0);
+      g.m.setSlide(1, 'right', 1); // col 0
+      g.m.setSlide(2, 'right', 1); // col 1
+      g.m.setSlide(4, 'right', 1); // col 3
+      g.m.pressButton(4, 0);
+      g.m.releaseButton(4, 0);
+      g.m.setSlide(1, 'left', 1);
+      g.m.setSlide(2, 'left', 1);
+      g.m.setSlide(4, 'left', 1);
+    }
+    for (let r = 4; r <= 7; r++) expect(g.row(r)).toBe(0b1011);
+    g.select(21);
+    g.steer(0); // the beam's column is 2 — the one hole in all four rows
+    g.tick();
+    for (let r = 1; r <= 7; r++) g.tick();
+    expect(g.tok()).toBe(7);
+    g.settle(); // lock -> four full rows -> four latches -> four seeds -> the walk
+    for (let r = 0; r <= 7; r++) expect(g.row(r), `row ${r} after the quad`).toBe(0);
+    // the score stepped FOUR: press pulse + phase-2 pulse + the gated
+    // phase-3 pulse + the new phase-4 pulse, one clock cycle each
+    const digit = Array.from({ length: 10 }, (_, i) => g.rel(SCR(i, 2))).findIndex((v) => v === 1);
+    expect(digit, 'the score ring').toBe(4);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  it('a low rest clips rows above the top, game over only at row 0 (T7 one deeper)', { timeout: 1800000 }, () => {
+    // column 2 filled to row 4: the beam rests at tok 3 and its lock
+    // writes rows 3,2,1,0 — INTO row 0 with NO game over (the machine's
+    // rule: only a lock whose BOTTOM is row 0 latches; the reference
+    // clips and agrees). TOPW3 starts at row 3, so a tok-2 rest would
+    // clip the fourth write exactly like TOPW2's row-1 clip.
+    const g = rig();
+    g.start();
+    const addr: Array<[string, string, string]> = [
+      ['left', 'left', 'right'], // row 4
+      ['right', 'left', 'right'], // row 5
+      ['left', 'right', 'right'], // row 6
+      ['right', 'right', 'right'], // row 7
+    ];
+    for (const [s1, s2, s3] of addr) {
+      g.m.setSlide(1, s1, 0);
+      g.m.setSlide(2, s2, 0);
+      g.m.setSlide(3, s3, 0);
+      g.m.setSlide(3, 'right', 1); // col 2
+      g.m.pressButton(4, 0);
+      g.m.releaseButton(4, 0);
+      g.m.setSlide(3, 'left', 1);
+    }
+    g.select(21);
+    g.steer(0);
+    g.tick();
+    for (let r = 1; r <= 3; r++) g.tick();
+    expect(g.tok(), 'rested on the column stack').toBe(3);
+    g.settle();
+    for (let r = 0; r <= 7; r++) expect(g.row(r), `row ${r}`).toBe(0b0100);
+    expect(g.rel(GAMEOVER), 'no game over: the bottom locked at row 3').toBe(0);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  it('the tok-3 cell is THE DECLARED SEAM: a right step under an overhang', { timeout: 1800000 }, () => {
+    // the one cell the contacts cannot read (no tok-3 occupancy bank):
+    // steering the beam sideways enters (tok..tok-3, q+2), and the
+    // banks cover three of the four. an overhang cell exactly three
+    // above the token is invisible — the machine ALLOWS a step the
+    // reference refuses (its diff knob tok3Blind models exactly this).
+    // when the MIRCT3 rung lands, THIS assertion flips red -> green
+    // inverted: the step must refuse.
+    const g = rig();
+    g.start();
+    // the overhang: a single stored cell at (2, 3) with rows 3..7 of
+    // column 3 empty (in play, an L2/T2 lock leaves exactly this shape)
+    g.m.setSlide(1, 'left', 0);
+    g.m.setSlide(2, 'right', 0);
+    g.m.setSlide(3, 'left', 0); // row 2
+    g.m.setSlide(4, 'right', 1); // col 3
+    g.m.pressButton(4, 0);
+    g.m.releaseButton(4, 0);
+    g.m.setSlide(4, 'left', 1);
+    expect(g.row(2)).toBe(0b1000);
+    g.select(21);
+    g.steer(0); // the beam falls in column 2
+    g.tick();
+    for (let r = 1; r <= 5; r++) g.tick();
+    expect(g.tok()).toBe(5); // piece at (5,4,3,2) x col 2; (2,3) is tok-3, q+2
+    g.right();
+    expect(g.posAt(), 'the contacts allow the step — the tok-3 seam').toBe(1);
     expect(g.m.getState().alerts).toEqual([]);
   });
 });

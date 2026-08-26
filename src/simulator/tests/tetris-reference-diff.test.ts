@@ -173,11 +173,16 @@ function makePair() {
   const ref = new TetrisReference({
     rows: ROWS,
     cols: COLS,
-    shapes: NSTATES, // compat knob: only the implemented ring
-    rot: 'current', // compat knob: the machine's flip map, not the 4-cycles yet
-    currentRot: ROT_STATE,
+    shapes: NSTATES, // == TARGET_NSTATES since B3: all 22 states exist
+    // B3 FLIPPED THE ROT KNOB: rot 'target' — the machine's map IS the
+    // NES map now (12 <-> 21 was the last edge). this green run is the
+    // "normal rotation" acceptance the whole ladder aimed at.
+    rot: 'target',
     selectionNext: SELECTION_NEXT, // the circuit's own chooser map (its D-feed wiring)
     home: circuitHome(COLS), // CENTER SPAWN — at target since 2026-08-26
+    // the ONE surviving asterisk: the tok-3 occupancy seam (declared,
+    // receipted in multivac-vertical-pieces; the MIRCT3 rung deletes it)
+    tok3Blind: true,
   });
   let n = 0;
   const play = (keys: RefKey[], label: string) => {

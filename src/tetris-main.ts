@@ -275,18 +275,20 @@ function render(note?: string) {
   const tok = tokenRow();
   const bm = mask();
   const tm = topMask(); // the MID row for the B1 verticals
-  const t2m = rowMask(2); // the third row (S vert / Z vert)
+  const t2m = rowMask(2); // the third row (S vert / Z vert / the L/J/T verticals)
+  const t3m = rowMask(3); // the fourth row (B3: the I vert only)
   for (let r = 0; r < ROWS; r++) {
     for (let j = 0; j < COLS; j++) {
       const on = relay(IO.cellRelay(r, j));
       const isPiece =
         (r === tok && ((bm >> j) & 1) === 1) ||
         (tok > 0 && r === tok - 1 && ((tm >> j) & 1) === 1) ||
-        (tok > 1 && r === tok - 2 && ((t2m >> j) & 1) === 1);
+        (tok > 1 && r === tok - 2 && ((t2m >> j) & 1) === 1) ||
+        (tok > 2 && r === tok - 3 && ((t3m >> j) & 1) === 1);
       pixels[r][j].style.background = isPiece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
-  const um = bm | tm | t2m;
+  const um = bm | tm | t2m | t3m;
   for (let j = 0; j < COLS; j++) {
     colMarks[j].style.background = ((um >> j) & 1) === 1 ? '#7fd4ff' : 'transparent';
   }
