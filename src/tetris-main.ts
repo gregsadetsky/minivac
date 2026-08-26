@@ -25,7 +25,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, ringPart } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, SELECTION_NEXT, ringPart } from './circuits/multivac-mini-tetris';
 
 // the 'fast' engine: typed-array rewrite of the sparse solver, validated
 // against the dense oracle on 5000 random circuits (zero mismatches, max
@@ -408,7 +408,7 @@ function dealNext() {
       };
       if (cur === want || guard <= 0) return done(`dealt: ${shapeLabel()}`);
       // clamp the register into the NEXT state's fit range, then press UP
-      const nIx = (cur + 1) % SHAPES.length;
+      const nIx = SELECTION_NEXT(cur); // the chooser cycle is circuit-defined
       const { min, max } = shapeRange(SHAPES[nIx], COLS);
       const p = posAt();
       const nPos = Math.min(max, Math.max(min, p));
@@ -517,7 +517,7 @@ function handleKey(key: string) {
     // The page just mirrors that map so its clamp walks toward the
     // right target and its readback knows what to expect.
     const cur0 = shapeAt();
-    const nIx = tokenRow() >= 0 ? ROT_STATE(cur0) : (cur0 + 1) % SHAPES.length;
+    const nIx = tokenRow() >= 0 ? ROT_STATE(cur0) : SELECTION_NEXT(cur0);
     if (nIx === cur0) {
       render('this piece has only one orientation');
       return;

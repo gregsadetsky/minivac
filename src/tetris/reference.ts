@@ -50,10 +50,11 @@ export interface RefShape {
   rows: ReadonlyArray<{ off: number; w: number }>;
 }
 
-// The full target ring, selection order = index order (UP pre-spawn steps
-// +1 with wraparound, exactly like the machine's chooser cycle). States
-// 0..12 are the circuit's ring today; 13..21 are the vertical orientations
-// the tall-piece rungs add. ASCII art is drawn top row first.
+// The full target ring. States 0..12 are the circuit's ring today;
+// 13..21 are the vertical orientations the tall-piece rungs add, in
+// LANDING ORDER (the lockstep test requires the circuit's table to stay
+// a prefix of this one). The CHOOSER order is TARGET_SELECTION_CYCLE
+// below, NOT index order. ASCII art is drawn top row first.
 export const TARGET_SHAPES: readonly RefShape[] = [
   { label: '1x1', rows: [{ off: 0, w: 1 }] },
   { label: '2 wide', rows: [{ off: 0, w: 2 }] },
@@ -146,6 +147,19 @@ export const TARGET_ROT: readonly number[] = (() => {
   return m;
 })();
 
+// THE TARGET SELECTION CYCLE: the chooser order the finished ring wires
+// as its D-feeds — every rotation cycle concatenated (S, S vert; Z,
+// Z vert; L's four; J's four; T's four; I, I vert), so every edge's
+// selection predecessor IS its rotation source and the machine's
+// shared-branch invariant holds with no extra machinery (validated for
+// every edge in tetris-reference.test.ts, at 4, 6 and 10 columns —
+// the pre-payment for rungs B1/B2/B3). The circuit implements a prefix
+// of this as its states land; while it does, the diff harness passes
+// the CIRCUIT's SELECTION_NEXT in as the compat knob.
+export const TARGET_SELECTION_CYCLE: readonly number[] = [
+  0, 1, 2, 3, 4, 13, 5, 14, 6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20, 12, 21,
+];
+
 // legal register positions for a shape: every row's cells must fit
 export function refShapeRange(s: RefShape, cols: number): { min: number; max: number } {
   let min = 0;
@@ -187,6 +201,10 @@ export interface RefConfig {
   rot?: 'current' | 'target';
   /** custom rotation map for rot: 'current' (the circuit's ROT_STATE, passed in by the harness so the reference itself never imports circuit code) */
   currentRot?: (i: number) => number;
+  /** the pre-spawn chooser successor (the circuit's SELECTION_NEXT — its
+   * D-feed wiring). defaults to the plain +1 cycle, which is the circuit
+   * today; the harness passes the real map so the two never drift */
+  selectionNext?: (i: number) => number;
   /** spawn/re-home column; defaults to homeColumn(cols). the machine today homes at 0 */
   home?: number;
 }
@@ -226,6 +244,7 @@ export class TetrisReference {
   readonly nShapes: number;
   readonly home: number;
   private readonly rot: (i: number) => number;
+  private readonly selNext: (i: number) => number;
   field: boolean[][]; // [row][col], row 0 = top
   shapeIx = 0;
   pos: number;
@@ -247,6 +266,7 @@ export class TetrisReference {
     } else {
       this.rot = (i) => TARGET_ROT[i];
     }
+    this.selNext = cfg.selectionNext ?? ((i) => (i + 1) % this.nShapes);
     this.pos = this.home;
     this.field = Array.from({ length: this.rows }, () => Array<boolean>(this.cols).fill(false));
   }
@@ -299,7 +319,7 @@ export class TetrisReference {
         return;
       }
       case 'up': {
-        const next = this.tokenRow >= 0 ? this.rot(this.shapeIx) : (this.shapeIx + 1) % this.nShapes;
+        const next = this.tokenRow >= 0 ? this.rot(this.shapeIx) : this.selNext(this.shapeIx);
         if (next === this.shapeIx) return; // singleton refusal
         if (next >= this.nShapes) return; // partner not built yet (compat)
         if (this.tokenRow >= 0) {

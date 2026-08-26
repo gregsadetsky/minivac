@@ -16,6 +16,7 @@ import {
   TARGET_SHAPES,
   TARGET_NSTATES,
   TARGET_ROT,
+  TARGET_SELECTION_CYCLE,
   TetrisReference,
   homeColumn,
   refShapeRange,
@@ -82,6 +83,40 @@ describe('tetris reference: the target tables', () => {
     for (const i of [6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20]) {
       expect(apply(i, 4), `state ${i} returns after four turns`).toBe(i);
       expect(apply(i, 2), `state ${i} is a quarter turn, not a flip`).not.toBe(i);
+    }
+  });
+
+  it('the target selection cycle satisfies the shared-branch invariant at every edge (the B1/B2/B3 pre-payment)', () => {
+    // the machine's UP-transition emitter shares ONE physical branch per
+    // target between the selection edge (cycle predecessor -> t) and the
+    // rotation edge (rotation source -> t), and ASSERTS their pos ranges
+    // coincide. the target cycle concatenates the rotation cycles exactly
+    // so that holds by construction — verify it mechanically for every
+    // edge and width, and that no branch range is empty (an empty range
+    // wedges the chooser at the predecessor).
+    expect([...TARGET_SELECTION_CYCLE].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: TARGET_NSTATES }, (_, i) => i)
+    );
+    const prevOf: number[] = [];
+    TARGET_SELECTION_CYCLE.forEach((s, k) => {
+      prevOf[TARGET_SELECTION_CYCLE[(k + 1) % TARGET_NSTATES]] = s;
+    });
+    for (const cols of [4, 6, 10]) {
+      for (let t = 0; t < TARGET_NSTATES; t++) {
+        // the state that rotates INTO t (unique in a permutation), else the cycle predecessor
+        const rotSrc = TARGET_ROT.findIndex((v, s) => v === t && s !== t);
+        const src = rotSrc >= 0 ? rotSrc : prevOf[t];
+        const r2 = refShapeRange(TARGET_SHAPES[t], cols);
+        const r1 = refShapeRange(TARGET_SHAPES[src], cols);
+        const rp = refShapeRange(TARGET_SHAPES[prevOf[t]], cols);
+        const lo = Math.max(r1.min, r2.min);
+        const hi = Math.min(r1.max, r2.max);
+        expect(
+          [Math.max(rp.min, r2.min), Math.min(rp.max, r2.max)],
+          `cols ${cols}, into ${TARGET_SHAPES[t].label}: selection (from ${TARGET_SHAPES[prevOf[t]].label}) and rotation (from ${TARGET_SHAPES[src].label}) branch ranges`
+        ).toEqual([lo, hi]);
+        expect(lo, `cols ${cols}, into ${TARGET_SHAPES[t].label}: the branch range is nonempty`).toBeLessThanOrEqual(hi);
+      }
     }
   });
 

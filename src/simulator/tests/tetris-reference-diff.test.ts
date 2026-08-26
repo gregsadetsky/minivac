@@ -32,6 +32,7 @@ import {
   NSTATES,
   ROT_STATE,
   TETRIS_IO,
+  SELECTION_NEXT,
   homeColumn as circuitHome,
 } from '../../circuits/multivac-mini-tetris';
 import {
@@ -175,6 +176,7 @@ function makePair() {
     shapes: NSTATES, // compat knob: only the implemented ring
     rot: 'current', // compat knob: the machine's flip map, not the 4-cycles yet
     currentRot: ROT_STATE,
+    selectionNext: SELECTION_NEXT, // the circuit's own chooser map (its D-feed wiring)
     home: circuitHome(COLS), // CENTER SPAWN — at target since 2026-08-26
   });
   let n = 0;

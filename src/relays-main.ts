@@ -39,7 +39,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, ringPart } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, SELECTION_NEXT, ringPart } from './circuits/multivac-mini-tetris';
 import { panelLayout, sectionOrigin, SEC_JACKS, CONTACT_SETS, SEC_W, SEC_H, COIL_BOX } from './relays/panel-layout';
 import { buildWirePaths, type WireStyle, type WirePaths } from './relays/wire-paths';
 import { circuitBlocks, ownerMap } from './relays/blocks';
@@ -662,7 +662,7 @@ function* gSteer(target: number): Step {
 function* gStepShape(): Step {
   const cur = shapeAt();
   const falling = tokenRow() >= 0;
-  const next = falling ? ROT_STATE(cur) : (cur + 1) % SHAPES.length;
+  const next = falling ? ROT_STATE(cur) : SELECTION_NEXT(cur);
   if (next === cur) return;
   const p = posAt();
   if (p >= 0) {
@@ -773,7 +773,7 @@ function handleKey(key: string): void {
   } else if (key === 'ArrowUp') {
     const falling = tokenRow() >= 0;
     const cur = shapeAt();
-    const next = falling ? ROT_STATE(cur) : (cur + 1) % SHAPES.length;
+    const next = falling ? ROT_STATE(cur) : SELECTION_NEXT(cur);
     if (next === cur) return void say(`${SHAPES[cur].label} has only one orientation`);
     act(falling ? `rotate: ${SHAPES[next].label}` : SHAPES[next].label, function* () {
       yield* gStepShape();

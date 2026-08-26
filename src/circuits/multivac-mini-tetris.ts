@@ -131,9 +131,30 @@ export function homeColumn(cols: number): number {
 // branch carries the ROTATION pair's deltas and serves selection too —
 // upResourceCounts asserts the pos ranges coincide per shared branch.
 export const ROT_STATE = (i: number) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 && i < 12 ? (i < 9 ? i + 3 : i - 3) : i);
+// THE SELECTION CYCLE (B1 groundwork, 2026-08-26): the chooser order is
+// D-FEED WIRING, not index order — each master's coil com is fed through
+// its predecessor slave's set2, so this array IS the map those wires
+// implement. Today it is the identity cycle (byte-identity verified when
+// the indirection landed); B1 threads the verticals in next to their
+// rotation partners (... 4 S -> 13 S vert -> 5 Z -> 14 Z vert -> 6 L ...)
+// so every new edge's selection predecessor IS its rotation source and
+// the shared-branch invariant below holds without new machinery. The
+// page, the drivers and the reference read THIS, never (i+1)%NSTATES.
+export const SELECTION_CYCLE: readonly number[] = Array.from({ length: NSTATES }, (_, i) => i);
+if (SELECTION_CYCLE.length !== NSTATES || new Set(SELECTION_CYCLE).size !== NSTATES)
+  throw new Error('SELECTION_CYCLE must be a permutation of the ring');
+const SEL_NEXT: number[] = [];
+const SEL_PREV: number[] = [];
+SELECTION_CYCLE.forEach((s, k) => {
+  const n = SELECTION_CYCLE[(k + 1) % SELECTION_CYCLE.length];
+  SEL_NEXT[s] = n;
+  SEL_PREV[n] = s;
+});
+export const SELECTION_NEXT = (i: number) => SEL_NEXT[i];
+export const SELECTION_PREV = (i: number) => SEL_PREV[i];
 // the state whose deltas the target's branch checks (the mid-fall
 // source when one exists, else the selection predecessor)
-export const DELTA_SOURCE = (t: number) => (ROT_STATE(t) !== t ? ROT_STATE(t) : (t + NSTATES - 1) % NSTATES);
+export const DELTA_SOURCE = (t: number) => (ROT_STATE(t) !== t ? ROT_STATE(t) : SELECTION_PREV(t));
 
 export function upResourceCounts(cols: number) {
   const span = (o: number, w2: number, p: number) => Array.from({ length: w2 }, (_, k) => p + o + k);
@@ -150,7 +171,7 @@ export function upResourceCounts(cols: number) {
     // range(t)) has to equal the selection edge's (range(prev) n
     // range(t)) — the reviewer's hand-check said they coincide at 4 and
     // 6; this assert is the mechanical version
-    const prev = SHAPES[(t + NSTATES - 1) % NSTATES];
+    const prev = SHAPES[SELECTION_PREV(t)];
     const rp = shapeRange(prev, cols);
     const lo = Math.max(r1.min, r2.min);
     const hi = Math.min(r1.max, r2.max);
@@ -2954,7 +2975,9 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${comOf(a)}/${R(a, 'E')}`, `${R(a, 'F')}/${minusOf(a)}`);
     w.push(`${comOf(sl)}/${R(sl, 'E')}`, `${R(sl, 'F')}/${minusOf(sl)}`);
     w.push(`${plusOf(c)}/${R(c, 'H')}`, `${plusOf(c)}/${R(c, 'L')}`);
-    const prevIx = (i + NSTATES - 1) % NSTATES;
+    // the D-feed IS the selection map: the predecessor comes from
+    // SELECTION_CYCLE, not from index order (B1 groundwork)
+    const prevIx = SELECTION_PREV(i);
     const prev = SH(prevIx, 2);
     w.push(`${R(c, 'J')}/${R(prev, 'L')}`);
     if (ROT_STATE(prevIx) === i) {

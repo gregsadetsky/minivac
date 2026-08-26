@@ -129,7 +129,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { MinivacSimulator, setSolverEngine } from '../minivac-simulator';
-import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET, SHAPES, shapeRange, NSTATES, ROT_STATE, ringPart, homeColumn } from '../../circuits/multivac-mini-tetris';
+import { tetrisCircuit, MACHINES, CELL, RING, PIECE, VMODE, TOPW, P2M, P2S, LKS, ELEVSL, POSS, POSA, GAMEOVER, SCR, LEFTBTN, TETRIS_IO, WIDM, STAGM, PIECET, SHAPES, shapeRange, NSTATES, ROT_STATE, SELECTION_NEXT, ringPart, homeColumn } from '../../circuits/multivac-mini-tetris';
 
 // the register's home column — the CENTER since 2026-08-26 (center spawn):
 // 1 on the classic 4-wide well. power-on seeds here, every reset re-homes here.
@@ -1753,7 +1753,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     };
     let wrap = 0;
     while (ringAt() !== 4 && wrap++ < 3 * SHAPES.length) {
-      const r = shapeRange(SHAPES[(ringAt() + 1) % SHAPES.length], 4);
+      const r = shapeRange(SHAPES[SELECTION_NEXT(ringAt())], 4);
       let st = 0;
       while (g.posAt() < r.min && st++ < 6) g.pressBtn(TETRIS_IO.right);
       while (g.posAt() > r.max && st++ < 6) g.pressBtn(TETRIS_IO.left);
@@ -2489,7 +2489,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const walkTo = (ix: number, tp: number) => {
       let g = 0;
       while (shape6() !== ix && g++ < 30) {
-        const r = shapeRange(SHAPES[(shape6() + 1) % SHAPES.length], COLS6);
+        const r = shapeRange(SHAPES[SELECTION_NEXT(shape6())], COLS6);
         let g2 = 0;
         while (pos6() < r.min && g2++ < 8) press6(4, btnMachine);
         while (pos6() > r.max && g2++ < 8) press6(3, btnMachine);
@@ -2561,7 +2561,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const drop2 = (ix: number, p: number) => {
       let g = 0;
       while (shape2() !== ix && g++ < 30) {
-        const r = shapeRange(SHAPES[(shape2() + 1) % SHAPES.length], COLS6);
+        const r = shapeRange(SHAPES[SELECTION_NEXT(shape2())], COLS6);
         let g2 = 0;
         while (pos2() < r.min && g2++ < 8) press2(4, btnMachine);
         while (pos2() > r.max && g2++ < 8) press2(3, btnMachine);
@@ -2634,7 +2634,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // because a transition out of range simply has no branch
     let guard = 0;
     while (shape() !== 12 && guard++ < 40) {
-      const r = shapeRange(SHAPES[(shape() + 1) % SHAPES.length], COLS);
+      const r = shapeRange(SHAPES[SELECTION_NEXT(shape())], COLS);
       let g2 = 0;
       while (pos() < r.min && g2++ < 8) press(4);
       while (pos() > r.max && g2++ < 8) press(3);
@@ -2729,7 +2729,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       // top, so a wrong phase-2 write is unmistakable
       let g = 0;
       while (shape() !== 6 && g++ < 40) {
-        const r = shapeRange(SHAPES[(shape() + 1) % SHAPES.length], COLS);
+        const r = shapeRange(SHAPES[SELECTION_NEXT(shape())], COLS);
         let g2 = 0;
         while (pos() < r.min && g2++ < 8) press(4);
         while (pos() > r.max && g2++ < 8) press(3);
