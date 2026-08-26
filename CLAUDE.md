@@ -89,9 +89,14 @@ M10/M11 — multivac tests enforce via assertJackCapacity().
   new game behavior gets specified in the reference FIRST.
 - the register homes at the CENTER: homeColumn(cols) — 1 at four wide,
   2 at six. tests use the HOME constant; un-steered drops fall at HOME.
-- /tetris/ deals pieces (operator's dice, page-side; ?deal=manual for
-  the driver). the relay dealer stays an open rung with a recorded
-  quality problem — see _notes/dealer.md before designing it.
+- /tetris/ deals by FREE-RUN + SAMPLE (2026-08-26, user call: no
+  Math.random choosing pieces, ever — that is javascript tetris with
+  relays blinking). between pieces the page cranks UP and the ring
+  spins; the player's ↓/enter press samples it (entropy = press timing;
+  unattended, the gravity timer takes it after >= 1 full revolution).
+  JS supplies CADENCE (the operator's hand), never CHOICE. ?deal=manual
+  for the driver. D2 (the crank in relays: motor dial / oscillator +
+  dealing-window relay) is an open rung — _notes/dealer.md.
 
 ## UI performance invariants (react panel)
 

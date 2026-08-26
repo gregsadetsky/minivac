@@ -1,3 +1,17 @@
+- THE WOW VIZ (2026-08-26, user call — this is the point, not a polish item):
+  a zoomable "all the minivacs" view of the tetris multivac — hundreds of
+  machines on one canvas, zoom out = the whole wall of them running, zoom
+  in = individual wires and relay armatures MOVING. much closer to the main
+  panel UI in feel, but fully react-less (canvas/webgl; the react panel's
+  perf lessons in CLAUDE.md are the floor, not the ceiling), and updated
+  between/async with the main calculation — the game must never wait on
+  paint. why it's not optional: "if there's no wow/visual people will think
+  this is tetris. it's not. sound is not convincing enough." the /relays/
+  page is a debugger, not this. rough shape: one static geometry buffer for
+  panels/wires (they never move), per-frame dirty-set of relay/light states
+  from the sim's stateVersion, armature flip animation only for relays that
+  changed, LOD by zoom (dots -> sections -> full jacks/wires), pan/zoom like
+  a map. start from the existing browser-side notes in _notes/ (gitignored).
 - wheel animation RESOLVED 2026-08-19 (was: spurts). full chain, each step measured:
   solver 14 newton iters on a zero-residual float pathology (epsilon fix, 3x) ->
   full-panel react renders at 120fps at idle (state-signature gate) -> renders from

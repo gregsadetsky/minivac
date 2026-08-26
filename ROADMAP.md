@@ -1008,6 +1008,26 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    phase tick, a fourth fan row, a tok-3 read, and TICKM4 needs a
    mirror), then the diff harness's rot knob flips.
 
+52. THE DICE DIED 2026-08-26 (user call): the page dealer's
+   Math.random target — relay presses performing around a JS choice —
+   was exactly the fake this project must never be. replaced with
+   FREE-RUN + SAMPLE, the only randomness a relay machine has ever had:
+   between pieces the page cranks UP with NO target (JS = the
+   operator's hand, cadence only, never choice) and the ring visibly
+   spins through all 21 states; the player's ↓/space/enter press
+   samples it — the piece IS the state the contacts held at that
+   instant. serve keys act immediately during the spin (queueing would
+   decouple the piece from the press). declared, not hidden: instant
+   pressers walk the selection cycle in order (the machine reflects
+   the entropy you feed it); timing a shape is a legal skill stop;
+   unattended, the gravity timer samples after >= 1 full revolution
+   (never near-adjacent to the previous deal) riding timer-vs-solve
+   wall-clock drift. the /relays/ viewer's "random" option DELETED
+   (its named-state picker is the honest open chooser). D2 — the crank
+   in relays (the real 601's motor dial was the machine's own 1961
+   randomizer; or the 3b-5 oscillator) through a dealing-window relay
+   — is an open rung in _notes/dealer.md, review before wiring.
+
 NEXT — THE ROAD TO NORMAL ROTATION (updated 2026-08-26 after the B1
    review; the full hole-counted ledger is at the end of
    _notes/tall-pieces.md and is the wiring authority):
@@ -1056,9 +1076,10 @@ NEXT — THE ROAD TO NORMAL ROTATION (updated 2026-08-26 after the B1
       occupancy row; TICKM4's sets are now full — it needs a mirror.
    4. flip the diff harness's rot knob to 'target': that green run IS
       normal rotation. delete the page seams as B1-5/B2 close them.
-   5. after the ladder: the relay dealer design round (the tick-clocked
-      ring deals near-adjacent states — needs a fast private counter or
-      input-clocked stepping; the page's dice hold until then), and the
+   5. after the ladder: D2, the relay dealer crank (motor dial or the
+      3b-5 oscillator pulsing the ring clock through a dealing-window
+      relay — the page's free-run+sample holds until then; the dice are
+      DEAD, see rung 52), and the
       wider-well question (the solver floor says 10x20 is out; whether
       8 or 10 columns at 12 rows stays playable is a measurement).
 

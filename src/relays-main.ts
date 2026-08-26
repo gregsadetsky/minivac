@@ -684,19 +684,20 @@ function* gDeal(target: number): Step {
 }
 
 // ---- the dealer -----------------------------------------------------------
-// THE MACHINE HAS NO RANDOMNESS. There is no noise source in a relay bank
-// and no dealer bank in this circuit yet, so "random" here is the OPERATOR
-// rolling a die and then stepping the shape ring with the UP button —
-// exactly the presses a human would make, just made for you. The ring
-// itself, and every refusal along the way, is still the relays'.
+// THE MACHINE HAS NO RANDOMNESS, and this viewer does not fake any: the
+// picker deals a NAMED state (the operator choosing openly, every step
+// still allowed or refused by the contacts). there is no "random" option —
+// a hidden random call choosing the target is exactly the fake the game
+// page's free-running dealer exists to avoid (_notes/dealer.md, D1: the
+// ring spins between pieces and the player's own press samples it).
 selDeal.innerHTML =
-  '<option value="-2">manual</option><option value="-1">random</option>' +
+  '<option value="-2">manual</option>' +
   SHAPES.map((s, i) => `<option value="${i}">${s.label}</option>`).join('');
 selDeal.value = '-2';
 function* gDealNext(): Step {
   const mode = parseInt(selDeal.value, 10);
   if (mode === -2 || tokenRow() >= 0) return;
-  const want = mode === -1 ? Math.floor(Math.random() * SHAPES.length) : mode;
+  const want = mode;
   if (want === shapeAt()) return;
   yield* gDeal(want);
   if (shapeAt() !== want)

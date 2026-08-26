@@ -141,3 +141,57 @@ press per frame, every transition still allowed/refused by the contacts.
 ?deal=manual turns it off (the driver's step-exact scripts use that).
 the machine semantics are untouched, so the reference-model differential
 is unaffected: randomness lives exactly where a human operator would be.
+
+## 2026-08-26, later — THE DICE DIE (user call, and the right one)
+
+the user's verdict on what shipped above: Math.random choosing the
+target with relay presses performing around it is "javascript tetris
+with relays blinking" — the exact fake this project exists to not be.
+correct. the operator-dice framing hid the one part that matters: WHO
+CHOOSES. the presses were real; the choice was not the machine's, and
+not a human's either.
+
+### the honest split of roles
+
+JS may supply CADENCE (the operator's hand: the gravity timer, crank
+pulses, conveying keys to buttons). JS may never supply CHOICE (which
+piece). the only entropy this machine has ever had access to is human
+input timing — so the dealer must be built on that, the way 1960s
+arcade hardware did it: a counter running fast relative to human
+reaction, sampled by the player's own press.
+
+### D1 — SHIPPED (page side): the free-running ring, sampled by your press
+
+between pieces the page cranks UP continuously — no target, no random
+call anywhere in the deal path — and the shape ring visibly spins
+through all 21 states (clamp steps into each next state's fit range,
+every transition allowed/refused by the contacts, as ever). the piece
+you get is the state the contacts held when you pressed ↓/space/enter
+(the serve key acts IMMEDIATELY during the spin — queueing it would
+decouple the piece from the press instant, which is the whole point).
+
+declared properties, not hidden:
+- press instantly every time and you walk the selection cycle in order:
+  the machine reflects exactly the entropy you feed it.
+- a patient player can try to time a shape — a skill stop (pachislo).
+  feature, documented.
+- unattended (auto-gravity, nobody pressing): the 700ms timer takes the
+  piece after AT LEAST ONE FULL REVOLUTION (never near-adjacent to the
+  previous state — the quality problem recorded above). the sample then
+  rides the drift between the timer grid and the spin's solve cadence:
+  deterministic in principle, drifting in practice. the attract mode is
+  a demo; the human mode is the game.
+- the /relays/ viewer's "random" dropdown option is DELETED — its named
+  state picker (deal me a T) is the honest open chooser.
+
+### D2 — OPEN RUNG (relay side): the crank moves into the machine
+
+the motor dial — the real Minivac 601's own randomizer (the 1961
+manual's games use the motorized rotary for chance) — or the 3b-5
+capacitor oscillator pulses the ring clock through a DEALING-WINDOW
+relay: latched at the reset tick (the piece died), broken by START.
+then JS is not even the hand. needs the clean-context review the note
+above already called for: the window gating vs NOTOK, the oscillator's
+flutter class (it must pulse the RING CLOCK, not the game tick — the
+flutter lesson in CLAUDE.md), and whether motor cadence vs relay settle
+time double-steps.

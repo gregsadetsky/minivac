@@ -382,7 +382,7 @@ function runTick() {
           busy = false;
           const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
           render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
-          if (n > 0) dealNext(); // a lock finished: deal the next piece
+          if (n > 0) deal(); // a lock finished: spin for the next piece
           drainKeys();
         }
       }, n === 0 ? 120 : 16);
@@ -390,60 +390,76 @@ function runTick() {
   step(0);
 }
 
-// ---- the dealer: the operator's dice ---------------------------------
+// ---- the dealer: the free-running ring, sampled by YOUR press ---------
 // THE MACHINE HAS NO RANDOMNESS (nothing in a relay bank is a noise
-// source, and the tick-clocked free-running ring the dealer note designed
-// deals near-adjacent states — see _notes/dealer.md). So the page rolls
-// the die and makes the presses a human would: after every lock (and at
-// boot) it walks the shape ring toward a random state, one clamped press
-// per frame, every single transition still allowed or refused by the
-// CONTACTS. UP pre-spawn still re-picks by hand; UP mid-fall rotates.
-// ?deal=manual turns the dice off (the driver's step-exact scripts need a
-// deterministic chooser; a human just plays with the deal on)
+// source). What a relay machine CAN do — the trick 1960s arcade hardware
+// used — is run a counter fast compared to human reaction time and let
+// the player's own press sample it. So between pieces the shape ring
+// FREE-RUNS: the page cranks UP continuously (the operator's hand; it
+// never chooses a target — there is no random call anywhere in the deal)
+// and the piece you get is whatever state the contacts held at the
+// instant you pressed ↓/space/enter. The entropy is your timing against
+// the spin. Press instantly every time and you walk the selection cycle
+// in order — the machine reflects exactly the entropy you feed it; a
+// patient player can even try to time a shape (a skill stop, documented
+// not hidden). Unattended, the auto-gravity timer takes the piece after
+// at least one full revolution: that sample rides the wall-clock drift
+// between the 700ms grid and the spin's own solve cadence —
+// deterministic in principle, drifting in practice, labeled as such in
+// _notes/dealer.md (D1 there; D2, the crank moving into the machine via
+// the motor dial or the 3b-5 oscillator, is its own relay rung).
+// ?deal=manual turns the spin off (the driver's step-exact scripts need
+// a deterministic chooser; UP pre-spawn still re-picks by hand).
 const DEAL_RANDOM = new URLSearchParams(window.location.search).get('deal') !== 'manual';
-// AUTO-SERVE (user call, 2026-08-26): real tetris does not wait for a
-// start press per piece — once the deal lands, the page makes the same
-// START press a human would and the next (auto) tick spawns. dealer
-// mode only: the driver's step-exact scripts keep manual arming.
 function serve() {
   if (!DEAL_RANDOM || relay(IO.gameOverRelay) || tokenRow() >= 0) return;
   press(IO.start);
 }
 let dealing = false;
-function dealNext() {
+let serveReq = false; // a human pressed ↓/space/enter during the spin
+let autoServeReq = false; // the gravity timer fired during the spin
+function deal() {
   if (!DEAL_RANDOM) return;
   if (busy || dealing || relay(IO.gameOverRelay) || tokenRow() >= 0) return;
-  const want = Math.floor(Math.random() * SHAPES.length);
-  if (shapeAt() === want) {
-    serve(); // nothing to walk, but the piece still self-serves
-    return;
-  }
   dealing = true;
   busy = true;
-  status.textContent = 'dealing…';
-  const step = (guard: number) =>
+  serveReq = false;
+  autoServeReq = false;
+  let steps = 0; // completed ring steps (a revolution = SHAPES.length)
+  let stall = 0; // safety only: the cycle is fully walkable from center
+  const step = () =>
     setTimeout(() => {
-      const cur = shapeAt();
-      const done = (note: string) => {
+      if (relay(IO.gameOverRelay)) {
         dealing = false;
-        serve(); // the dealt piece self-serves; the next tick spawns it
         busy = false;
-        render(note);
+        render();
+        return;
+      }
+      if (serveReq || (autoServeReq && steps >= SHAPES.length) || stall > SHAPES.length) {
+        dealing = false;
+        serve(); // the sampled state spawns on the next tick
+        busy = false;
+        render(`dealt: ${shapeLabel()}`);
         drainKeys();
-      };
-      if (cur === want || guard <= 0) return done(`dealt: ${shapeLabel()}`);
-      // clamp the register into the NEXT state's fit range, then press UP
+        return;
+      }
+      // clamp the register into the NEXT state's fit range, then press
+      // UP — every transition still allowed or refused by the CONTACTS
+      const cur = shapeAt();
       const nIx = SELECTION_NEXT(cur); // the chooser cycle is circuit-defined
       const { min, max } = shapeRange(SHAPES[nIx], COLS);
       const p = posAt();
       const nPos = Math.min(max, Math.max(min, p));
       if (p !== nPos) press(p < nPos ? IO.right : IO.left);
       else press(IO.up);
-      if (shapeAt() === cur && posAt() === p)
-        return done(`dealt as far as ${shapeLabel()} — the contacts refused the rest`);
-      step(guard - 1);
+      if (shapeAt() !== cur) {
+        steps++;
+        stall = 0;
+      } else if (posAt() === p) stall++;
+      status.textContent = `the ring spins — ${shapeLabel()} … ↓ or enter takes it`;
+      step();
     }, 16);
-  step(3 * SHAPES.length + COLS);
+  step();
 }
 
 // auto-gravity: a timer cycles the TICK SLIDE at operator cadence — the
@@ -461,7 +477,14 @@ function setAuto(on: boolean) {
   autoOn = on;
   if (on && autoTimer === undefined) {
     autoTimer = setInterval(() => {
-      if (busy || relay(IO.gameOverRelay)) return;
+      if (relay(IO.gameOverRelay)) return;
+      if (dealing) {
+        // take the spinning piece — but only past a full revolution,
+        // so an unattended deal never lands near the previous state
+        autoServeReq = true;
+        return;
+      }
+      if (busy) return;
       runTick();
     }, 700);
   } else if (!on && autoTimer !== undefined) {
@@ -505,6 +528,13 @@ document.addEventListener('keydown', e => {
 function handleKey(key: string) {
   const e = { key };
   if (busy && GAME_KEYS.includes(key) && !relay(IO.gameOverRelay)) {
+    // during the spin, ↓/space/enter IS the sample — it acts now, it
+    // does not queue (queueing it would decouple the piece from the
+    // press instant, which is the whole point of the free-run dealer)
+    if (dealing && (key === 'ArrowDown' || key === ' ' || key === 'Enter')) {
+      serveReq = true;
+      return;
+    }
     if (keyQueue.length < 4) keyQueue.push(key);
     return;
   }
@@ -608,8 +638,8 @@ setTimeout(() => {
   sim.initialize();
   // nothing to apply: the shape ring seeds at 1x1, the slides stay parked
   busy = false;
-  render(DEAL_RANDOM ? 'ready — dealing the first piece…' : 'ready — press enter to spawn a piece');
-  dealNext(); // the first piece is dealt too (and self-serves)
+  render(DEAL_RANDOM ? 'ready — the ring spins; ↓ or enter takes a piece' : 'ready — press enter to spawn a piece');
+  deal(); // the first piece spins too
   // GRAVITY ON BY DEFAULT (user call, 2026-08-26): the game plays like
   // tetris out of the box; 'a' pauses and resumes it. driver mode keeps
   // gravity off — its scripts own every tick.
