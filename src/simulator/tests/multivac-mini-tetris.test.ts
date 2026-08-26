@@ -1662,19 +1662,16 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(g.posAt(), 'the triple bound: pos 2 refused in contacts').toBe(1);
     g.pressBtn(TETRIS_IO.left);
     expect(g.posAt()).toBe(0);
-    up(); // L1 -> J1: the stem moves to the right end
-    expect(shapeAt()).toBe(7);
-    expect(botBank()).toBe(0b0111);
-    expect(topBank(), 'J1 top: the stem on the right').toBe(0b0100);
-    up(); // J1 -> T1: the stem centers
-    expect(shapeAt()).toBe(8);
-    expect(botBank()).toBe(0b0111);
-    expect(topBank(), 'T1 top: the stem centered').toBe(0b0010);
-    g.pressBtn(TETRIS_IO.left);
-    expect(g.posAt(), 'the left edge self-loops as ever').toBe(0);
-    // 3b-4c: the OVERHANG trio — 3-wide TOPS over offset single bottoms
-    up(); // T1 -> L2: the base column is CUT, the bottom rides WID3 alone
-    expect(shapeAt(), 'T1 steps into L2 now, not home').toBe(9);
+    // B2: the chooser now runs the ROTATION CYCLES CONCATENATED — each
+    // family's four orientations ride consecutively (L, L vert R,
+    // L flip, L vert L; then J's four; then T's; then the I). the
+    // verticals' own rails and fans are pinned state by state in
+    // multivac-vertical-pieces; here the walk just passes through them
+    // and re-checks every pre-B2 state at its NEW cycle position.
+    up(); // L1 -> L vert R
+    expect(shapeAt()).toBe(15);
+    up(); // -> L flip (L2): the base column is CUT, the bottom rides WID3 alone
+    expect(shapeAt(), 'L vert R steps into L2').toBe(9);
     expect(rails(), 'L2: NOT wide-paired, tall, T-fan phase 2').toEqual([0, 1, 1]);
     expect(botBank(), 'L2 bottom: the single at p+2').toBe(0b0100);
     expect(topBank(), 'L2 top: the triple').toBe(0b0111);
@@ -1686,21 +1683,41 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(g.posAt(), 'the 3-wide TOP bound: pos 2 refused').toBe(1);
     g.pressBtn(TETRIS_IO.left);
     expect(g.posAt()).toBe(0);
-    up(); // L2 -> J2: the bottom moves to the base column
+    up(); // -> L vert L
+    expect(shapeAt()).toBe(16);
+    up(); // -> J1: the stem on the right end
+    expect(shapeAt()).toBe(7);
+    expect(botBank()).toBe(0b0111);
+    expect(topBank(), 'J1 top: the stem on the right').toBe(0b0100);
+    up(); // -> J vert R
+    expect(shapeAt()).toBe(17);
+    up(); // -> J flip (J2): the bottom moves to the base column
     expect(shapeAt()).toBe(10);
     expect(rails(), 'J2: plain base bottom').toEqual([0, 1, 1]);
     expect(botBank(), 'J2 bottom: the single at p').toBe(0b0001);
     expect(topBank()).toBe(0b0111);
-    up(); // J2 -> T2: the bottom centers (the WIDM tap with the base cut)
+    up(); // -> J vert L
+    expect(shapeAt()).toBe(18);
+    up(); // -> T1: the stem centers
+    expect(shapeAt()).toBe(8);
+    expect(botBank()).toBe(0b0111);
+    expect(topBank(), 'T1 top: the stem centered').toBe(0b0010);
+    g.pressBtn(TETRIS_IO.left);
+    expect(g.posAt(), 'the left edge self-loops as ever').toBe(0);
+    up(); // -> T vert R
+    expect(shapeAt()).toBe(19);
+    up(); // -> T flip (T2): the bottom centers (the WIDM tap, base cut)
     expect(shapeAt()).toBe(11);
     expect(rails(), 'T2: rides the wide tap').toEqual([1, 1, 1]);
     expect(botBank(), 'T2 bottom: the single at p+1').toBe(0b0010);
     expect(topBank()).toBe(0b0111);
+    up(); // -> T vert L
+    expect(shapeAt()).toBe(20);
     // 3b-4d: the horizontal I — four wide and FLAT. it joins the same
     // wide rails the 2- and 3-wide bottoms use (the fan's offsets 1 and
     // 2) plus its own offset-3 rail, and never touches VMODE or STAG.
-    up(); // T2 -> I
-    expect(shapeAt(), 'T2 steps into the I now, not home').toBe(12);
+    up(); // T vert L -> I
+    expect(shapeAt(), 'T vert L steps into the I').toBe(12);
     expect(rails(), 'I: wide, not tall, not staggered').toEqual([1, 0, 0]);
     expect(botBank(), 'I bottom: four columns from p').toBe(0b1111);
     expect(topBank(), 'a flat piece never feeds the T bank').toBe(0);
@@ -1901,7 +1918,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     model[6] = 0b0010;
     expect(g.field(), 'L: the stem on the left end').toEqual(model);
     g.tick(); // reset re-homes the register to the CENTER (pos 1)
-    up(); // -> J1 at pos 1 (entry checks are dark pre-spawn)
+    for (let k = 0; k < 4; k++) up(); // -> J1, through L's verticals and the flip (B2 cycle)
     expect(g.posAt()).toBe(1);
     g.tick(); // spawn (J1 drops at the home column)
     for (let r = 1; r <= 5; r++) g.tick(); // rests at 5 on the L's stem (6,1)
@@ -1911,7 +1928,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     model[4] = 0b1000;
     expect(g.field(), 'J: the stem on the right end').toEqual(model);
     g.tick(); // reset
-    up(); // -> T1 at the re-homed pos 1
+    for (let k = 0; k < 4; k++) up(); // -> T1, through J's verticals and the flip
     g.tick(); // spawn
     for (let r = 1; r <= 3; r++) g.tick(); // rests at 3 on the J's stem (4,3)
     model[3] = 0b1110;
@@ -1988,7 +2005,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // J1 right: the stem lands one row up at col 3
     g = makeGame();
     g.operatorWrite(4, 0b1000); // the floater at (4,3)
-    walkTo(g, 9); // J1 at pos 1
+    walkTo(g, 12); // J1 at pos 1 (the B2 cycle interleaves the verticals)
     g.pressBtn(TETRIS_IO.left);
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5: stem target (4,3)
@@ -2036,7 +2053,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const up = () => g.pressBtn(TETRIS_IO.up);
     const model = Array(8).fill(0);
     // L2 at pos 0 (the CENTER home pos 1 transits S in range; walk left for the drop)
-    for (let k = 0; k < 11; k++) up(); // -> L2 (through the B1 verticals)
+    for (let k = 0; k < 10; k++) up(); // -> L2 (the B2 cycle: L's flip rides right after L vert R)
     g.pressBtn(TETRIS_IO.left);
     g.pressStart();
     g.tick(); // spawn
@@ -2047,7 +2064,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     model[6] = 0b0111;
     expect(g.field(), 'L2: the triple top').toEqual(model);
     g.tick(); // reset
-    up(); // -> J2 at the re-homed CENTER (pos 1)
+    for (let k = 0; k < 4; k++) up(); // -> J2, through L vert L, J1, J vert R
     g.tick(); // spawn
     // J2's bottom (col 1) rests by the ordinary bottom term on the L2's
     // top at (6,1)
@@ -2069,7 +2086,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(4, 0b0001); // the tower at (4,0): left-target top col 0
     // the CENTER home IS pos 1
-    for (let k = 0; k < 13; k++) up(); // -> T2 at pos 1 (bottom col 2, top 1-3)
+    for (let k = 0; k < 18; k++) up(); // -> T2 at pos 1 (bottom col 2, top 1-3)
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the tower
     expect(g.tokenAt()).toEqual([5]);
@@ -2178,7 +2195,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(5, 0b0001); // the stack at (5,0)
     // the CENTER home pos 1 carries the chooser past S
-    for (let k = 0; k < 11; k++) g.pressBtn(TETRIS_IO.up); // L2, pre-spawn
+    for (let k = 0; k < 10; k++) g.pressBtn(TETRIS_IO.up); // L2, pre-spawn
     expect(shapeAt6(g), 'chose the L flip before spawning').toBe(9);
     g.pressBtn(TETRIS_IO.left); // back to pos 0
     g.pressStart();
@@ -2191,13 +2208,13 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
 
     // the same turn, same columns, on a clear field: it conducts
     g = makeGame();
-    for (let k = 0; k < 11; k++) g.pressBtn(TETRIS_IO.up); // L2 (home transits the verticals too)
+    for (let k = 0; k < 10; k++) g.pressBtn(TETRIS_IO.up); // L2 (home transits the verticals too)
     g.pressBtn(TETRIS_IO.left); // pos 0
     g.pressStart();
     for (let t = 0; t <= 3; t++) g.tick(); // still falling, nothing stored
     expect(g.tokenAt()).toEqual([3]);
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt6(g), 'over empty cells the same turn conducts').toBe(6);
+    expect(shapeAt6(g), 'over empty cells the same turn conducts (to L vert L since B2)').toBe(16);
     expect(g.m.getState().alerts).toEqual([]);
   });
 
@@ -2259,8 +2276,8 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       stepChooser();
       cycle.push(shapeAt());
     }
-    expect(cycle, 'the pre-spawn chooser cycles all fifteen (the B1 verticals ride next to their rotation partners)').toEqual([
-      1, 2, 3, 4, 13, 5, 14, 6, 7, 8, 9, 10, 11, 12, 0,
+    expect(cycle, 'the pre-spawn chooser cycles all twenty-one (the rotation cycles concatenated)').toEqual([
+      1, 2, 3, 4, 13, 5, 14, 6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20, 12, 0,
     ]);
 
     // MID-FALL the same button rotates: L1 <-> L2, both directions
@@ -2270,13 +2287,15 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g.tick();
     expect(g.tokenAt().length, 'a piece is falling').toBe(1);
     up();
-    expect(shapeAt(), 'L1 rotates to its flip').toBe(9);
+    expect(shapeAt(), 'L1 rotates a QUARTER turn now (B2)').toBe(15);
     up();
-    expect(shapeAt(), 'and back again').toBe(6);
-    // it is ROTATION, not the chooser: the selection successor (7 = J)
-    // is never reachable from a falling L
-    for (let k = 0; k < 4; k++) up();
-    expect([6, 9], 'UP mid-fall stays inside the L family').toContain(shapeAt());
+    expect(shapeAt(), 'the second quarter is the flip').toBe(9);
+    up();
+    up();
+    expect(shapeAt(), 'four quarters are the identity').toBe(6);
+    // it is ROTATION, not the chooser: J is never reachable mid-fall
+    for (let k = 0; k < 6; k++) up();
+    expect([6, 15, 9, 16], 'UP mid-fall stays inside the L family').toContain(shapeAt());
 
     // ONE-ORIENTATION shapes refuse mid-fall (no master is fed at all)
     for (let t = 0; t < 30 && g.tokenAt().length > 0; t++) g.tick();

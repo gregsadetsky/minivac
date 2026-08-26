@@ -1186,3 +1186,26 @@ TWO NEW GENERAL LESSONS, paid for at 3.53A:
    catches it (it did, three times).
 - scenario lesson AGAIN: a floor-bound piece has no steerable tok-7
   moment (merged lock) — the conducts-proof moves sideways.
+
+## B2 LANDED (2026-08-26) — see ROADMAP 51
+
+executed per the review with these wiring-time discoveries:
+- THE CLOCK SAG: 21 chained clock coils measured 92 -> 77mA head to
+  tail (70mA pickup) — staggered pickup let a one-wire D-feed's master
+  latch mid-pulse and cascade the ring two-hot. the CLKDRV pair +
+  four-segment clock net (each segment fed from an idle master's
+  machine) reads 194-216mA flat. NOTE FOR B3: a 22nd state joins
+  segment 3 (com 20 pairs 20/21); the segment map [0,6,12,18] holds
+  to 24 states.
+- the my-batch-edit-script-dies-silently trap: a failed assertion in a
+  multi-sub python edit loses EVERY sub (single write at the end).
+  five test fixes vanished that way and re-surfaced as regression
+  noise. write-per-sub or verify with grep after.
+- walkers that clamp into range(target) rather than the SHARED branch
+  range survive at the home column by luck; the into-I edge at 4 cols
+  is the only place it bites today (steer to 0 first, as shipped).
+B3 ledger seeds: fourth phase tick (TICKM4's sets are FULL - mirror
+needed), ROW3-analog changeover in the write path, a fourth fan (rows[3]),
+tok-3 occupancy for the rotation delta (12<->21: misses (r-1..r-3, p+2)),
+the I-vert's bottom at p+2 = a NEW BCUT/WID3-class combination, and the
+21->22 lockstep/driver/count updates. review before wiring, as ever.

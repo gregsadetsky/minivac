@@ -255,10 +255,10 @@ describe('the differential: machine vs reference, every key compared', () => {
     expect(ref.pos).toBe(circuitHome(COLS));
     selectShape(6, 'choose L');
     play(['tick'], 'spawn L');
-    play(['up'], 'L -> L flip mid-fall');
+    play(['up'], 'L -> L vert R mid-fall (a QUARTER turn since B2)');
+    expect(ref.shapeIx).toBe(15);
+    play(['up'], 'L vert R -> L flip');
     expect(ref.shapeIx).toBe(9);
-    play(['up'], 'L flip -> L');
-    expect(ref.shapeIx).toBe(6);
     while (ref.tokenRow >= 0) play(['tick'], 'drop the L');
 
     // T with a flip left in place, dropped wherever it lands legally

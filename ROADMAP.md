@@ -965,6 +965,49 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    (12,6); both page drivers green on the preview build (the pages
    draw the third row; the relays dealer deals all 15 states).
 
+51. B2 LANDED 2026-08-26, the same day as B1: THE L/J/T VERTICALS —
+   rotation is a TRUE 4-CYCLE in the contacts (L -> L vert R -> L flip
+   -> L vert L -> L, clockwise, and likewise J and T). 21 ring states:
+   every tetromino orientation except the vertical I (B3). landed as
+   three reviewed increments:
+   - B2-0, the tok-2 occupancy bank (MIRCT2/LEGINVT3, the MIRCT idiom
+     one level up; the UP emitter and the step trees read ALL THREE
+     shape rows) — B1's declared seams RETIRED, receipt red -> green
+     on the existing S vert. found while wiring, at 3.53A: THE
+     ARM-SOURCE RULE (a member contact sources its whole destination
+     net from the machine feeding its arm — chain the arms, feed once
+     from the destination's machine).
+   - B2-1, DELTA_SOURCE = ROT_PRED (byte-identical; the review's T-B
+     load assert stands guard against the silent 4-cycle mis-source).
+   - B2-2, the six states: the selection cycle became the rotation
+     cycles concatenated (muxes SHRANK to 9/12); ALL verticals ride
+     STAG (the review's T-A — a mid==bottom vertical through the B fan
+     would leave its phase 3 severed); the T2 fan grew its third rail
+     and the CUTC7 write-gate bank (multi-column phase-3 masks would
+     bridge rails as the T fan's once did); the left trees' per-state
+     bypasses collapsed into the shared BO1 union; LEGBT fired for real
+     (J vert L rests its top on stored content).
+   THE CLOCK DRIVERS, the rung's measured discovery: at 21 states the
+   single chained clock net sagged 92mA at the head to 77mA at the tail
+   against a 70mA pickup, and the tail clocks' staggered pickup opened
+   a one-wave window that cascaded the ring two-hot ([4,13],
+   reproduced). the legality network now fires a driver PAIR whose four
+   sets feed four SEGMENTS of the clock net from four idle-master
+   supplies: 194-216mA everywhere, one crisp wave. the same class as
+   the 3b-6 supply overload — RELAY COMPUTING IS ANALOG, and the sag
+   gradient was the (a)-grade receipt (the function reproduced the
+   measured values before the fix moved them).
+   receipts: the vertical battery grew to 9 (the live 4-cycle with all
+   three fans per state; an L vert R lock writing its 2-column top
+   through the cut bank with no fifth cell; LEGBT's first real rest;
+   the 21-wrap with the I still refusing) — all green; the tetris
+   regression green at 21 states including the diff harness and both
+   random runs; capacity + zero-undefined audits at (8,4)/(8,6)/(12,6);
+   the driver's rotation receipt DELIBERATELY REWRITTEN to the 4-cycle.
+   REMAINING to 'rotation: target': B3 (the vertical I — a fourth
+   phase tick, a fourth fan row, a tok-3 read, and TICKM4 needs a
+   mirror), then the diff harness's rot knob flips.
+
 NEXT — THE ROAD TO NORMAL ROTATION (updated 2026-08-26 after the B1
    review; the full hole-counted ledger is at the end of
    _notes/tall-pieces.md and is the wiring authority):

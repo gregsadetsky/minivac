@@ -104,7 +104,7 @@ console.log('boot:', await status());
   const labels = await page.$$eval('#rv-deal option', (os) =>
     os.map((o) => [o.value, o.textContent]).filter(([v]) => +v >= 0)
   );
-  if (labels.length !== 15) fail(`dealer lists ${labels.length} shapes, expected 15 (B1 added the S/Z verticals)`);
+  if (labels.length !== 21) fail(`dealer lists ${labels.length} shapes, expected 21 (B2: every orientation but the vertical I)`);
   let dealt = 0;
   for (const [value, label] of labels) {
     await page.selectOption('#rv-deal', value);
@@ -159,6 +159,14 @@ await waitIdle('tick');
   const r2 = rowOf((await well()).rows);
   if (r2 !== r0 + 1) fail(`after ArrowUp the piece stopped mid-air: row ${r0} -> ${r2}`);
   else console.log(`ok  ArrowUp leaves the piece falling (row ${r0} -> ${r2})`);
+  // B2: that UP was a QUARTER turn (T -> T vert R). complete the 4-cycle
+  // so the landing phase below sees the canonical 2-row T again — and
+  // this page receipts the full rotation cycle on the way.
+  for (let k = 0; k < 3; k++) {
+    await page.keyboard.press('ArrowUp');
+    await waitIdle('4-cycle');
+  }
+  console.log('ok  the 4-cycle returned the T (three more quarter turns)');
 }
 
 // ---- 6. a second START mid-fall is refused (no stranded mid-air cell) ------

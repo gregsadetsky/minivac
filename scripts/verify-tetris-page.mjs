@@ -148,7 +148,7 @@ if (rSq2[11] !== 'OOO.OO' || rSq2[10] !== 'OOO.OO')
 await page.keyboard.press('ArrowUp');
 const sS = await waitIdle('shapeS');
 if (!/\bS\b/.test(sS)) throw new Error('expected S, got: ' + sS);
-for (const want of [/S vert/, /\bZ\b/, /Z vert/, /\bL\b/, /\bJ\b/, /\bT\b/, /L flip/, /J flip/, /T flip/]) {
+for (const want of [/S vert/, /\bZ\b/, /Z vert/, /\bL\b/, /L vert R/, /L flip/, /L vert L/, /\bJ\b/, /J vert R/, /J flip/, /J vert L/, /\bT\b/, /T vert R/, /T flip/, /T vert L/]) {
   await page.keyboard.press('ArrowUp');
   const s = await waitIdle('shapeTriple');
   if (!want.test(s)) throw new Error(`cycle expected ${want}, got: ${s}`);
@@ -433,7 +433,7 @@ const modelKey = (key) => {
     }
     // the circuit's SELECTION_CYCLE: the verticals sit next to their
     // rotation partners (B1)
-    const SEL = { 0:1, 1:2, 2:3, 3:4, 4:13, 13:5, 5:14, 14:6, 6:7, 7:8, 8:9, 9:10, 10:11, 11:12, 12:0 };
+    const SEL = { 0:1, 1:2, 2:3, 3:4, 4:13, 13:5, 5:14, 14:6, 6:15, 15:9, 9:16, 16:7, 7:17, 17:10, 10:18, 18:8, 8:19, 19:11, 11:20, 20:12, 12:0 };
     m.shapeIx = SEL[m.shapeIx];
     return;
   }
@@ -620,13 +620,14 @@ try {
     await waitIdle('rot spawn');
     await page.keyboard.press('ArrowDown');
     await waitIdle('rot tick');
-    await page.keyboard.press('ArrowUp');
-    const s1 = await waitIdle('rotate');
-    if (labelOf(s1) !== 'L flip') throw new Error(`mid-fall UP did not rotate: ${s1}`);
-    await page.keyboard.press('ArrowUp');
-    const s2 = await waitIdle('rotate back');
-    if (labelOf(s2) !== 'L') throw new Error(`rotation did not return: ${s2}`);
-    console.log('rotation verified: L -> L flip -> L on a falling piece');
+    // B2: rotation is a true 4-cycle — this receipt was REWRITTEN
+    // deliberately (the old one asserted the 2-cycle flip)
+    for (const want of ['L vert R', 'L flip', 'L vert L', 'L']) {
+      await page.keyboard.press('ArrowUp');
+      const sr = await waitIdle('rotate');
+      if (labelOf(sr) !== want) throw new Error(`4-cycle expected ${want}: ${sr}`);
+    }
+    console.log('rotation verified: L -> L vert R -> L flip -> L vert L -> L, all in contacts');
     // and a one-orientation shape refuses (the page says so; the ring holds)
     for (let i = 0; i < 40; i++) {
       const st = await status();

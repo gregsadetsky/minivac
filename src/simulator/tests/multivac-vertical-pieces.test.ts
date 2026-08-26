@@ -321,3 +321,93 @@ describe('B1: vertical S and Z', () => {
     expect(g.m.getState().alerts).toEqual([]);
   });
 });
+
+describe('B2: the L/J/T verticals — rotation is a true 4-cycle', () => {
+  it('the L family walks its 4-cycle mid-fall, all three fans per state (fast)', { timeout: 1800000 }, () => {
+    const g = rig();
+    g.start();
+    g.select(6); // L, through the full B1 stretch of the chooser
+    g.steer(1);
+    g.tick(); // spawn
+    g.tick();
+    g.tick(); // token 2, clear air
+    expect(g.tok()).toBe(2);
+    // clockwise: L -> L vert R -> L flip -> L vert L -> L
+    g.up();
+    expect(g.shapeAt(), 'L turned to L vert R').toBe(15);
+    expect(g.banks(PIECE), 'bottom: the offset single').toBe(0b0100);
+    expect(g.banks(PIECET), 'mid: the same column').toBe(0b0100);
+    expect(g.banks(g.L.PIECET2), 'top: the WIDE pair — the cut bank writes this').toBe(0b1100);
+    g.up();
+    expect(g.shapeAt(), 'quarter turn two: L flip').toBe(9);
+    g.up();
+    expect(g.shapeAt(), 'quarter turn three: L vert L').toBe(16);
+    expect(g.banks(PIECE), 'bottom: the wide pair at p').toBe(0b0110);
+    expect(g.banks(PIECET), 'mid: the single at p+1').toBe(0b0100);
+    expect(g.banks(g.L.PIECET2), 'top: the single at p+1').toBe(0b0100);
+    g.up();
+    expect(g.shapeAt(), 'and home: four turns is the identity').toBe(6);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  it('an L vert R lock: the 2-column top writes through the cut bank, no fifth cell (fast)', { timeout: 1800000 }, () => {
+    const g = rig();
+    g.start();
+    g.select(15);
+    g.steer(1); // bottom/mid col 2, top cols 2-3
+    g.tick(); // spawn
+    for (let r = 1; r <= 7; r++) g.tick(); // floor lock
+    expect(g.tok()).toBe(7);
+    expect(g.field(), 'press: the bottom single').toEqual([0, 0, 0, 0, 0, 0, 0, 0b0100]);
+    g.tick(); // phase 2 (the T fan: ALL verticals ride STAG — the T-A fix)
+    expect(g.field(), 'phase 2: the mid single').toEqual([0, 0, 0, 0, 0, 0, 0b0100, 0b0100]);
+    g.tick(); // phase 3: the WIDE top through CUTC7 — and ONLY those two
+    // columns: the severed T fan must not bridge a fifth cell in
+    expect(g.field(), 'phase 3: the wide top, exactly two cells').toEqual([0, 0, 0, 0, 0, 0b1100, 0b0100, 0b0100]);
+    g.tick(); // reset
+    expect(g.tok()).toBe(-1);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  it('LEGBT does real work now: J vert L rests its top on stored content (fast)', { timeout: 1800000 }, () => {
+    // J vert L's top {p, p+1} exceeds its mid {p+1}: the (tok-1, p)
+    // entry is the first REACHABLE firing of the top-collision term
+    // (belt-and-braces since B1, the review's item-6 receipt)
+    const g = rig();
+    g.start();
+    g.m.setSlide(1, 'left', 0);
+    g.m.setSlide(2, 'left', 0);
+    g.m.setSlide(3, 'right', 0); // row 4
+    g.m.setSlide(2, 'right', 1); // col 1 data
+    g.m.pressButton(4, 0);
+    g.m.releaseButton(4, 0);
+    g.m.setSlide(2, 'left', 1);
+    expect(g.row(4)).toBe(0b0010);
+    g.select(18); // J vert L at pos 1: bottom/mid col 2, top {1,2}
+    g.steer(1);
+    g.tick(); // spawn; the fall sweeps col 2 (and col 1 only via the top)
+    for (let r = 1; r <= 5; r++) g.tick();
+    expect(g.tok(), 'rested: the TOP would enter the stored (4,1)').toBe(5);
+    g.settle(); // the lock runs where it rests
+    expect(g.row(5), 'bottom wrote beside nothing').toBe(0b0100);
+    expect(g.row(4), 'mid joined the stored cell').toBe(0b0110);
+    expect(g.row(3), 'the top pair above').toBe(0b0110);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+
+  it('the 21-state chooser wraps; singletons still refuse (fast)', { timeout: 1800000 }, () => {
+    const g = rig();
+    g.start();
+    g.select(20); // T vert L — the last new state before the I
+    g.select(0); // ... through the I and the wrap
+    expect(g.shapeAt()).toBe(0);
+    // O still refuses mid-fall; the I still refuses (its partner is B3)
+    g.select(12);
+    g.steer(0);
+    g.tick(); // spawn the I
+    g.tick();
+    g.up();
+    expect(g.shapeAt(), 'the I is a singleton until B3').toBe(12);
+    expect(g.m.getState().alerts).toEqual([]);
+  });
+});
