@@ -612,7 +612,7 @@ export class MinivacSimulator {
             if (!alerts.includes(message)) {
               alerts.push(message);
             }
-            console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A (normal: <2.5A)`);
+            console.warn(`${message} Power supply current: ${powerCurrent.toFixed(2)}A on machine ${m} (normal: <2.5A)`);
           }
         }
         if (this.verbose) console.log('  Relay states and bulb resistances stable!');

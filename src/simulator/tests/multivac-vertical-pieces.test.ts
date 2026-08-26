@@ -230,9 +230,19 @@ describe('B1: vertical S and Z', () => {
     expect(g2.posAt()).toBe(2);
     g2.up();
     expect(g2.shapeAt(), 'the turn into S vert refused: its mid would take (4,3)').toBe(4);
-    g2.tick(); // token 6: the floater is two rows up now
+    g2.tick(); // token 6: the floater sits at tok-2 now — the TOP row's cell
     g2.up();
-    expect(g2.shapeAt(), 'a row later the same turn conducts').toBe(13);
+    // B2-0: the tok-2 occupancy bank (MIRCT2/LEGINVT3) closes what was
+    // B1's declared seam — the turn's TOP cell (4,3) is read in contacts
+    // now. this assertion was RED before the bank landed (the turn
+    // conducted through the unread row) and is the increment's receipt.
+    expect(g2.shapeAt(), 'the turn refused on the TOP cell too (the old seam)').toBe(4);
+    // a floor-bound piece has no steerable tok-7 moment (merged lock),
+    // so the conducts-proof moves SIDEWAYS out from under the floater
+    g2.left(); // back to pos 1: every delta cell is clear there
+    expect(g2.posAt()).toBe(1);
+    g2.up();
+    expect(g2.shapeAt(), 'clear of it the turn conducts').toBe(13);
     expect(g2.m.getState().alerts).toEqual([]);
   });
 

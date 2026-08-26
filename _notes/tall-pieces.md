@@ -1156,3 +1156,33 @@ B2 BUILD ORDER, final: B2-0 the tok-2 bank + emitter extension
 the six states (corrected STAG list, fan growth, cut bank, shared
 left-offset union, receipts incl. state 18 and the 4-cycle driver
 rewrite).
+
+## B2-0 LANDED (2026-08-26): the tok-2 occupancy bank
+
+MIRCT2/LEGINVT3 per the review's item-5 call — the MIRCT idiom one
+level up (coils off MIRCT(r,1).E / the MIRCTX tail; arms through the
+MIRCT(r-1) arm jacks' one free hole each; r = 2..rows-2). the UP
+emitter and upResourceCounts read ALL THREE shape rows now (plus the
+T-B load assert: DELTA_SOURCE must rotate INTO its target); the step
+trees grew four derived top2 union classes and hops. RECEIPT: the B1
+seam assertion in multivac-vertical-pieces flipped red -> green (a
+rotation into S vert now refuses on (tok-2, p+1) content in contacts).
+pool growth: STPUNION 12->16, STPREAD 9->11(cols-1), STPMIR
+55+7(cols-1), retNode 4->5 groups, caps[13/14] +1 relay each.
+
+TWO NEW GENERAL LESSONS, paid for at 3.53A:
+1. THE ARM-SOURCE RULE: a member contact sources its whole destination
+   net's coil current from whatever machine feeds its arm. a state with
+   many memberships (the verticals) concentrates every union/rail/mode
+   chain on its own mirror bank's supply — machine 94 tripped the
+   overload alarm the moment S vert was selected. fix, now the emitters'
+   convention: CHAIN the member arms (the B fan's POSS-arm idiom) and
+   feed the chain ONCE from the DESTINATION rail's machine. this also
+   keeps the destination's + jack at one wire.
+2. destination relays whose own + is 2/2 (both arms legacy-fed: WIDM3,
+   STAGM2) cannot source their own splice — the feed comes from a
+   provably-free + on a low-load machine (LEGB's + jacks are unused at
+   every geometry). count the + holes like any other jack: the audit
+   catches it (it did, three times).
+- scenario lesson AGAIN: a floor-bound piece has no steerable tok-7
+  moment (merged lock) — the conducts-proof moves sideways.
