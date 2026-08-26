@@ -657,5 +657,31 @@ try {
   }
 }
 
+// LAST+2: DEALER MODE, hands off — the page without ?deal=manual must
+// deal a piece, SELF-SERVE it (no Enter), and gravity must be on by
+// default: within ~25s of boot a piece has spawned and moved down on
+// its own, or pieces have locked (cells appeared). nondeterministic by
+// design, so the check is behavioral, not step-exact.
+{
+  await page.goto(`${BASE}/tetris/`);
+  const t0 = Date.now();
+  let sawFall = false;
+  let lastRow = -1;
+  while (Date.now() - t0 < 45000) {
+    const st = await status();
+    const m2 = st.match(/at row (\d+)/);
+    if (m2) {
+      const r = Number(m2[1]);
+      if (lastRow >= 0 && r > lastRow) { sawFall = true; break; }
+      lastRow = r;
+    }
+    const g = await gridState();
+    if (g.some((c) => c === 'O')) { sawFall = true; break; } // a lock already happened
+    await page.waitForTimeout(250);
+  }
+  if (!sawFall) throw new Error('dealer mode never self-served/fell: ' + (await status()));
+  console.log('dealer mode verified: dealt, self-served, and fell with no keys pressed');
+}
+
 console.log(doubleClearOk ? 'PAGE VERIFICATION PASSED (incl. double clear)' : 'PAGE VERIFICATION PASSED (double clear still open)');
 await browser.close();

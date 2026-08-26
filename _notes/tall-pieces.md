@@ -944,7 +944,7 @@ precedent: increments 2 -> 3a shipped exactly this shape for the 2-tall.
 ## B1 REVIEW VERDICT (clean-context adversarial review, 2026-08-26)
 
 the second draft was refuted in four places. full review kept with the
-session log; the load-bearing... the DECISIVE findings, folded in:
+session log; the DECISIVE findings, folded in:
 
 - Q1 -> a FOURTH option wins: the phase-3 diversion is VERT-GATED, not
   unconditional. ROW2W's coil = + -> ROW2Y.L (its set 2 is FREE — only
@@ -1022,3 +1022,137 @@ both pinned by the probe test (which was red before each half).
 NOTE for B1: the review earmarked ROW2Y's set 2 for ROW2W's coil gate —
 P3LG used only ROW2Y's COIL-NET hole (E), not the set. the set is still
 free for B1.
+
+## B1 LANDED (2026-08-26, same session as the review) — see ROADMAP 50
+
+executed as reviewed, with these deltas discovered while wiring:
+- the mux pool needed NOTHING: with the selection cycle re-threaded,
+  states 13/14 are one-wire D-feeds (rotation partner IS selection
+  successor) and t=5/t=6 keep muxes — still exactly 12.
+- FANPOS overflowed exactly where counted; grew 4 -> 5 mirrors/position.
+- colFanT2 shipped UNGATED (single-column masks bridge nothing); the
+  B2 cut bank's entry is reserved at ROW2W.G.
+- LEGBT is belt-and-braces at B1: for S/Z verts the mid provably
+  vacates the top's entering cell. it starts doing real work at B2 (L vert
+  R's top {p+1,p+2} vs mid {p+1} — (tok-1, p+2) is a real entry).
+- THREE first-draft trace scenarios were physically impossible (sweep
+  covers the delta column; the mid rests the piece first; S can't
+  enter pos 0). derive the reachable form on paper first, THEN probe.
+B2 ledger notes that survive: ROT stops being self-inverse (ROT_PRED);
+the selection cycle grows to the full TARGET_SELECTION_CYCLE prefix
+(6 -> 15 -> 9 -> 16 -> 7 ...); the T2-fan cut bank; a third occupancy
+row for the seams; upResourceCounts' 2-row views undercount 3-row
+DELTAS for 4-cycles (the into-vertical branches read only the mid —
+fine at B1 where the tok-2 seam is declared; B2 must re-audit).
+
+## B2 LEDGER, first draft (2026-08-26) — REVIEW BEFORE WIRING
+
+six states: 15 L-vert-R, 16 L-vert-L, 17 J-vert-R, 18 J-vert-L,
+19 T-vert-R, 20 T-vert-L (TARGET_SHAPES geometry, quarter-turn-verified).
+
+1. ROT_STATE becomes a real 4-cycle for L/J/T (6->15->9->16->6 etc.) —
+   and DELTA_SOURCE(t) must become ROT_PRED(t) (the unique s with
+   ROT(s)=t), NOT ROT_STATE(t): with involutions they coincided; with
+   4-cycles reusing ROT_STATE aims every into-branch's delta checks at
+   the wrong shape (tall-pieces trap #1, now live).
+2. SELECTION_CYCLE grows to the target prefix: ... 6 -> 15 -> 9 -> 16 ->
+   7 -> 17 -> 10 -> 18 -> 8 -> 19 -> 11 -> 20 -> 12 ... — every family
+   edge's selection predecessor IS its rotation source (the reference's
+   all-edges invariant test already passes this at 4/6/10). D-FEED
+   NOTE: family-internal edges become one-wire feeds; count the mux
+   pool consumption fresh (12 today; edges into 12 and 0 and the toy
+   states keep muxes; expect the pool to SHRINK in consumers — verify,
+   do not assume).
+3. the T2-fan CUT BANK becomes required: L/J vert tops are... CHECK:
+   L vert R rows[2] = {off 1, w 2}?? NO — L vert R = [{1,1},{1,1},{1,2}]:
+   the TOP row (rows[2]) is {off1,w2} = TWO columns -> the closed
+   PIECET2 gates bridge rails during any fall of that state. the cut
+   bank (CUTC7/8-class) enters at ROW2W.G (reserved at B1's split) and
+   must conduct ONLY during a vertical's phase 3.
+4. the T2 fan grows offset rails (tops at off 0,1,2 across the six
+   states) + T2POS taps beyond 2 sets/pos -> T2POS banks need capacity
+   counted fresh; FANPOS feeds stay 1/pos (bank pattern).
+5. upResourceCounts/the UP emitter see 2-ROW views: the into-vertical
+   branches read only bottom+mid deltas. at B1 the tok-2 seam was
+   declared; at B2 the 4-cycles make rotations INTO 3-row states from
+   3-row states (15->9 reads a 2-row target: fine; 9->16: target 3-row)
+   — enumerate which deltas the emitter MISSES per edge and either
+   extend the emitter to rows[2] reads (needs a tok-2 occupancy bank =
+   B1-5's MIRCT2/LEGINVT3, pulling that increment INTO B2) or declare
+   the seams per edge. THE DECISION for the reviewer.
+6. LEGBT starts doing real work (L vert R: top enters (tok-1, p+2), not
+   covered by the mid) — its firing finally testable in play.
+7. phase-2/3 row COUNT is per-state: all six are 3-row -> V3 union
+   membership; mids: 15 {p+1}x1, 16 {p+1}... every mid is 1 column
+   EXCEPT none? check: 15 mid {1,1}, 16 mid {1,1}, 17 {1,1}, 18 {1,1},
+   19 mid {1,2} (T vert R: [{1,1},{1,2},{1,1}]), 20 mid {0,2}. so T
+   verts have 2-column MIDS -> STAG memberships + T-fan entries; L/J
+   verts have 1-column mids EQUAL to neither bottom nor... their mid ==
+   bottom column for 15/17 ({1} vs bottom {1}/{1,2}?) — 15 bottom
+   {1,1}: mid == bottom -> NOT staggered (phase 2 rides the B fan)?
+   the staggered predicate is derived (tOff/tW vs bOff/bW) — audit per
+   state what phase 2 must write vs what the derivation gives.
+8. bounds/unions: all derived; new classes possible (check mkUnion
+   coverage of rightBottom/rightTop/leftTop values the six states add).
+9. caps for stBanks[15..20] + STPMIR/STPREAD growth; count from the
+   emitters' requests, let the bank asserts catch drift.
+
+## B2 REVIEW VERDICT (clean-context adversarial review #3, 2026-08-26)
+
+the ledger contained BOTH HALVES OF A CONTRADICTION (T-A, fatal as
+drafted) plus a silent-shipping trap. folded:
+
+- T-A: the T2 cut bank's reserved feed (ROW2W.G) hangs off CUTBD.K, and
+  CUTBD's coil is p2railA AND STAGM — STAG-scoped. my item 7 kept
+  15/18 (L vert R, J vert L: mid == bottom) OUT of STAG -> their
+  phase 3 would divert to colFanT2 with the cut bank DEAD and the top
+  row would never be written. FIX (reviewed option i): ALL SIX states
+  join STAG; the derived predicate becomes
+  `rows.length > 2 || mid != bottom`; 15/18's phase 2 rides the T fan
+  (identical content), CUTBD lives in both phases, the LEGB term goes
+  live-but-inert for them (gravity argument).
+- T-B: DELTA_SOURCE reusing ROT_STATE ships SILENTLY at B2 — the
+  shared-branch ranges coincide on all twelve 4-cycle edges at 4/6/10,
+  so the load assert never fires and only the delta CELLS are wrong.
+  DELTA_SOURCE becomes ROT_PRED (the unique s with ROT(s)=t, else
+  SELECTION_PREV) plus a NEW load assert:
+  ROT_STATE(DELTA_SOURCE(t)) === t for every non-singleton t, plus a
+  trace probing a ROT_PRED-only delta cell.
+- ITEM-5 CALL (reviewer, adopted): MIRCT2/LEGINVT3 — the tok-2
+  occupancy bank — lands INSIDE B2 as its own increment BEFORE the six
+  states (~14 relays at 8x4, ~33 at 12x6 + emitter growth: a top2 term
+  in upResourceCounts, rows[2] entering reads in the step trees, ~5 new
+  union classes -> STPUNION ~17). decisive reason: edge 11 -> 20 has
+  ZERO contact checks without it (one pos contact, nothing else), and
+  per-edge seams would force a third compat mode into the diff harness.
+  SEQUENCING RECEIPT: land the bank against the EXISTING 13/14 first —
+  "rotation into S vert refused on (tok-2, p+1) content" is RED today
+  and goes green with the bank, before any B2 state exists. B1's two
+  declared seams retire with it. (it does NOT finish B3: I-vert needs
+  tok-3.)
+- D-feeds at 21 states: 12 one-wire, 9 muxes — THE POOL SHRINKS to
+  9/12. masters 9/10/11 lose their fourth com wire.
+- T2 fan at B2: rails d0={14,18}, d1={13,15,16,17,18,19,20}, d2={15} —
+  a THIRD rail; FANRAIL2 take(2)->3, T2POS overflows (6 relays @4,
+  10 @6), FANT2 overflows (5 @4, 8 @6). all appended-tail growth ->
+  re-measure section current (the 3.5A rule).
+- item 9 cost-saver (adopted): a shared "left-bottom-offset-1" union
+  (T2|Zv|15|16?|17|18|19|20 — count from geometry) replaces per-state
+  left bypasses: 2x(cols-1) sets instead of ~10x(cols-1).
+- LEGBT's real-work receipt probes state 18 (J vert L: top enters
+  (tok-1, p)), not only 15.
+- T-D: ROW2Y.K is 2/2 — the six new coil-gate arms chain arm-jack-to-
+  arm-jack off the B1 arms' spare holes.
+- T-E receipts due: the driver's rotation receipt becomes a 4-cycle
+  (deliberately rewritten, not widened); the relays driver's deal walk
+  count; the driver geometry table +6; TETRIS_IO.up's comment.
+- 17 (J vert R) needs BCUT+WIDB+WID3 SIMULTANEOUSLY — a combination no
+  state uses today; composes on paper, wants its own receipt.
+- no chooser wedge at 4 cols (walked); into-12 still steers to 0, as
+  shipped today.
+
+B2 BUILD ORDER, final: B2-0 the tok-2 bank + emitter extension
+(red-then-green on S/Z verts) -> B2-1 ROT_PRED + load assert -> B2-2
+the six states (corrected STAG list, fan growth, cut bank, shared
+left-offset union, receipts incl. state 18 and the 4-cycle driver
+rewrite).

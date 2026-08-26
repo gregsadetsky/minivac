@@ -71,7 +71,7 @@ root.innerHTML = `
     <div style="margin-top:14px;color:#5c646e;font-size:11px">the machine wall — every armature, live</div>
     <canvas id="wall" style="margin-top:4px;image-rendering:pixelated"></canvas>
     <div style="margin-top:10px;color:#5c646e">
-      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = rotate (pre-spawn: re-pick the dealt shape) &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; a = auto-gravity &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
+      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = rotate (pre-spawn: re-pick the deal) &nbsp;&middot;&nbsp; &darr;/space = soft drop &nbsp;&middot;&nbsp; a = pause/resume gravity &nbsp;&middot;&nbsp; m = sound
     </div>
     <details style="margin-top:18px;color:#5c646e;text-align:left;max-width:520px">
       <summary style="cursor:pointer;text-align:center">dump the circuit</summary>
@@ -395,12 +395,23 @@ function runTick() {
 // ?deal=manual turns the dice off (the driver's step-exact scripts need a
 // deterministic chooser; a human just plays with the deal on)
 const DEAL_RANDOM = new URLSearchParams(window.location.search).get('deal') !== 'manual';
+// AUTO-SERVE (user call, 2026-08-26): real tetris does not wait for a
+// start press per piece — once the deal lands, the page makes the same
+// START press a human would and the next (auto) tick spawns. dealer
+// mode only: the driver's step-exact scripts keep manual arming.
+function serve() {
+  if (!DEAL_RANDOM || relay(IO.gameOverRelay) || tokenRow() >= 0) return;
+  press(IO.start);
+}
 let dealing = false;
 function dealNext() {
   if (!DEAL_RANDOM) return;
   if (busy || dealing || relay(IO.gameOverRelay) || tokenRow() >= 0) return;
   const want = Math.floor(Math.random() * SHAPES.length);
-  if (shapeAt() === want) return;
+  if (shapeAt() === want) {
+    serve(); // nothing to walk, but the piece still self-serves
+    return;
+  }
   dealing = true;
   busy = true;
   status.textContent = 'dealing…';
@@ -409,6 +420,7 @@ function dealNext() {
       const cur = shapeAt();
       const done = (note: string) => {
         dealing = false;
+        serve(); // the dealt piece self-serves; the next tick spawns it
         busy = false;
         render(note);
         drainKeys();
@@ -576,6 +588,10 @@ setTimeout(() => {
   sim.initialize();
   // nothing to apply: the shape ring seeds at 1x1, the slides stay parked
   busy = false;
-  render('ready — press enter to spawn a piece');
-  dealNext(); // the first piece is dealt too
+  render(DEAL_RANDOM ? 'ready — dealing the first piece…' : 'ready — press enter to spawn a piece');
+  dealNext(); // the first piece is dealt too (and self-serves)
+  // GRAVITY ON BY DEFAULT (user call, 2026-08-26): the game plays like
+  // tetris out of the box; 'a' pauses and resumes it. driver mode keeps
+  // gravity off — its scripts own every tick.
+  if (DEAL_RANDOM) setAuto(true);
 }, 30);
