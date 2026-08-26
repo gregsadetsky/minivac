@@ -571,6 +571,7 @@ function draw(): void {
         if (tr >= 0) {
           if (r === tr) live = rel(built.layout.PIECE(j));
           else if (r === tr - 1) live = rel(built.layout.PIECET(j));
+          else if (r === tr - 2) live = rel(built.layout.PIECET2(j)); // B1: the third row
         }
         if (!stored && !live) continue;
         const x = ox + pad + j * cell, y = oy + pad + r * cell;

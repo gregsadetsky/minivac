@@ -245,7 +245,7 @@ describe('the differential: machine vs reference, every key compared', () => {
     selectShape(4, 'S enters at the home column');
     play(['tick', 'left'], 'S spawned; left into its bound refused');
     expect(ref.pos).toBe(1);
-    play(['up'], 'S is a rotation singleton today'); // refused on both sides
+    play(['up'], 'S rotates VERTICAL mid-fall since B1'); // conducts on both sides
     while (ref.tokenRow >= 0) play(['tick'], 'drop the S');
 
     // L: spawn, flip mid-fall, flip back. before center spawn the re-home

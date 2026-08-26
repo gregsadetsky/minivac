@@ -175,16 +175,21 @@ function mask(): number {
   return (((1 << s.bW) - 1) << sh) & ((1 << COLS) - 1);
 }
 
-function topMask(): number {
+// row k of the shape (bottom-first) as a column mask at the current
+// register position. out-of-bounds = EMPTY, mirroring the fans exactly
+// (their invalid-pos branches are omitted); happens transiently after a
+// reset re-homes the register, before the operator steps back in bounds
+function rowMask(k: number): number {
   const s = shape();
   const p = posAt();
-  if (p < 0 || s.tW === 0) return 0;
-  // out-of-bounds = EMPTY top, mirroring the machine's T fan exactly (its
-  // invalid-pos branches are omitted); happens transiently after a reset
-  // re-homes the register, before the operator steps back in bounds
-  const sh = p + s.tOff;
-  if (sh < 0 || sh + s.tW > COLS) return 0;
-  return (((1 << s.tW) - 1) << sh) & ((1 << COLS) - 1);
+  const row = s.rows[k];
+  if (p < 0 || !row) return 0;
+  const sh = p + row.off;
+  if (sh < 0 || sh + row.w > COLS) return 0;
+  return (((1 << row.w) - 1) << sh) & ((1 << COLS) - 1);
+}
+function topMask(): number {
+  return rowMask(1);
 }
 
 function press(b: { button: number; machine: number }) {
@@ -263,17 +268,19 @@ function render(note?: string) {
   }
   const tok = tokenRow();
   const bm = mask();
-  const tm = topMask(); // = bm for symmetric tall shapes, shifted for S/Z
+  const tm = topMask(); // the MID row for the B1 verticals
+  const t2m = rowMask(2); // the third row (S vert / Z vert)
   for (let r = 0; r < ROWS; r++) {
     for (let j = 0; j < COLS; j++) {
       const on = relay(IO.cellRelay(r, j));
       const isPiece =
         (r === tok && ((bm >> j) & 1) === 1) ||
-        (tok > 0 && r === tok - 1 && ((tm >> j) & 1) === 1);
+        (tok > 0 && r === tok - 1 && ((tm >> j) & 1) === 1) ||
+        (tok > 1 && r === tok - 2 && ((t2m >> j) & 1) === 1);
       pixels[r][j].style.background = isPiece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
-  const um = bm | tm;
+  const um = bm | tm | t2m;
   for (let j = 0; j < COLS; j++) {
     colMarks[j].style.background = ((um >> j) & 1) === 1 ? '#7fd4ff' : 'transparent';
   }

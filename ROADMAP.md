@@ -922,11 +922,55 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    predecessor becomes its rotation partner and the shared-branch
    invariant holds. full ledger at the end of _notes/tall-pieces.md.
 
+50. B1 LANDED 2026-08-26, the same session as its review: VERTICAL S AND
+   Z — the first three-row states, the first REAL mid-fall rotation of
+   a stagger family (S <-> S vert, Z <-> Z vert in contacts). what the
+   emitters derived for free once SHAPES spoke rows (the union
+   memberships, the T fan carrying the MID mask, the step-tree bound
+   classes); what was hand-wired per the reviewed ledger: MMIR5 branch
+   mirrors, the mode-rail memberships through the union nets' free head
+   jacks, ROW2W (coil = ROW2 AND a vertical, off ROW2Y's free set — the
+   review's fourth option, so slide-only phase 3 still writes the bar
+   and every B1b/B1c receipt stood untouched), the CUT SPLIT (CUTC5/6
+   now ride CUTBD's second set through ROW2W's NC: severed during a
+   vertical's phase 3, when the still-closed T-fan gates would have
+   bridged rails through colFanT — the review's catch, wired away),
+   the T2 fan (PIECET2 + two offset rails + private T2POS pos taps fed
+   through single FANPOS sets; FANPOS grew 4 -> 5 mirrors per position,
+   the exact overflow the review counted), colFanT2 UNGATED by design
+   (B1 masks are single-column; B2's multi-column tops must add the cut
+   bank at ROW2W.G, reserved), the LEGBT top-collision term entering at
+   COLLIDE.E, and Z vert's left-tree bypass + d1 read (T4). the
+   SELECTION CYCLE became real D-feed wiring: ... S -> S vert -> Z ->
+   Z vert -> L ..., so the mux pool stayed exactly 12/12 and the
+   shared-branch invariant held with zero new machinery (INC-A's
+   groundwork, validated mechanically before wiring at 4 and 6).
+   test-scenario lessons, paid again: three of the first five trace
+   scenarios were PHYSICALLY IMPOSSIBLE (S's own sweep covers the
+   rotation delta column; the mid rests the piece before the bottom
+   probe; S cannot enter pos 0) — the machine was right each time, and
+   the reachable forms were derived on paper before re-probing. the
+   LEGBT term is belt-and-braces at B1 (the mid provably vacates the
+   top's entering cell for these shapes) and starts doing real work at
+   B2. DECLARED LIMITS, pinned: a 3-tall lock at row 1 clips its top
+   silently with no game-over (T7); the tok-2 occupancy is unreadable,
+   so steering/rotating a vertical's TOP row into stored content stays
+   the page guard's seam until B1-5 (MIRCT2/LEGINVT3).
+   receipts: the 5-part vertical trace battery (15-state walk with all
+   THREE fans asserted per state, the four-tick lock writing three
+   DIFFERENT masks, rotation with a reachable occupancy refusal, the
+   T4 pair, T7); the whole tetris regression 54 green including the
+   diff harness at 15 states and both random-gameplay runs; npm run
+   check 248; capacity audit + zero undefined nodes at (8,4), (8,6),
+   (12,6); both page drivers green on the preview build (the pages
+   draw the third row; the relays dealer deals all 15 states).
+
 NEXT — THE ROAD TO NORMAL ROTATION (updated 2026-08-26 after the B1
    review; the full hole-counted ledger is at the end of
    _notes/tall-pieces.md and is the wiring authority):
 
-   1. B1 (vertical S/Z) — ONE INTERLOCKED BLOCK, plan a full session:
+   1. DONE (entry 50) — B1 (vertical S/Z). the plan below was executed
+      as reviewed; kept for the record:
       the states cannot land without the selection rewiring or the
       chooser wedges at I. order inside the block:
       a. SELECTION_NEXT: the chooser cycle becomes an exported map

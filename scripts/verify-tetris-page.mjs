@@ -141,17 +141,14 @@ for (let i = 0; i < 16; i++) {
 const rSq2 = await rows();
 if (rSq2[11] !== 'OOO.OO' || rSq2[10] !== 'OOO.OO')
   throw new Error('second square wrong: ' + JSON.stringify(rSq2));
-// the cycle passes the staggered pair, the triples, the flips AND the
-// horizontal I: 2x2 -> S -> Z -> L -> J -> T -> flips -> I -> 1x1.
-// the operator clamps re-position the register per shape along the way
-// (the I's 4-wide bottom has the narrowest fit range of any shape).
+// the cycle passes the staggered pair AND THEIR VERTICALS (B1: the
+// chooser runs S -> S vert -> Z -> Z vert), then the triples, the
+// flips and the horizontal I, back to 1x1. the operator clamps
+// re-position the register per shape along the way.
 await page.keyboard.press('ArrowUp');
 const sS = await waitIdle('shapeS');
 if (!/\bS\b/.test(sS)) throw new Error('expected S, got: ' + sS);
-await page.keyboard.press('ArrowUp');
-const sZ = await waitIdle('shapeZ');
-if (!/\bZ\b/.test(sZ)) throw new Error('expected Z, got: ' + sZ);
-for (const want of [/\bL\b/, /\bJ\b/, /\bT\b/, /L flip/, /J flip/, /T flip/]) {
+for (const want of [/S vert/, /\bZ\b/, /Z vert/, /\bL\b/, /\bJ\b/, /\bT\b/, /L flip/, /J flip/, /T flip/]) {
   await page.keyboard.press('ArrowUp');
   const s = await waitIdle('shapeTriple');
   if (!want.test(s)) throw new Error(`cycle expected ${want}, got: ${s}`);
@@ -434,7 +431,10 @@ const modelKey = (key) => {
       m.shapeIx = rot;
       return;
     }
-    m.shapeIx = (m.shapeIx + 1) % 13; // twelve shapes plus the horizontal I
+    // the circuit's SELECTION_CYCLE: the verticals sit next to their
+    // rotation partners (B1)
+    const SEL = { 0:1, 1:2, 2:3, 3:4, 4:13, 13:5, 5:14, 14:6, 6:7, 7:8, 8:9, 9:10, 10:11, 11:12, 12:0 };
+    m.shapeIx = SEL[m.shapeIx];
     return;
   }
   if (key === 'ArrowLeft' || key === 'ArrowRight') {

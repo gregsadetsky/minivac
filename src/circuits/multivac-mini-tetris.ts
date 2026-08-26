@@ -34,7 +34,7 @@ export const minusOf = (n: number) => `m${Math.floor(n / 6)}.${(n % 6) + 1}-`;
 // source now (wider-well phase C shifts bank sizes; literals would
 // break). the inline comments document each bank; jack ranges in
 // them describe TODAY'S map and move with the allocator.
-export const NSTATES = 13; // ring states (the page's cycle length)
+export const NSTATES = 15; // ring states (13 + the B1 verticals: S vert, Z vert)
 // the shape set — geometry per ring state as (bottom offset/width, top
 // offset/width): the bottom row sits at register position p+bOff, the
 // top at p+tOff. Order MUST match the ring (the L/J/T triples appended
@@ -83,6 +83,20 @@ export const SHAPES: readonly ShapeDef[] = [
   // four-row write engine, so until that exists I is a ring singleton
   // and UP refuses it mid-fall exactly like O.
   shapeDef('I', [{ off: 0, w: 4 }]),
+  // B1 (2026-08-26) — the first VERTICAL orientations: three rows tall,
+  // driving the landed phase-3 engine. The derived 2-row views expose
+  // the bottom + MID rows (exactly what the emitters must see: the mid
+  // is what phase 2 writes and what the T fan carries); the third row is
+  // the phase-3 mask, read only by the T2 fan and the LEGBT collision
+  // term. Geometry matches TARGET_SHAPES 13/14 (the lockstep test).
+  // .X
+  // XX
+  // X.
+  shapeDef('S vert', [{ off: 0, w: 1 }, { off: 0, w: 2 }, { off: 1, w: 1 }]),
+  // X.
+  // XX
+  // .X
+  shapeDef('Z vert', [{ off: 1, w: 1 }, { off: 0, w: 2 }, { off: 0, w: 1 }]),
 ];
 if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
 // legal register positions for a shape: EVERY row's cells must fit
@@ -130,7 +144,8 @@ export function homeColumn(cols: number): number {
 // i<->i+3 inside 6..11). pre-spawn every occupancy rail is dark, so the
 // branch carries the ROTATION pair's deltas and serves selection too —
 // upResourceCounts asserts the pos ranges coincide per shared branch.
-export const ROT_STATE = (i: number) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 && i < 12 ? (i < 9 ? i + 3 : i - 3) : i);
+export const ROT_STATE = (i: number) =>
+  i === 1 ? 2 : i === 2 ? 1 : i === 4 ? 13 : i === 13 ? 4 : i === 5 ? 14 : i === 14 ? 5 : i >= 6 && i < 12 ? (i < 9 ? i + 3 : i - 3) : i;
 // THE SELECTION CYCLE (B1 groundwork, 2026-08-26): the chooser order is
 // D-FEED WIRING, not index order — each master's coil com is fed through
 // its predecessor slave's set2, so this array IS the map those wires
@@ -140,7 +155,7 @@ export const ROT_STATE = (i: number) => (i === 1 ? 2 : i === 2 ? 1 : i >= 6 && i
 // so every new edge's selection predecessor IS its rotation source and
 // the shared-branch invariant below holds without new machinery. The
 // page, the drivers and the reference read THIS, never (i+1)%NSTATES.
-export const SELECTION_CYCLE: readonly number[] = Array.from({ length: NSTATES }, (_, i) => i);
+export const SELECTION_CYCLE: readonly number[] = [0, 1, 2, 3, 4, 13, 5, 14, 6, 7, 8, 9, 10, 11, 12];
 if (SELECTION_CYCLE.length !== NSTATES || new Set(SELECTION_CYCLE).size !== NSTATES)
   throw new Error('SELECTION_CYCLE must be a permutation of the ring');
 const SEL_NEXT: number[] = [];
@@ -554,6 +569,25 @@ export interface TetrisLayout {
   P3LG: number;
   /** CLEARP3 mirror: latches SCBOOT away on an r-2-ONLY first clear */
   CLEARPM3B: number;
+  // ---- B1: the vertical S/Z block ----
+  /** ring states 13/14: clk, master, slave */
+  SHR5: (i: number, part: number) => number;
+  /** master mirrors for the into-13/14 transition branches */
+  MMIR5: (i: number) => number;
+  /** the phase-3 diversion mirror: coil = ROW2 AND a vertical state; set1
+   *  splits the stagger cuts (NC keeps CUTC5/6 = today), set2 diverts the
+   *  column feed (NC -> STAGM.H = today, NO -> colFanT2) */
+  ROW2W: number;
+  /** the phase-3 mask bank (the third row's columns) */
+  PIECET2: (j: number) => number;
+  /** T2-fan offset rails: k=0 -> d0 (Z vert), k=1 -> d1 (S vert) */
+  FANRAIL2: (k: number) => number;
+  /** T2-fan rail mirrors, ceil((cols-1)/2) per rail */
+  FANT2: number; FANT2_CAP: number;
+  /** T2-fan pos taps: one relay per position (2 sets: the d0 and d1 branches) */
+  T2POS: (p: number) => number;
+  /** top-row collision reads: coils parallel LEGINVT(j).E */
+  LEGBT: (j: number) => number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -616,6 +650,7 @@ export function ringPart(L: TetrisLayout, i: number, part: number): number {
   if (i < 9) return L.SHR2(i, part);
   if (i < 12) return L.SHR3(i, part);
   if (i < 13) return L.SHR4(i, part);
+  if (i < 15) return L.SHR5(i, part);
   throw new Error(`ring state ${i} belongs to no block (NSTATES = ${NSTATES})`);
 }
 
@@ -696,12 +731,12 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // ---- the wider-well step-tree emitter's banks (uniform union-gated
   // trees; the hand-laid tree support banks above go dead-unwired) ----
   // caps are generous formula bounds; the emitter asserts actual <= cap
-  const stpMirBase = take(40 + 6 * (cols - 1)); // per-state member + singleton-gate mirrors
+  const stpMirBase = take(53 + 7 * (cols - 1)); // per-state member + singleton-gate mirrors (+13+(cols-1) for the B1 verticals)
   const stpUnionBase = take(12); // the union rails (B0..WALLB, B3, HIB2)
   const stpUGateBase = take(12 * (cols - 1)); // union mirrors: per-tree gate contacts
-  const stpReadBase = take(8 * (cols - 1)); // the gated read pool
+  const stpReadBase = take(9 * (cols - 1)); // the gated read pool (+cols-1: Z vert's left d1 reads)
   // the fan emitter's banks (B/T fans as offset rails x pos taps)
-  const fanPosBase = take(4 * cols); // per-position mirror banks
+  const fanPosBase = take(5 * cols); // per-position mirror banks (5 since B1: the T2POS feeds spent the last sets)
   const fanRailBase = take(4); // T-fan offset rails (T-1, T0, T1, T2)
   const fanMirBase = take(6 * Math.ceil(cols / 2) + 8); // rail mirrors (private tap sets)
   const mirbExtra = Math.max(0, Math.ceil(cols / 2) - 2); // collision mirrors beyond MIRB/MIRB2
@@ -790,6 +825,20 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   // that row's sense).
   const p3lgBase = take(1);
   const clearpm3bBase = take(1); // CLEARPM3B: SCBOOT's phase-3-only latch path
+  // ---- B1 (2026-08-26): vertical S/Z — everything appended at the end,
+  // per the 3.5A lesson (mid-sequence growth re-hosts every later coil).
+  // note the DERIVED pools above (UPPOS/UPREAD, STPMIR caps) did grow
+  // with NSTATES — that re-host is accepted and receipted by the suite's
+  // alerts/capacity audits, exactly as the wider-well growth was.
+  const shr5Base = take(6); // states 13/14 x (clk, master, slave)
+  const mmir5Base = take(2); // MMIR5(13), MMIR5(14)
+  const row2wBase = take(1); // ROW2W
+  const piecet2Base = take(cols); // PIECET2(j)
+  const fanRail2Base = take(2); // the d0 and d1 rails
+  const fant2Cap = Math.ceil((cols - 1) / 2);
+  const fant2Base = take(2 * fant2Cap); // rail mirrors
+  const t2posBase = take(cols); // pos taps, 1 relay (2 sets) each
+  const legbtBase = take(cols); // top-row collision reads
   return {
     rows,
     cols,
@@ -874,11 +923,11 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     LTOT: g4cBase + 18, LTOB: k => g4cBase + 19 + k, T2B: k => g4cBase + 21 + k,
     UTR3: g4cBase + 23, LEGB3: k => g4cBase + 24 + k, POSM6: k => g4cBase + 27 + k,
     TOSC: oscBase, TDRV: oscBase + 1,
-    STPMIR: stpMirBase, STPMIR_CAP: 40 + 6 * (cols - 1),
+    STPMIR: stpMirBase, STPMIR_CAP: 53 + 7 * (cols - 1),
     STPUNION: stpUnionBase, STPUNION_CAP: 12,
     STPUGATE: stpUGateBase, STPUGATE_CAP: 12 * (cols - 1),
-    STPREAD: stpReadBase, STPREAD_CAP: 8 * (cols - 1),
-    FANPOS: fanPosBase, FANPOS_CAP: 4 * cols,
+    STPREAD: stpReadBase, STPREAD_CAP: 9 * (cols - 1),
+    FANPOS: fanPosBase, FANPOS_CAP: 5 * cols,
     FANRAIL: fanRailBase, FANRAIL_CAP: 4,
     FANMIR: fanMirBase, FANMIR_CAP: 6 * Math.ceil(cols / 2) + 8,
     NOTOK: rotBase, NOTM: k => rotBase + 1 + k, TOKM0: rotBase + 6,
@@ -893,6 +942,14 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     ROW2Y: row2yBase, ROW2Z: row2yBase + 1,
     P3LG: p3lgBase,
     CLEARPM3B: clearpm3bBase,
+    SHR5: (i, part) => shr5Base + 3 * (i - 13) + part,
+    MMIR5: i => mmir5Base + (i - 13),
+    ROW2W: row2wBase,
+    PIECET2: j => piecet2Base + j,
+    FANRAIL2: k => fanRail2Base + k,
+    FANT2: fant2Base, FANT2_CAP: 2 * fant2Cap,
+    T2POS: p => t2posBase + p,
+    LEGBT: j => legbtBase + j,
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -1022,6 +1079,14 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   claim('score3', L8.ROW2Y, L8.ROW2Z);
   claim('P3LG', L8.P3LG);
   claim('CLEARPM3B', L8.CLEARPM3B);
+  for (let i = 13; i < 15; i++) for (let part = 0; part < 3; part++) claim('SHR5', L8.SHR5(i, part));
+  claim('MMIR5', L8.MMIR5(13), L8.MMIR5(14));
+  claim('ROW2W', L8.ROW2W);
+  for (let j = 0; j < 4; j++) claim('PIECET2', L8.PIECET2(j));
+  claim('FANRAIL2', L8.FANRAIL2(0), L8.FANRAIL2(1));
+  for (let k = 0; k < L8.FANT2_CAP; k++) claim('FANT2', L8.FANT2 + k);
+  for (let p = 0; p < 4; p++) claim('T2POS', L8.T2POS(p));
+  for (let j = 0; j < 4; j++) claim('LEGBT', L8.LEGBT(j));
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -1055,7 +1120,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     POSA, POSS, POSM, LEFTM, RIGHTM, ANYBM, ANYBM2, WIDM, WIDM2,
     POSRST, TWIN, BOOTL, POSM2, MIRC, LEGINV, WIDM3, WIDM4,
     MIRCT, LEGINVT, VMODEM, GOM, GAMEOVER, LKM2, LKM3, ROW2, TICKM4, V3M, ROW2M, ROW2X, TOPW2,
-    LINE3, LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3, ROW2Y, ROW2Z, P3LG, CLEARPM3B, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
+    LINE3, LINEDLY3, CPSET3, CLEARP3, RSTM3, CLEARPM3, ROW2Y, ROW2Z, P3LG, CLEARPM3B, SHR5, MMIR5, ROW2W, PIECET2, FANRAIL2, T2POS, LEGBT, SCR, SCBOOT, PIECET, CUTC5, CUTC6, STAGM, CUTB1, CUTB2, CUTB3, CUTB4, CUTBD, LEGB, STAGM2,
     SHR, UPM, SHBOOT, SM, ZM, OM, I2TM, I2WM, POSM3,
     SG, ZG,
     MMIR,
@@ -1105,7 +1170,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     R(A0m, 'J'), R(A0m, 'G'), R(A0m, 'N'), R(A0m, 'K'),
   ];
 
-  const dataRails = Array.from({ length: cols }, () => takeGroups(grown(6, 2))); // 6: 21 taps/rail at 8 rows since the T bank joined
+  const dataRails = Array.from({ length: cols }, () => takeGroups(grown(7, 2))); // 7: the T2 bank's gate joined at B1 (was 6 = 21 taps/rail at 8 rows)
   const railJack = (j: number, hole: number) => dataRails[j][Math.floor(hole / 4)];
   // chain each rail's groups (each link burns one hole on both sides, so a
   // group offers 4 fresh holes; railJack spreads consumers accordingly)
@@ -1587,7 +1652,16 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // pieces keep the classic path (NC -> colFan, the B-mask gates — zero
   // behavior change with the STAG slide off); staggered pieces divert to
   // the T fan (NO -> colFanT, the PIECET gates)
-  w.push(`${plusOf(P2COL)}/${R(P2COL, 'L')}`, `${R(P2COL, 'K')}/${R(STAGM, 'H')}`);
+  // B1: the feed now runs through ROW2W's second changeover FIRST —
+  // NC (phase 2, or a slide-only phase 3) continues into STAGM's
+  // changeover exactly as before; NO (a VERTICAL's phase 3) diverts to
+  // colFanT2, the T2 fan's node. ROW2W's coil = ROW2 AND (S vert |
+  // Z vert) via ROW2Y's free second set, so the slide-only phase 3
+  // keeps writing the bar and every B1b/B1c receipt stands (the review
+  // verdict's fourth option). the changeover moves at the tick-low
+  // transfer, rails cold, like ROW2 itself.
+  w.push(`${plusOf(P2COL)}/${R(P2COL, 'L')}`, `${R(P2COL, 'K')}/${R(ROW2W, 'L')}`);
+  w.push(`${R(ROW2W, 'N')}/${R(STAGM, 'H')}`);
   w.push(`${R(STAGM, 'J')}/${colFan()}`);
   // TOPW(r) routes the triggers to row r-1. The gate com (comA) is 4/4
   // full, but a com is one node: the trigger enters through W(r-1,0)'s coil
@@ -2279,6 +2353,9 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     SHR(0, 2), I2WM, I2TM, OM, SM2, ZG(3),
     L1M(1), J1M3, T1M2, L2M(2), J2M, T2M(2),
     IM(1),
+    // B1: the new slaves' coil jacks have the one free hole (no other
+    // mirrors chain off them — same story as state 0)
+    L.SHR5(13, 2), L.SHR5(14, 2),
   ];
   const stBanks: MirrorBank[] = [];
   {
@@ -2295,7 +2372,10 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     const capg = Math.max(0, cols - 4);
     // state 12 (I): two union memberships (B3, HIB2) + the B fan's
     // offset-3 rail feed. one spare set for the bank's own assert.
-    const caps = [4, 1, 2, 3, 4 + capg, 3, 3, 3 + capg, 3, 6 + capg, 4, 7 + capg, 2];
+    // B1: state 13 (S vert) = 11 sets (4 memberships + 2 T rails + 1 T2
+    // rail + 3 mode splices + the ROW2W gate); state 14 (Z vert) adds
+    // WIDB/BCUT and the per-left-tree bypass + d1 read gates
+    const caps = [4, 1, 2, 3, 4 + capg, 3, 3, 3 + capg, 3, 6 + capg, 4, 7 + capg, 2, 6, 7 + (cols - 1)];
     let off = 0;
     for (let i = 0; i < NSTATES; i++) {
       stBanks.push(
@@ -2446,18 +2526,23 @@ export function tetrisCircuit(rows = 8, cols = 4): {
         // changeovers BYPASS the shared check (NO forward, NC continue)
         const t2c = stBanks[11].request('changeover');
         const l2c = stBanks[9].request('changeover');
+        const zvc = stBanks[14].request('changeover'); // B1: Z vert's bottom is offset too
         enter(R(t2c.relay, t2c.arm));
         w.push(`${R(t2c.relay, t2c.nc)}/${R(l2c.relay, l2c.arm)}`);
         w.push(`${R(t2c.relay, t2c.no)}/${R(l2c.relay, l2c.no)}`); // bypasses tie
+        w.push(`${R(l2c.relay, l2c.nc)}/${R(zvc.relay, zvc.arm)}`);
+        w.push(`${R(t2c.relay, t2c.no)}/${R(zvc.relay, zvc.no)}`); // ...into the same bypass net
         pending = [R(l2c.relay, l2c.no)];
         {
-          // the d0 check itself (LEGINV set2), entered from L2's NC
+          // the d0 check itself (LEGINV set2), entered from Z vert's NC
+          // (the last bypass in the chain — T2, L2 and Z vert all skip it)
           const [arm, no, nc] = ['L', 'K', 'N'];
-          w.push(`${R(l2c.relay, l2c.nc)}/${R(LEGINV(c), arm)}`);
+          w.push(`${R(zvc.relay, zvc.nc)}/${R(LEGINV(c), arm)}`);
           w.push(`${R(LEGINV(c), no)}/${retTap(src)}`);
           pending.push(R(LEGINV(c), nc));
         }
         poolHop(c + 1, stBanks[11], false); // T2 bottom d1
+        poolHop(c + 1, stBanks[14], false); // Z vert bottom d1 (B1 — the review's T4)
         poolHop(c + 2, stBanks[9], false); // L2 bottom d2
         // top: d-1 (S), d0 (path-gated LEGINVT set2), d1, d2 (J1)
         poolHop(c - 1, stBanks[4], true); // S top d-1
@@ -2489,10 +2574,10 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     if (p === 0) {
       // pos 0's slave E carries the home-set wire (full): feed the bank
       // through POSM2(0)'s freed set2 instead (the old T fan spent it)
-      fanPos.push(new MirrorBank({ name: 'FANPOS0', source: null, base: L.FANPOS, capacity: 4, w, R, minusOf }));
+      fanPos.push(new MirrorBank({ name: 'FANPOS0', source: null, base: L.FANPOS, capacity: 5, w, R, minusOf }));
       w.push(`${plusOf(POSM2(0))}/${R(POSM2(0), 'L')}`, `${R(POSM2(0), 'K')}/${R(L.FANPOS, 'E')}`);
     } else {
-      fanPos.push(new MirrorBank({ name: `FANPOS${p}`, source: POSS(p), base: L.FANPOS + 4 * p, capacity: 4, w, R, minusOf }));
+      fanPos.push(new MirrorBank({ name: `FANPOS${p}`, source: POSS(p), base: L.FANPOS + 5 * p, capacity: 5, w, R, minusOf }));
     }
   }
   // the B fan: base = the chained POSS arms behind BCUT's NC (offset
@@ -2644,7 +2729,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       const s2 = SHAPES[t];
       const r1 = shapeRange(s1, cols);
       const r2 = shapeRange(s2, cols);
-      const mm = t < 6 ? MMIR(t) : t < 9 ? MMIR2(t) : t < 12 ? MMIR3(t) : MMIR4;
+      const mm = t < 6 ? MMIR(t) : t < 9 ? MMIR2(t) : t < 12 ? MMIR3(t) : t < 13 ? MMIR4 : MMIR5(t);
       let armChain: string | null = null;
       for (let p = r1.min; p <= r1.max; p++) {
         if (p < r2.min || p > r2.max) continue;
@@ -2829,9 +2914,23 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // the cuts still land the same eval as the first hot rail.
   w.push(`${tap(p2railA, p2aUse)}/${R(STAGM, 'L')}`, `${R(STAGM, 'K')}/${R(CUTBD, 'E')}`);
   w.push(`${R(CUTBD, 'F')}/${minusOf(CUTBD)}`);
-  w.push(`${plusOf(CUTBD)}/${R(CUTBD, 'H')}`, `${R(CUTBD, 'G')}/${R(CUTC5, 'E')}`);
+  // B1 SPLIT THE CUT CHAIN: the stagger cuts used to be one coil chain
+  // (CUTC5/6 + CUTB1..4) off CUTBD.G, hot on BOTH phase ticks — and
+  // during a vertical's phase 3 the still-closed T-fan gates BRIDGED
+  // rail p to rail p+1 through colFanT (a bridge needs no feed): the
+  // phase-3 write grew the mid mask's fifth cell (the review's catch).
+  // now: CUTB1..4 stay unconditional on CUTBD.G; CUTC5/6 (the T-fan
+  // gates) ride CUTBD's SECOND set through ROW2W's NC — closed for
+  // every phase 2 and for slide-only phase 3 (identical timing, a
+  // contact adds no wave), OPEN during a vertical's phase 3 so the
+  // T fan is severed while the T2 fan writes.
+  w.push(`${plusOf(CUTBD)}/${R(CUTBD, 'H')}`, `${R(CUTBD, 'G')}/${R(CUTB1, 'E')}`);
+  w.push(`${plusOf(CUTBD)}/${R(CUTBD, 'L')}`, `${R(CUTBD, 'K')}/${R(ROW2W, 'H')}`);
+  w.push(`${R(ROW2W, 'J')}/${R(CUTC5, 'E')}`);
+  // (ROW2W.G is RESERVED: when B2's vertical L/J/T make PIECET2
+  // multi-column, their fan needs its own cut bank and it enters here)
   w.push(`${R(CUTC5, 'E')}/${R(CUTC6, 'E')}`);
-  w.push(`${R(CUTC6, 'E')}/${R(CUTB1, 'E')}`, `${R(CUTB1, 'E')}/${R(CUTB2, 'E')}`);
+  w.push(`${R(CUTB1, 'E')}/${R(CUTB2, 'E')}`);
   w.push(`${R(CUTB2, 'E')}/${R(CUTB3, 'E')}`, `${R(CUTB3, 'E')}/${R(CUTB4, 'E')}`);
   // wider wells: stagger-cut extras chain off CUTB4 (the CUTBD net)
   {
@@ -3212,6 +3311,125 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // the join grows the overhang tails
   for (const m of [MMIR3(9), MMIR3(10), MMIR3(11), TT, TTM(0), TTM(1), TTM(2), TTM(3), TTM(4), BCUT, BCUTM, L2M(0), L2M(1), L2M(2), J2M, T2M(0), T2M(1), T2M(2)])
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
+
+  // ---------- B1 (2026-08-26): VERTICAL S AND Z ----------
+  // the first three-row states, driving the landed phase-3 engine. the
+  // ring/tree/fan EMITTERS grew them automatically from the SHAPES rows
+  // (their derived 2-row views expose bottom+MID, exactly what phase 2
+  // and the legality trees must see); this block wires what no emitter
+  // derives: the transition-branch mirrors, the mode-rail memberships,
+  // the ROW2W diversion, the T2 fan (the phase-3 mask) and the top-row
+  // collision term. design + adversarial review: _notes/tall-pieces.md.
+  // MMIR5 coils parallel the new masters; the master-mirror arm chain
+  // extends off MMIR4.H (the old tail, one free hole)
+  w.push(`${R(SHR5(13, 1), 'E')}/${R(MMIR5(13), 'E')}`, `${R(MMIR5(13), 'F')}/${minusOf(MMIR5(13))}`);
+  w.push(`${R(SHR5(14, 1), 'E')}/${R(MMIR5(14), 'E')}`, `${R(MMIR5(14), 'F')}/${minusOf(MMIR5(14))}`);
+  w.push(`${R(MMIR4, 'H')}/${R(MMIR5(13), 'H')}`, `${R(MMIR5(13), 'H')}/${R(MMIR5(14), 'H')}`);
+  // mode-rail memberships: one state contact each, outputs tied, ONE
+  // wire into each union net's free jack (the chain heads / newest
+  // tails, hole-counted in the review): V3 at V3M.E, VMODE at I2TM.G,
+  // STAG at SM(3).G, and Z vert alone joins WIDB (at IM(0).K — its
+  // offset single bottom is T2's tap mechanism verbatim) and BCUT (at
+  // L2M(0).K, the base suppression). every arm is at +, every idle
+  // throw dead-ends open: the standard wired-OR audit.
+  const orInto = (sets: Array<{ relay: number; arm: string; no: string }>, entry: string) => {
+    for (const cs of sets) w.push(`${plusOf(cs.relay)}/${R(cs.relay, cs.arm)}`);
+    for (let k = 1; k < sets.length; k++)
+      w.push(`${R(sets[k - 1].relay, sets[k - 1].no)}/${R(sets[k].relay, sets[k].no)}`);
+    w.push(`${R(sets[sets.length - 1].relay, sets[sets.length - 1].no)}/${entry}`);
+  };
+  orInto([stBanks[13].request('gate'), stBanks[14].request('gate')], R(V3M, 'E'));
+  orInto([stBanks[13].request('gate'), stBanks[14].request('gate')], R(I2TM, 'G'));
+  orInto([stBanks[13].request('gate'), stBanks[14].request('gate')], R(SM(3), 'G'));
+  orInto([stBanks[14].request('gate')], R(IM(0), 'K'));
+  orInto([stBanks[14].request('gate')], R(L2M(0), 'K'));
+  // ROW2W's coil: + -> ROW2Y's free second set ("ROW2 is up", +-armed so
+  // it reads true at the tick-low where ROW2 moves) -> a vertical-state
+  // contact -> the coil. slide-only phase 3 leaves it DOWN: both of its
+  // changeovers (the cut split and the feed diversion, wired at their
+  // sites above) then route exactly as before B1.
+  {
+    const sv = stBanks[13].request('gate');
+    const zv = stBanks[14].request('gate');
+    w.push(`${plusOf(ROW2Y)}/${R(ROW2Y, 'L')}`);
+    w.push(`${R(ROW2Y, 'K')}/${R(sv.relay, sv.arm)}`, `${R(ROW2Y, 'K')}/${R(zv.relay, zv.arm)}`);
+    w.push(`${R(sv.relay, sv.no)}/${R(zv.relay, zv.no)}`);
+    w.push(`${R(zv.relay, zv.no)}/${R(ROW2W, 'E')}`, `${R(ROW2W, 'F')}/${minusOf(ROW2W)}`);
+  }
+  // the T2 fan: the THIRD row's mask, same offset-rail shape as the T
+  // fan. rails: d0 = Z vert (third row at p), d1 = S vert (at p+1);
+  // rail mirrors from their own bank; pos taps from a private T2POS
+  // relay per position (2 sets: one d0 branch, one d1 branch), each fed
+  // through ONE fanPos set — FANPOS was at 7/8 on the tight positions,
+  // so per-branch fanPos taps would overflow (the review's count).
+  {
+    const railOf = (d: 0 | 1, cs: { relay: number; arm: string; no: string }) => {
+      const u = FANRAIL2(d);
+      w.push(`${plusOf(cs.relay)}/${R(cs.relay, cs.arm)}`, `${R(cs.relay, cs.no)}/${R(u, 'E')}`, `${R(u, 'F')}/${minusOf(u)}`);
+      return u;
+    };
+    const fant2Cap = Math.ceil((cols - 1) / 2);
+    const t2Rails: Array<{ bank: MirrorBank; d: number }> = [
+      { bank: new MirrorBank({ name: 'FANT2D0', source: railOf(0, stBanks[14].request('gate')), base: L.FANT2, capacity: fant2Cap, w, R, minusOf }), d: 0 },
+      { bank: new MirrorBank({ name: 'FANT2D1', source: railOf(1, stBanks[13].request('gate')), base: L.FANT2 + fant2Cap, capacity: fant2Cap, w, R, minusOf }), d: 1 },
+    ];
+    const t2pos: MirrorBank[] = [];
+    for (let pp = 0; pp < cols; pp++) {
+      const bank = new MirrorBank({ name: `T2POS${pp}`, source: null, base: T2POS(pp), capacity: 1, w, R, minusOf });
+      const feed = fanPos[pp].request('gate');
+      w.push(`${plusOf(feed.relay)}/${R(feed.relay, feed.arm)}`, `${R(feed.relay, feed.no)}/${R(T2POS(pp), 'E')}`);
+      t2pos.push(bank);
+    }
+    for (let j = 0; j < cols; j++) {
+      const outs: string[] = [];
+      for (const { bank, d } of t2Rails) {
+        const pp = j - d;
+        if (pp < 0 || pp >= cols) continue;
+        const rm = bank.request('gate');
+        const pm = t2pos[pp].request('gate');
+        w.push(`${plusOf(rm.relay)}/${R(rm.relay, rm.arm)}`);
+        w.push(`${R(rm.relay, rm.no)}/${R(pm.relay, pm.arm)}`);
+        outs.push(R(pm.relay, pm.no));
+      }
+      for (let k = 1; k < outs.length; k++) w.push(`${outs[k - 1]}/${outs[k]}`);
+      w.push(`${outs[outs.length - 1]}/${R(PIECET2(j), 'E')}`, `${R(PIECET2(j), 'F')}/${minusOf(PIECET2(j))}`);
+    }
+  }
+  // colFanT2 + the write gates. UNGATED BY DESIGN for B1: both vertical
+  // masks are single-column, and a single closed gate bridges nothing —
+  // the tie to an unfed node is a dead stub in every other phase. B2's
+  // vertical L/J/T tops are multi-column: THEIR landing must add the
+  // cut bank (it enters at ROW2W.G, reserved at the cut split above).
+  {
+    const colFanT2G = takeGroups(Math.ceil(cols / 4));
+    for (let i = 1; i < colFanT2G.length; i++) w.push(`${colFanT2G[i - 1]}/${colFanT2G[i]}`);
+    const use = { n: 0 };
+    const colFanT2 = () => {
+      const g = colFanT2G.length === 1 ? colFanT2G[0] : colFanT2G[Math.floor(use.n / 4)];
+      use.n++;
+      return g;
+    };
+    w.push(`${R(ROW2W, 'K')}/${colFanT2()}`); // fed ONLY during a vertical's phase 3
+    for (let j = 0; j < cols; j++) {
+      w.push(`${colFanT2()}/${R(PIECET2(j), 'H')}`, `${R(PIECET2(j), 'G')}/${tapRail(j)}`);
+    }
+  }
+  // the TOP-ROW collision term: the third row rests on stored content.
+  // per column, a +-fed series branch PIECET2(j) AND occupied(tok-1, j)
+  // pre-arms COLLIDE — the 3b-2 LEGB pattern one row up. occupied()
+  // comes from LEGBT coils paralleling LEGINVT(j).E (each had exactly
+  // one free hole); the branches chain and enter at COLLIDE.E, the one
+  // free hole on the collide-coil net (the com went to LEGB in 3b-2).
+  // no extra mode scope: PIECET2 is dark unless a vertical is up, so
+  // every branch dead-ends at its open PIECET2 contact otherwise.
+  // MIRCT covers rows 1..rows-2, so a token at the floor reads dark —
+  // benign (a floor lock needs no top check).
+  for (let j = 0; j < cols; j++) {
+    w.push(`${R(LEGINVT(j), 'E')}/${R(LEGBT(j), 'E')}`, `${R(LEGBT(j), 'F')}/${minusOf(LEGBT(j))}`);
+    w.push(`${plusOf(PIECET2(j))}/${R(PIECET2(j), 'L')}`, `${R(PIECET2(j), 'K')}/${R(LEGBT(j), 'H')}`);
+  }
+  for (let j = 1; j < cols; j++) w.push(`${R(LEGBT(j - 1), 'G')}/${R(LEGBT(j), 'G')}`);
+  w.push(`${R(LEGBT(cols - 1), 'G')}/${R(COLLIDE, 'E')}`);
 
   // ---------- 3b-5: the self-tick oscillator (see the constants) -------
   const om = Math.floor(TOSC / 6);

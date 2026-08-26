@@ -1628,8 +1628,14 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(g.posAt()).toBe(2);
     expect(topBank(), 'S at pos 2: top pair 1-2').toBe(0b0110);
 
-    up(); // S -> Z at pos 2: Z's range ends at pos 1 — refused too
-    expect(shapeAt(), 'Z at pos 2 refused in contacts').toBe(4);
+    // B1: the chooser runs S -> S VERT -> Z -> Z VERT now. entering
+    // S vert at pos 2 is fine (its shared branch spans [1, 2])...
+    up();
+    expect(shapeAt(), 'S steps into S vert').toBe(13);
+    // ...but Z's branch (shared with its rotation source Z vert) ends at
+    // pos 1: the pos-2 refusal moved one edge over and still refuses
+    up();
+    expect(shapeAt(), 'Z at pos 2 refused in contacts').toBe(13);
     g.pressBtn(TETRIS_IO.left);
     up(); // Z: shifted RIGHT
     expect(shapeAt()).toBe(5);
@@ -1637,11 +1643,13 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(topBank(), 'Z at pos 1: top pair 2-3').toBe(0b1100);
     g.pressBtn(TETRIS_IO.left);
     expect(topBank(), 'Z at pos 0: top pair 1-2').toBe(0b0110);
+    up(); // Z -> Z vert (rails and fans pinned in multivac-vertical-pieces)
+    expect(shapeAt(), 'Z steps into Z vert').toBe(14);
 
-    // 3b-4a: the ring continues into the upright triples. Z -> L1 (the
-    // delta cells read dark pre-spawn, and pos 0 is in every range here)
+    // 3b-4a: the ring continues into the upright triples. Z vert -> L1
+    // (the delta cells read dark pre-spawn, and pos 0 is in every range)
     up();
-    expect(shapeAt(), 'Z steps into L1 now, not home').toBe(6);
+    expect(shapeAt(), 'Z vert steps into L1, not home').toBe(6);
     expect(rails(), 'L1: wide, tall, T-fan phase 2').toEqual([1, 1, 1]);
     expect(botBank(), 'L1 bottom: the triple at pos 0').toBe(0b0111);
     expect(topBank(), 'L1 top: the stem on the left').toBe(0b0001);
@@ -1721,9 +1729,10 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const up = () => g.pressBtn(TETRIS_IO.up);
     const model = Array(8).fill(0);
     // the CENTER home is pos 1 — already inside S's fit range, which the
-    // cycle passes through (the transition network refuses out-of-range)
+    // cycle passes through (the transition network refuses out-of-range;
+    // since B1 it also passes S VERT between S and Z)
     expect(g.posAt()).toBe(1);
-    for (let k = 0; k < 5; k++) up(); // 1x1 -> ... -> Z at pos 1
+    for (let k = 0; k < 6; k++) up(); // 1x1 -> ... -> S vert -> Z at pos 1
     g.pressBtn(TETRIS_IO.left); // Z's floor drop happens at pos 0
     g.pressStart();
     // Z at the home column: bottom 0-1, top 1-2
@@ -1832,7 +1841,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(4, 0b0001); // the tower at (4,0); pos-1 fall path clear
     // the CENTER home is pos 1: in range for every entry on the cycle
-    for (let k = 0; k < 5; k++) g.pressBtn(TETRIS_IO.up); // -> Z at pos 1 (bottom 1-2, top 2-3)
+    for (let k = 0; k < 6; k++) g.pressBtn(TETRIS_IO.up); // -> Z at pos 1 (through S vert since B1)
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the tower
     expect(g.tokenAt()).toEqual([5]);
@@ -1855,7 +1864,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(4, 0b1000); // the tower at (4,3); pos-0 fall path clear
     // the CENTER home is pos 1 for the cycle...
-    for (let k = 0; k < 5; k++) g.pressBtn(TETRIS_IO.up); // -> Z
+    for (let k = 0; k < 6; k++) g.pressBtn(TETRIS_IO.up); // -> Z (through S vert since B1)
     g.pressBtn(TETRIS_IO.left); // ...then home to 0 for the drop
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5 (top {1,2} clears col 3)
@@ -1882,7 +1891,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const model = Array(8).fill(0);
     // the cycle transits S/Z — the CENTER home pos 1 is already in range
     // (the triples steer freely since 4b, but these drops stay put)
-    for (let k = 0; k < 6; k++) up(); // -> L1 at pos 1
+    for (let k = 0; k < 8; k++) up(); // -> L1 at pos 1 (through the B1 verticals)
     g.pressStart();
     g.tick(); // spawn
     for (let r = 1; r <= 7; r++) g.tick(); // floor lock
@@ -1919,7 +1928,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(6, 0b0100); // stored at (6,2)
     // the CENTER home pos 1 is in range for the whole walk
-    for (let k = 0; k < 5; k++) up(); // -> Z at pos 1
+    for (let k = 0; k < 6; k++) up(); // -> Z at pos 1 (through S vert)
     g.pressBtn(TETRIS_IO.left); // home to 0
     g.pressStart();
     // Z's own notch ({2} = top minus bottom) rests it ON the stored cell:
@@ -1958,7 +1967,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // L1 right: the triple's ENTERING bottom column is col 3
     let g = makeGame();
     g.operatorWrite(5, 0b1000); // the tower at (5,3)
-    walkTo(g, 6); // L1 at pos 1
+    walkTo(g, 8); // L1 at pos 1 (through the B1 verticals)
     g.pressBtn(TETRIS_IO.left); // home to 0 (free pre-spawn)
     expect(g.posAt()).toBe(0);
     g.pressStart();
@@ -1979,7 +1988,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // J1 right: the stem lands one row up at col 3
     g = makeGame();
     g.operatorWrite(4, 0b1000); // the floater at (4,3)
-    walkTo(g, 7); // J1 at pos 1
+    walkTo(g, 9); // J1 at pos 1
     g.pressBtn(TETRIS_IO.left);
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5: stem target (4,3)
@@ -1999,7 +2008,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // L1 left: the stem target reads through the re-gated point-1 check
     g = makeGame();
     g.operatorWrite(4, 0b0001); // the tower at (4,0)
-    walkTo(g, 6); // L1 at pos 1 (falls in cols 1-3, clear of the tower)
+    walkTo(g, 8); // L1 at pos 1 (falls in cols 1-3, clear of the tower)
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5: stem target (4,0)
     g.pressBtn(TETRIS_IO.left);
@@ -2027,7 +2036,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     const up = () => g.pressBtn(TETRIS_IO.up);
     const model = Array(8).fill(0);
     // L2 at pos 0 (the CENTER home pos 1 transits S in range; walk left for the drop)
-    for (let k = 0; k < 9; k++) up(); // -> L2
+    for (let k = 0; k < 11; k++) up(); // -> L2 (through the B1 verticals)
     g.pressBtn(TETRIS_IO.left);
     g.pressStart();
     g.tick(); // spawn
@@ -2060,7 +2069,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(4, 0b0001); // the tower at (4,0): left-target top col 0
     // the CENTER home IS pos 1
-    for (let k = 0; k < 11; k++) up(); // -> T2 at pos 1 (bottom col 2, top 1-3)
+    for (let k = 0; k < 13; k++) up(); // -> T2 at pos 1 (bottom col 2, top 1-3)
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the tower
     expect(g.tokenAt()).toEqual([5]);
@@ -2169,7 +2178,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(5, 0b0001); // the stack at (5,0)
     // the CENTER home pos 1 carries the chooser past S
-    for (let k = 0; k < 9; k++) g.pressBtn(TETRIS_IO.up); // L2, pre-spawn
+    for (let k = 0; k < 11; k++) g.pressBtn(TETRIS_IO.up); // L2, pre-spawn
     expect(shapeAt6(g), 'chose the L flip before spawning').toBe(9);
     g.pressBtn(TETRIS_IO.left); // back to pos 0
     g.pressStart();
@@ -2182,7 +2191,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
 
     // the same turn, same columns, on a clear field: it conducts
     g = makeGame();
-    for (let k = 0; k < 9; k++) g.pressBtn(TETRIS_IO.up); // L2 (home transits S)
+    for (let k = 0; k < 11; k++) g.pressBtn(TETRIS_IO.up); // L2 (home transits the verticals too)
     g.pressBtn(TETRIS_IO.left); // pos 0
     g.pressStart();
     for (let t = 0; t <= 3; t++) g.tick(); // still falling, nothing stored
@@ -2233,7 +2242,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // column >= 1, the I's 4-wide bottom fits only at column 0 — so the
     // walk steers, exactly as a player would.
     const stepChooser = () => {
-      const r = shapeRange(SHAPES[(shapeAt() + 1) % NSTATES], 4);
+      const r = shapeRange(SHAPES[SELECTION_NEXT(shapeAt())], 4);
       let st = 0;
       while (g.posAt() < r.min && st++ < 6) g.pressBtn(TETRIS_IO.right);
       while (g.posAt() > r.max && st++ < 6) g.pressBtn(TETRIS_IO.left);
@@ -2250,7 +2259,9 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       stepChooser();
       cycle.push(shapeAt());
     }
-    expect(cycle, 'the pre-spawn chooser cycles all thirteen').toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0]);
+    expect(cycle, 'the pre-spawn chooser cycles all fifteen (the B1 verticals ride next to their rotation partners)').toEqual([
+      1, 2, 3, 4, 13, 5, 14, 6, 7, 8, 9, 10, 11, 12, 0,
+    ]);
 
     // MID-FALL the same button rotates: L1 <-> L2, both directions
     walkTo(6);
@@ -2702,8 +2713,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       const m = new MinivacSimulator(wires, false, L.machines);
       m.initialize();
       const rel = (i: number) => (m.getMachineState(Math.floor(i / 6)).relays[i % 6] ? 1 : 0);
-      const SH = (i: number, p: number) =>
-        i < 6 ? L.SHR(i, p) : i < 9 ? L.SHR2(i, p) : i < 12 ? L.SHR3(i, p) : L.SHR4(i, p);
+      const SH = (i: number, p: number) => ringPart(L, i, p);
       const shape = () => {
         for (let i = 0; i < SHAPES.length; i++) if (rel(SH(i, 2))) return i;
         return -1;
