@@ -41,32 +41,62 @@ export const NSTATES = 13; // ring states (the page's cycle length)
 // in 3b-4a, their 180-degree overhang forms in 3b-4c). SINGLE SOURCE OF
 // TRUTH: the page renders from it and the wider-well emitter derives
 // its step/reshape check tables from it (_notes/wider-well.md).
-export const SHAPES = [
-  { label: '1x1', bOff: 0, bW: 1, tOff: 0, tW: 0 },
-  { label: '2 wide', bOff: 0, bW: 2, tOff: 0, tW: 0 },
-  { label: '2 tall', bOff: 0, bW: 1, tOff: 0, tW: 1 },
-  { label: '2x2 square', bOff: 0, bW: 2, tOff: 0, tW: 2 },
-  { label: 'S', bOff: 0, bW: 2, tOff: -1, tW: 2 },
-  { label: 'Z', bOff: 0, bW: 2, tOff: 1, tW: 2 },
-  { label: 'L', bOff: 0, bW: 3, tOff: 0, tW: 1 },
-  { label: 'J', bOff: 0, bW: 3, tOff: 2, tW: 1 },
-  { label: 'T', bOff: 0, bW: 3, tOff: 1, tW: 1 },
-  { label: 'L flip', bOff: 2, bW: 1, tOff: 0, tW: 3 },
-  { label: 'J flip', bOff: 0, bW: 1, tOff: 0, tW: 3 },
-  { label: 'T flip', bOff: 1, bW: 1, tOff: 0, tW: 3 },
-  // 3b-4d — the horizontal I: 4 wide and FLAT (tW 0, so every top path
-  // stays dark and no new write phase or collision term is needed). its
-  // rotation partner is the VERTICAL I, which wants a four-row write
-  // engine, so until that exists I is a ring singleton and UP refuses
-  // it mid-fall exactly like O.
-  { label: 'I', bOff: 0, bW: 4, tOff: 0, tW: 0 },
-] as const;
-if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
-// legal register positions for a shape at a given width (both rows fit)
-export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
-  min: Math.max(0, -s.bOff, s.tW > 0 ? -s.tOff : 0),
-  max: Math.min(cols - s.bOff - s.bW, s.tW > 0 ? cols - s.tOff - s.tW : cols),
+// B1-0 (2026-08-26): a shape is N ROWS, bottom-first — rows[k] sits k
+// rows above the token row. bOff/bW/tOff/tW are DERIVED views of
+// rows[0]/rows[1] so every 2-row consumer (the emitters, the page, the
+// tests) reads on unchanged; a third row is invisible to them BY DESIGN
+// until its consumer is deliberately taught (the per-site list lives in
+// _notes/tall-pieces.md, T5). Byte-identity of the netlist at (8,4),
+// (8,6) and (12,6) was verified when this record changed shape.
+export interface ShapeDef {
+  label: string;
+  rows: ReadonlyArray<{ off: number; w: number }>;
+  bOff: number;
+  bW: number;
+  tOff: number;
+  tW: number;
+}
+const shapeDef = (label: string, rows: Array<{ off: number; w: number }>): ShapeDef => ({
+  label,
+  rows,
+  bOff: rows[0].off,
+  bW: rows[0].w,
+  tOff: rows[1]?.off ?? 0,
+  tW: rows[1]?.w ?? 0,
 });
+export const SHAPES: readonly ShapeDef[] = [
+  shapeDef('1x1', [{ off: 0, w: 1 }]),
+  shapeDef('2 wide', [{ off: 0, w: 2 }]),
+  shapeDef('2 tall', [{ off: 0, w: 1 }, { off: 0, w: 1 }]),
+  shapeDef('2x2 square', [{ off: 0, w: 2 }, { off: 0, w: 2 }]),
+  shapeDef('S', [{ off: 0, w: 2 }, { off: -1, w: 2 }]),
+  shapeDef('Z', [{ off: 0, w: 2 }, { off: 1, w: 2 }]),
+  shapeDef('L', [{ off: 0, w: 3 }, { off: 0, w: 1 }]),
+  shapeDef('J', [{ off: 0, w: 3 }, { off: 2, w: 1 }]),
+  shapeDef('T', [{ off: 0, w: 3 }, { off: 1, w: 1 }]),
+  shapeDef('L flip', [{ off: 2, w: 1 }, { off: 0, w: 3 }]),
+  shapeDef('J flip', [{ off: 0, w: 1 }, { off: 0, w: 3 }]),
+  shapeDef('T flip', [{ off: 1, w: 1 }, { off: 0, w: 3 }]),
+  // 3b-4d — the horizontal I: 4 wide and FLAT (one row, so every top
+  // path stays dark and no new write phase or collision term is
+  // needed). its rotation partner is the VERTICAL I, which wants a
+  // four-row write engine, so until that exists I is a ring singleton
+  // and UP refuses it mid-fall exactly like O.
+  shapeDef('I', [{ off: 0, w: 4 }]),
+];
+if (SHAPES.length !== NSTATES) throw new Error('SHAPES must mirror the ring');
+// legal register positions for a shape: EVERY row's cells must fit
+// (generalized to all rows in B1-0 — identical for 2-row shapes, and it
+// stops the silent wrongness a 3-row shape's top row would hit)
+export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => {
+  let min = 0;
+  let max = cols;
+  for (const r of s.rows) {
+    min = Math.max(min, -r.off);
+    max = Math.min(max, cols - r.off - r.w);
+  }
+  return { min, max };
+};
 
 // THE HOME COLUMN (center spawn, 2026-08-26, user call): the register
 // seeds and re-homes at the middle of the window every shape can occupy —

@@ -55,16 +55,11 @@ describe('table lockstep: the circuit tables are a prefix of the target tables',
       const c = SHAPES[i];
       const t = TARGET_SHAPES[i];
       expect(c.label, `state ${i}`).toBe(t.label);
-      // the circuit's 2-row record is the rows.length <= 2 special case
-      const rows = t.rows;
-      expect(rows.length, `state ${i} (${t.label}) is at most 2 rows in the circuit today`).toBeLessThanOrEqual(2);
-      expect({ off: c.bOff, w: c.bW }, `state ${i} bottom row`).toEqual({ off: rows[0].off, w: rows[0].w });
-      if (c.tW > 0) {
-        expect(rows.length, `state ${i} has a top row`).toBe(2);
-        expect({ off: c.tOff, w: c.tW }, `state ${i} top row`).toEqual({ off: rows[1].off, w: rows[1].w });
-      } else {
-        expect(rows.length, `state ${i} is flat`).toBe(1);
-      }
+      // since B1-0 both tables speak rows: compare them outright, and
+      // pin the circuit's derived 2-row views against its own rows
+      expect(c.rows, `state ${i} (${t.label}) rows`).toEqual(t.rows);
+      expect({ off: c.bOff, w: c.bW }, `state ${i} derived bottom`).toEqual(c.rows[0]);
+      expect({ off: c.tOff, w: c.tW }, `state ${i} derived top`).toEqual(c.rows[1] ?? { off: 0, w: 0 });
     }
   });
 
