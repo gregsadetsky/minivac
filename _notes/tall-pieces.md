@@ -1209,3 +1209,187 @@ needed), ROW3-analog changeover in the write path, a fourth fan (rows[3]),
 tok-3 occupancy for the rotation delta (12<->21: misses (r-1..r-3, p+2)),
 the I-vert's bottom at p+2 = a NEW BCUT/WID3-class combination, and the
 21->22 lockstep/driver/count updates. review before wiring, as ever.
+
+## B3 LEDGER, first draft (2026-08-26 — the LAST state) — REVIEW BEFORE WIRING
+
+one state: 21, the VERTICAL I ([{2,1},{2,1},{2,1},{2,1}] — four rows,
+one column at p+2). ROT 12<->21; SELECTION_CYCLE appends 21 between 12
+and the wrap ([..., 11, 20, 12, 21] -> 0); TARGET tables already carry
+it (the lockstep and the all-edges invariant test pass by construction
+— re-verify mechanically).
+
+1. THE FOURTH PHASE TICK: the ROW2 pattern one deeper — a ROW3
+   changeover in the write-trigger path (row3gate/row3break fork), a
+   ROW3M/ROW3X master/latch pair, P2CLR's inhibit chain extended
+   (+V4M-analog term), the reset one MORE tick late. TICKM4's sets are
+   FULL (measured at B1b) — the new transfer clock needs a TICKM5
+   mirror. the write rows: press r, phase2 r-1, phase3 r-2, phase4 r-3
+   via a TOPW3(r) bank (r=3..rows-1) entering the write-trigger nets at
+   holes that MUST BE MEASURED (the TOPW2 lesson: the spare is
+   elsewhere on the coil net, width-conditional).
+2. the V4 rail: state-21-only (no slide analog? add a V4 service slide
+   for symmetry with V3 or gate purely on the state mirror — DECIDE;
+   pure-state is simpler and the B1b-style slide receipts don't exist
+   for phase 4 anyway).
+3. the FOURTH fan row: rows[3] = {p+2} single column — a PIECET3 bank?
+   or, single-column-forever (only the I-vert has a fourth row): ONE
+   rail + pos taps, no cut bank needed (single column bridges nothing).
+4. the phase-4 line sense + collapse seed + score fourth step: the B1c
+   pattern one deeper (LINE4/CLEARP4/SEEDM3/quad-clock) — OR declare
+   quads unscorable... a 1-column I-vert can complete AT MOST the rows
+   its single cells finish: any of its four rows can complete. the
+   HONEST cost: the full fourth copy of the clear machinery. count it
+   before deciding; a quad clear IS tetris's namesake move — but note
+   the I-vert is ONE COLUMN: it completes a row only where the other
+   cols-1 cells already stand; four simultaneous completions = four
+   pre-filled rows = the classic tetris quad ✓ real gameplay. build it.
+5. legality: the tok-3 row is UNREADABLE (no bank); rotation 12->21's
+   deltas at (r-1, p+2), (r-2, p+2), (r-3, p+2) — tok-1/tok-2 read,
+   tok-3 = a NEW DECLARED SEAM (page guard), or a MIRCT3 bank
+   (~2(rows-4)+cols more relays). B2-0's precedent says build the bank;
+   B3's I-vert is ONE state and the seam is one cell — DECIDE in review.
+6. the I-vert bottom {p+2}: BCUT + a WID3-tap-alone bottom — L2's
+   pattern verbatim (bOff=2 joins L2's d2 class in the left trees, NOT
+   BO1). uHIB2-class bounds: range(21) = [0, cols-3].
+7. steering: bottom d2 entering cells (left tree: L2's existing d2
+   read gains a member — union it or twin it); the four-row footprint's
+   mid/top checks ride the existing tok-1/tok-2 banks; tok-3 per item 5.
+8. counts: caps[21], STPMIR/STPREAD/UNION growth, T2POS (rows[2] of 21
+   = {p+2} joins the d2 rail), FANRAIL2 d2 gains a member, clock
+   segment 3 takes state 21 (com20 pairs 20/21 — verify the segment
+   current headroom at 6 coils), driver/test cycle updates (21 wraps),
+   NSTATES 22 = TARGET_NSTATES: the lockstep goes EXACT (cycle equality
+   kicks in — the reference's TARGET_SELECTION_CYCLE must equal the
+   circuit's, and rot 'current' must equal TARGET_ROT everywhere).
+
+## B3 REVIEW VERDICT (clean-context adversarial review #4, 2026-08-26)
+
+hole counts read from wire-emission sites, not a built netlist — confirm
+each with the jack audit before wiring. all :lines = generator post-B2.
+
+### the structural refutation: ITEM 3 DISSOLVES
+rows[3] === rows[2] for the I-vert (all four rows {off:2,w:1}). the
+phase-4 column mask IS the phase-3 mask: leave ROW2W up through phase 4
+(its coil is ROW2-AND-vert and ROW2 stays up until P2CLR), keep the feed
+on colFanT2, PIECET2's d2 branch writes the phase-4 mask — state 21
+joins d2 by geometry, zero code. NO PIECET3/FANRAIL3/T3POS/CUTC8. this
+is my own vertical-3-bar argument (:714-723) one level up and the ledger
+forgot it applies. GUARD: load assert — every >=4-row shape's rows[3]
+deep-equals rows[2]. consequence: ROW3's changeover is needed ONLY in
+the write-trigger path (row3gate/row3break fork), not the column feed.
+
+### item 1 (fourth tick): skeleton verified, four details refuted
+- P2CLR.E is 2/2 FULL (V3M.J :1710 + ROW2X.G :1819). the "+V4M term" is
+  a RESTRUCTURE: ROW2X.G's wire MOVES onto a V4 changeover (stBanks[21]
+  request('changeover'), the :2672 idiom); V4.NC and ROW3X.NO tie
+  together first, enter P2CLR.E as ONE wire (exclusive by V4's throw).
+- both P2CLR contact sets spent (J :1680, N :1824). ROW3M's latch break
+  needs a P2CLR parallel mirror; its coil enters at V3M.J's 1 FREE hole.
+- "ROW2 up" contacts exhausted (ROW2X.G/.J spent; set2 N is NC = wrong
+  polarity). the ROW2 coil net's only free hole is P3LG.E (:1994) —
+  ONE hole, don't spend it twice (the score gate wants ROW3-side state
+  instead, which avoids the collision).
+- clocking ROW3M: TICKM4.N (set2 NC, arm at +, :1830) is FREE — carries
+  the tick-low transfer; only the tick-high hold needs TICKM5. TICKM5's
+  coil chains off TICKM4.E (1 free; TICKM3.E is FULL — the B1b note's
+  "TICKM3.E free" is STALE, don't copy it). fifth coil on the tick net
+  lands ~2.99-3.03A at 12x6 vs the ~3.4A alarm — probably clears, MUST
+  be measured per this file's own rule.
+- reset stays one tick later than the last phase iff the 3-tall states
+  (13-20) never raise V4 — pin that equivalence receipt.
+
+### item 4 (quad clear): build it, cheaper AND buggier than drafted
+- NO LINE4 bank: LINE3's entire second contact set (L/K/N) is unwired —
+  the fourth sense chain rides LINE3 set 2 exactly as the double rode
+  LINE set 2. saves cols relays.
+- WIPE TRAP 1: LINEDLY3's coil taps row3gate UPSTREAM of the new ROW3
+  fork — phase-4 tick would latch CLEARP3 off the wrong row and wipe
+  r-2 (the T2/P3LG defect one phase deeper). needs a P4LG-analog or the
+  tap moves below ROW3's NC.
+- WIPE TRAP 2: CLEARP3.G enters the row3break tap — with ROW3 up its
+  held pulse diverts to row4break and holds r-3's breakers through the
+  phase-4 write (the CLEARP2/ROW2 wipe verbatim). entry moves to ROW3's
+  NC jack, same as :2004-2015 did with ROW2.N (ROW2.N itself now 2/2).
+- score: CLEARPM3's pulse (ungated because LAST today) gains a
+  ROW3Z-analog NC gate + a +-armed ROW3 mirror to set it (rail-fed
+  contacts dead at tick-low, the :2996-3003 lesson); hold-break needs
+  RSTM4 (RSTM3 sets spent; coil off RSTM3.E, 1 free). CLEARPM4B: an
+  r-3-only FIRST clear leaves the SCBOOT seed live — the CLEARPM3B
+  recurrence, unledgered. 4th pulse clock entry: SCR(i,0).E net has
+  holes left.
+- fourth collapse seed: ELEVA(t).E/com full; SEEDM2(t-1).G now 2/2; the
+  surviving hole is SEEDM2(t-1).K (1 free). SEEDM3(t) coil parallels
+  SEEDM2(t).E (1 free), output into SEEDM2(t-1).K; one-hot legalizes
+  the shared node. SEEDM3 is a REAL bank, rows-4 relays.
+- count at 12x6: ~17 relays (~13 at 8x4), not a full B1c copy.
+
+### item 5 (tok-3 seam): DECLARE IT, bank as its OWN RUNG after
+enumerated: 12->21 misses ONE cell (tok-3, p+2); 21->12 misses NOTHING
+(all deltas bottom-row — the B2 seed note overstated); lateral misses
+(tok-3, q+2) one cell/direction; descent needs NO new term. B2-0's
+precedent does NOT transfer: that edge had ZERO contact checks and an
+existing state to flip red->green; here every edge keeps 2-of-3 or
+3-of-4 in contacts and a MIRCT3 bank (~30 relays at 12x6, arms through
+MIRCT2 arm jacks' 1 free hole each, coils off the MIRCT2/MIRCT2X tail;
+plus upResourceCounts' k<3 cap lifts, plus top3 hops) would land BLIND
+with its only consumer. cost of declaring: at NSTATES=22 the lockstep
+is "exact with one asterisk" — a compat knob survives the finish line
+(reference ignores tok-3 on three edges). if unacceptable, build
+MIRCT3 as its own rung AFTER 21 exists — the seam test goes red first.
+
+### items 6/7 (bounds/steering): three hand-laid sites, one wrong label
+- item 6's "uHIB2-class" is WRONG: range(21) = [0, cols-3] = the
+  DERIVED uHIB class (maxCol === cols-3). uHIB2 is cols-4 (horizontal
+  I). hand-adding uHIB2 would over-refuse one column early. zero code.
+- left tree bottom d2: hardcoded stBanks[9] singleton (:2695,
+  :2704-2709) — twin it (ledger knew).
+- left tree TOP d2: hardcoded stBanks[7] (J1) at :2714 — state 21's
+  leftTop=2 joins and the ledger NEVER MENTIONS it. without it,
+  left-steer never checks (tok-1, q+2).
+- left tree top2 d2: the class DOES NOT EXIST (only u2L0/u2L1). new
+  hop. (right side fine: u2R2/uT2/uB2 derived, 21 joins by geometry.)
+
+### pools/caps (the quiet 3.5A re-host trap)
+- STPUNION 18/18 FULL. stpUnionBase is mid-sequence — a cap bump
+  re-hosts every later bank (:819-822 documented trap). the three
+  left-tree sites are TWINS (private stBanks[21] hops), NOT unions.
+- STPREAD at/near 13(cols-1) cap, also mid-sequence. twins add ~2-3
+  reads/left tree. count exactly; if over, a SECOND GatedReadPool based
+  in the appended tail — do NOT bump the formula.
+- TOPW3 entries: the write-trigger nets' spare holes were CONSUMED by
+  TOPW2; the new free holes are TOPW2(r-1).G and .K (1 each). legality
+  = the :1851-1856 one-hot argument a third time. assert both widths.
+- clock: state 21 pairs onto com 20 (i-(i%2)) inside segment 3 → 4
+  coils, the LIGHTEST segment. the real new load is ~0.2A on the
+  machine feeding segment 3's arm (plusOf(SH(19,1))) — MEASURE THAT.
+- T2POS: zero growth (taps emitted independent of rail membership).
+  FANRAIL2 d2 gains one member arm, derived.
+- NSTATES=22 breaks: NSTATES, SELECTION_CYCLE (+ its loud guard),
+  ROT_MAP, ringPart throws at 21 (SHR7 block + layout + claim), the UP
+  emitter MMIR ternary has NO throw — MMIR6(21) = CUTC7(0) SILENTLY
+  (banks adjacent): extend the dispatch-table lesson to the ternary.
+  caps[21] (array has 21 entries — undefined feeds MirrorBank
+  silently), mirrorTailOf 22nd entry, VERTS literal (21 joins
+  V3/VMODE/STAG/ROW2W chains + BCUT + WID3's class), claim loops.
+- mux pool fine: 9/13 at 22 states; into-21 one-wire (prev=12=source);
+  wrap mux moves slave 12 -> slave 21 (NC to SH(12,1)). shared-branch
+  assert holds at target 12 — re-run mechanically.
+- pre-existing registry holes found: claim('FANRAIL2') skips (2)
+  (allocated+wired); claim('T2POS') claims only the even relay of each
+  pair. fix both.
+
+### interactions checked
+runTick owed-ticks caps fit a quad lock+collapse at both geometries.
+reference already clips r<0 (game over only at tokenRow 0) — both
+models clip I-vert locks at rows 1/2/3 consistently; the T7
+declared-limit test wants row-2 and row-3 siblings. LKM2/LKM3 freeze
+covers the four-tick window free. collapse latches are delay-tolerant.
+the four-hot elevator walk rests on the F3 argument PROBED AT
+THREE-HOT — probe four-hot, don't cite it. V4-as-pure-state: agreed
+(changeover exists in MirrorBank; LKM2 freezes the state through the
+lock, V3M's union-splice argument).
+
+### verdict summary
+items 1 (skeleton), 2, 6 (minus label), 7 (plus two sites it missed)
+stand. item 3 dissolves. item 4 builds, -cols relays +2 wipe traps
++2 latch relays. item 5: seam at B3, bank as its own rung after.
