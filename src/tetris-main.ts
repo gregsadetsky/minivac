@@ -68,6 +68,12 @@ root.innerHTML = `
     <div id="colrow" style="display:grid;grid-template-columns:repeat(${COLS},44px);gap:8px;justify-content:center;margin-bottom:6px"></div>
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},44px);gap:8px;justify-content:center"></div>
     <div id="status" style="margin-top:16px;color:#9aa3ad;min-height:1.5em">wiring the relays…</div>
+    <div id="touchrow" style="display:none;gap:10px;justify-content:center;margin-top:12px">
+      <button data-key="ArrowLeft" style="width:64px;height:52px;font-size:22px;border-radius:12px;border:1px solid #2b3648;background:#1b2027;color:#c8cdd4">&larr;</button>
+      <button data-key="ArrowUp" style="width:64px;height:52px;font-size:22px;border-radius:12px;border:1px solid #2b3648;background:#1b2027;color:#c8cdd4">&#8635;</button>
+      <button data-key="ArrowDown" style="width:64px;height:52px;font-size:22px;border-radius:12px;border:1px solid #2b3648;background:#1b2027;color:#c8cdd4">&darr;</button>
+      <button data-key="ArrowRight" style="width:64px;height:52px;font-size:22px;border-radius:12px;border:1px solid #2b3648;background:#1b2027;color:#c8cdd4">&rarr;</button>
+    </div>
     <div style="margin-top:14px;color:#5c646e;font-size:11px">the machine wall — every armature, live</div>
     <canvas id="wall" style="margin-top:4px;image-rendering:pixelated"></canvas>
     <div style="margin-top:10px;color:#5c646e">
@@ -482,6 +488,20 @@ document.addEventListener('keydown', e => {
   if (GAME_KEYS.includes(e.key)) e.preventDefault();
   handleKey(e.key);
 });
+// mobile (user ask, 2026-08-26): on-screen buttons on coarse-pointer
+// devices — no swipes, just the four game keys through the same queue.
+// with the dealer, auto-serve and default gravity, taps are enough to
+// actually play. hidden on desktop; the drivers never see them.
+{
+  const row = document.getElementById('touchrow')!;
+  if (window.matchMedia('(pointer: coarse)').matches) row.style.display = 'flex';
+  row.querySelectorAll('button').forEach((b) => {
+    b.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault(); // no ghost clicks, no focus ring stealing keys
+      handleKey((b as HTMLButtonElement).dataset.key as string);
+    });
+  });
+}
 function handleKey(key: string) {
   const e = { key };
   if (busy && GAME_KEYS.includes(key) && !relay(IO.gameOverRelay)) {
