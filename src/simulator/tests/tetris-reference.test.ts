@@ -74,12 +74,12 @@ describe('tetris reference: the target tables', () => {
     // singletons
     for (const i of [0, 3]) expect(TARGET_ROT[i]).toBe(i);
     // 2-cycles: domino, S, Z, I
-    for (const i of [1, 2, 4, 19, 5, 20, 12, 21]) {
+    for (const i of [1, 2, 4, 13, 5, 14, 12, 21]) {
       expect(TARGET_ROT[i], `state ${i} is in a 2-cycle`).not.toBe(i);
       expect(apply(i, 2), `state ${i} returns after two turns`).toBe(i);
     }
     // 4-cycles: L, J, T — four turns return, two do NOT (it is not a flip)
-    for (const i of [6, 13, 9, 14, 7, 15, 10, 16, 8, 17, 11, 18]) {
+    for (const i of [6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20]) {
       expect(apply(i, 4), `state ${i} returns after four turns`).toBe(i);
       expect(apply(i, 2), `state ${i} is a quarter turn, not a flip`).not.toBe(i);
     }
@@ -176,11 +176,11 @@ describe('tetris reference: gameplay', () => {
     g.key('tick'); // row 2 — room below remains
     expect(g.tokenRow).toBe(2);
     g.key('up');
-    expect(g.shapeIx, 'L -> L vert R').toBe(13);
+    expect(g.shapeIx, 'L -> L vert R').toBe(15);
     g.key('up');
     expect(g.shapeIx, 'L vert R -> L flip').toBe(9);
     g.key('up');
-    expect(g.shapeIx, 'L flip -> L vert L').toBe(14);
+    expect(g.shapeIx, 'L flip -> L vert L').toBe(16);
     g.key('up');
     expect(g.shapeIx, 'L vert L -> L').toBe(6);
   });
@@ -195,7 +195,7 @@ describe('tetris reference: gameplay', () => {
     // cell and check the refusal on occupancy.
     expect(g.tokenRow).toBe(0);
     g.key('up');
-    expect(g.shapeIx, 'clipped rotation at the top is legal').toBe(13);
+    expect(g.shapeIx, 'clipped rotation at the top is legal').toBe(15);
   });
 
   it('rotation refused on stored cells', () => {
@@ -219,7 +219,7 @@ describe('tetris reference: gameplay', () => {
     // rows 2-4 (tower is rows 5-7) — rotate, then fall once: now the
     // vertical rests ON the tower
     g.key('up');
-    expect(g.shapeIx).toBe(13);
+    expect(g.shapeIx).toBe(15);
     g.key('tick');
     expect(g.tokenRow, 'locked resting on the tower').toBe(-1);
   });

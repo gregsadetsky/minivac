@@ -78,6 +78,21 @@ M10/M11 — multivac tests enforce via assertJackCapacity().
   0-based, unbounded), letters a.-h. are legacy aliases for m0-m7; per-machine
   supplies; negative rails common; machine 0 unprefixed internally.
 
+## tetris: the reference model is the spec (2026-08-26, user call)
+
+- src/tetris/reference.ts = the executable TARGET ruleset (NES-style: 22
+  ring states, 4-cycle rotation for L/J/T, center spawn, no wall kicks).
+  the differential harness (tetris-reference-diff.test.ts) plays scripted
+  + seeded-random games against the circuit, full state diffed after
+  every settled key. its COMPAT KNOBS (shapes / rot / home) are the
+  machine's remaining distance to tetris — a rung lands, a knob moves.
+  new game behavior gets specified in the reference FIRST.
+- the register homes at the CENTER: homeColumn(cols) — 1 at four wide,
+  2 at six. tests use the HOME constant; un-steered drops fall at HOME.
+- /tetris/ deals pieces (operator's dice, page-side; ?deal=manual for
+  the driver). the relay dealer stays an open rung with a recorded
+  quality problem — see _notes/dealer.md before designing it.
+
 ## UI performance invariants (react panel)
 
 never push per-frame values through react state: motor angle goes through

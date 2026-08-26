@@ -18,7 +18,8 @@ const WELL_CELL = 52; // must match relays-main.ts
 const SHOT_DIR = process.env.SHOT_DIR || '/tmp';
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  // PW_CHROME overrides for local runs (the default is the cloud sandbox path)
+  executablePath: process.env.PW_CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
   args: ['--no-sandbox'],
 });
 const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });

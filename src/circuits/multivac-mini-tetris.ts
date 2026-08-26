@@ -68,6 +68,28 @@ export const shapeRange = (s: (typeof SHAPES)[number], cols: number) => ({
   max: Math.min(cols - s.bOff - s.bW, s.tW > 0 ? cols - s.tOff - s.tW : cols),
 });
 
+// THE HOME COLUMN (center spawn, 2026-08-26, user call): the register
+// seeds and re-homes at the middle of the window every shape can occupy —
+// 1 at four columns, 2 at six (the derivation from _notes/dealer.md, and
+// what unblocked the dealer rung: from the old home 0 a free-running
+// chooser could reach only 4 of the ring's states). A shape that fits
+// nowhere, or whose range cannot intersect the running window, is skipped
+// (at four columns the horizontal I fits only at column 0 while S needs
+// column >= 1 — the window follows the majority). Must agree with the
+// reference model's derivation — pinned in tetris-reference-diff.test.ts.
+export function homeColumn(cols: number): number {
+  let lo = 0;
+  let hi = cols - 1;
+  for (const s of SHAPES) {
+    const r = shapeRange(s, cols);
+    if (r.min > r.max) continue;
+    if (Math.max(lo, r.min) > Math.min(hi, r.max)) continue;
+    lo = Math.max(lo, r.min);
+    hi = Math.min(hi, r.max);
+  }
+  return Math.ceil((lo + hi) / 2);
+}
+
 // the UP-transition emitter's resource counts, a pure function of the
 // geometry: branches exist where a position is legal for BOTH states of
 // a ring step; each branch spends one pos-fan set and one read set per
@@ -207,7 +229,8 @@ export const JUNC = L8.JUNC; // spare-section 4-hole coms as junction boxes
 // direction-gated neighbor), commit-on-release (the slaves copy, LKS-style
 // against ANYBM). Edge presses self-loop (the master samples its own slave)
 // so the one-hot can never walk off the ring. Every spawn resets POS to the
-// home column (slave 0) via POSRST + SPAWNCLR's spare set — correct tetris
+// home column (homeColumn(cols) — the CENTER since 2026-08-26, slave 0
+// before that) via POSRST + SPAWNCLR's spare set — correct tetris
 // AND the seeding story. The PIECE column relays re-feed from the register:
 // slave j's tap, or WIDM AND slave j-1 (the wide edge). Width itself is the
 // WID slide; legality gating (lateral collision) is the next increment.
@@ -1989,9 +2012,13 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // spawn+lock. The reset rail gains a third group for the POSRST coils;
   // the home set rides POSRST's own spare NO (its arm is the idle-hold
   // chain — + always, except inside a button-release window, which can't
-  // coincide with a tick). The very FIRST seed is POWER-ON: BOOTL is down
-  // at boot, so its NC feeds + into slave 0's com and the ring wakes at
-  // the home column; the first button activity latches BOOTL forever
+  // coincide with a tick). THE HOME IS THE CENTER COLUMN (homeColumn(cols):
+  // 1 at four wide, 2 at six — center spawn, like tetris, and the column
+  // from which the chooser can reach the whole ring; it homed at 0 until
+  // 2026-08-26 and the old home stranded S/Z/L/J/T behind the fit gates
+  // after every reset). The very FIRST seed is POWER-ON: BOOTL is down
+  // at boot, so its NC feeds + into the home slave's com and the ring
+  // wakes at the home column; the first button activity latches BOOTL forever
   // (through ANYBM2's spare K, waves before any release window could need
   // slave 0's hold broken) and the seed line goes dead. A first draft
   // seeded through the START button's X line instead — and that jack is
@@ -2002,14 +2029,26 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // game just keeps the boot seed feeding the home column it sits at,
   // and every reset's POSRST re-set agrees with it.
   const resetRail3 = takeGroups(1)[0];
+  const home = homeColumn(cols);
   w.push(`${resetRail[resetRail.length - 1]}/${resetRail3}`);
   w.push(`${resetRail3}/${R(POSRST(0), 'E')}`, `${R(POSRST(0), 'F')}/${minusOf(POSRST(0))}`);
   w.push(`${resetRail3}/${R(POSRST(1), 'E')}`, `${R(POSRST(1), 'F')}/${minusOf(POSRST(1))}`);
-  w.push(`${R(POSRST(0), 'G')}/${R(POSS(0), 'E')}`); // home set, reset-scoped
+  // home set, reset-scoped. Slave 0's E jack was free, but the CENTER
+  // slave's whole node is spoken for (E carries the FANPOS mirror chain,
+  // the com is at 4 with the POSM coil and self-hold ties) — so the home
+  // set CHAINS ONTO THE SEED LINE: POSRST's NO ties to BOOTL's NC throw,
+  // and both feeds enter the coil net through the seed's one G hole.
+  // Audit of the shared net {POSRST(0).G, BOOTL.N, POSS(home).G=com}:
+  // idle, both throws open or at + — dead ends; reset tick, + through
+  // the NO into the com (the home set); power-on, + through BOOTL's NC
+  // (the seed) with POSRST's NO open behind it. A reset tick can never
+  // coincide with a release window (documented above), and after BOOTL
+  // latches away its N is an open throw forever.
+  w.push(`${R(POSRST(0), 'G')}/${R(BOOTL, 'N')}`);
   w.push(`${comOf(BOOTL)}/${R(BOOTL, 'E')}`, `${R(BOOTL, 'F')}/${minusOf(BOOTL)}`);
   w.push(`${plusOf(BOOTL)}/${R(BOOTL, 'H')}`, `${R(BOOTL, 'G')}/${comOf(BOOTL)}`); // hold forever
   w.push(`${plusOf(ANYBM2)}/${R(ANYBM2, 'L')}`, `${R(ANYBM2, 'K')}/${R(BOOTL, 'E')}`); // set on the first press
-  w.push(`${plusOf(BOOTL)}/${R(BOOTL, 'L')}`, `${R(BOOTL, 'N')}/${R(POSS(0), 'G')}`); // the power-on seed
+  w.push(`${plusOf(BOOTL)}/${R(BOOTL, 'L')}`, `${R(BOOTL, 'N')}/${R(POSS(home), 'G')}`); // the power-on seed
   // wide mode: PIECE(j+1) also fires when (wide AND pos == j). Each tap is
   // + through TWO series contacts — POSM2(j) (pos == j) then a WIDM/WIDM2
   // set (wide) — into PIECE(j+1)'s coil jack. The first draft armed the

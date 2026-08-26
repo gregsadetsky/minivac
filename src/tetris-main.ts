@@ -71,7 +71,7 @@ root.innerHTML = `
     <div style="margin-top:14px;color:#5c646e;font-size:11px">the machine wall — every armature, live</div>
     <canvas id="wall" style="margin-top:4px;image-rendering:pixelated"></canvas>
     <div style="margin-top:10px;color:#5c646e">
-      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = rotate (pre-spawn: pick shape) &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; a = auto-gravity &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
+      &larr;/&rarr; move &nbsp;&middot;&nbsp; &uarr; = rotate (pre-spawn: re-pick the dealt shape) &nbsp;&middot;&nbsp; &darr;/space = tick &nbsp;&middot;&nbsp; a = auto-gravity &nbsp;&middot;&nbsp; enter = start &nbsp;&middot;&nbsp; m = sound
     </div>
     <details style="margin-top:18px;color:#5c646e;text-align:left;max-width:520px">
       <summary style="cursor:pointer;text-align:center">dump the circuit</summary>
@@ -301,11 +301,12 @@ function act(label: string, fn: () => string | void) {
   }, 15);
 }
 
-// after a lock the reset tick re-homes the register to column 0 — out of
-// bounds for a staggered shape (S needs pos>=1). The operator steps the
-// fresh position back in bounds BEFORE the next spawn (pre-spawn steps
-// are legal: no token, the legality rails read empty). Nothing else to
-// sync: the machine's T fan follows the register by itself.
+// after a lock the reset tick re-homes the register to the CENTER column
+// (homeColumn(cols) — inside every shape's fit range at 6 wide, so this
+// usually no-ops; kept for narrower wells and belt-and-braces). The
+// operator steps the fresh position back in bounds BEFORE the next spawn
+// (pre-spawn steps are legal: no token, the legality rails read empty).
+// Nothing else to sync: the machine's T fan follows the register by itself.
 function resyncPiece() {
   let cur = posAt();
   let guard = 0;
@@ -368,11 +369,56 @@ function runTick() {
           busy = false;
           const cleared = cellsBefore.some((c, r) => c > 0 && rowCells(r) === 0);
           render(cleared ? `tick ${ticks} — line cleared! the stack fell in` : undefined);
+          if (n > 0) dealNext(); // a lock finished: deal the next piece
           drainKeys();
         }
       }, n === 0 ? 120 : 16);
     }, n === 0 ? 15 : 0);
   step(0);
+}
+
+// ---- the dealer: the operator's dice ---------------------------------
+// THE MACHINE HAS NO RANDOMNESS (nothing in a relay bank is a noise
+// source, and the tick-clocked free-running ring the dealer note designed
+// deals near-adjacent states — see _notes/dealer.md). So the page rolls
+// the die and makes the presses a human would: after every lock (and at
+// boot) it walks the shape ring toward a random state, one clamped press
+// per frame, every single transition still allowed or refused by the
+// CONTACTS. UP pre-spawn still re-picks by hand; UP mid-fall rotates.
+// ?deal=manual turns the dice off (the driver's step-exact scripts need a
+// deterministic chooser; a human just plays with the deal on)
+const DEAL_RANDOM = new URLSearchParams(window.location.search).get('deal') !== 'manual';
+let dealing = false;
+function dealNext() {
+  if (!DEAL_RANDOM) return;
+  if (busy || dealing || relay(IO.gameOverRelay) || tokenRow() >= 0) return;
+  const want = Math.floor(Math.random() * SHAPES.length);
+  if (shapeAt() === want) return;
+  dealing = true;
+  busy = true;
+  status.textContent = 'dealing…';
+  const step = (guard: number) =>
+    setTimeout(() => {
+      const cur = shapeAt();
+      const done = (note: string) => {
+        dealing = false;
+        busy = false;
+        render(note);
+        drainKeys();
+      };
+      if (cur === want || guard <= 0) return done(`dealt: ${shapeLabel()}`);
+      // clamp the register into the NEXT state's fit range, then press UP
+      const nIx = (cur + 1) % SHAPES.length;
+      const { min, max } = shapeRange(SHAPES[nIx], COLS);
+      const p = posAt();
+      const nPos = Math.min(max, Math.max(min, p));
+      if (p !== nPos) press(p < nPos ? IO.right : IO.left);
+      else press(IO.up);
+      if (shapeAt() === cur && posAt() === p)
+        return done(`dealt as far as ${shapeLabel()} — the contacts refused the rest`);
+      step(guard - 1);
+    }, 16);
+  step(3 * SHAPES.length + COLS);
 }
 
 // auto-gravity: a timer cycles the TICK SLIDE at operator cadence — the
@@ -524,4 +570,5 @@ setTimeout(() => {
   // nothing to apply: the shape ring seeds at 1x1, the slides stay parked
   busy = false;
   render('ready — press enter to spawn a piece');
+  dealNext(); // the first piece is dealt too
 }, 30);

@@ -32,12 +32,14 @@ import {
   NSTATES,
   ROT_STATE,
   TETRIS_IO,
+  homeColumn as circuitHome,
 } from '../../circuits/multivac-mini-tetris';
 import {
   TARGET_SHAPES,
   TARGET_NSTATES,
   TARGET_ROT,
   TetrisReference,
+  homeColumn,
   type RefKey,
 } from '../../tetris/reference';
 
@@ -64,6 +66,17 @@ describe('table lockstep: the circuit tables are a prefix of the target tables',
         expect(rows.length, `state ${i} is flat`).toBe(1);
       }
     }
+  });
+
+  it("the circuit's home column and the reference's derivation agree", () => {
+    for (const cols of [4, 6, 10]) {
+      expect(circuitHome(cols), `home at ${cols} columns`).toBe(
+        homeColumn(cols, TARGET_SHAPES.slice(0, NSTATES))
+      );
+    }
+    // and the dealer-note values hold
+    expect(circuitHome(4)).toBe(1);
+    expect(circuitHome(6)).toBe(2);
   });
 
   it("the circuit's rotation map is the target map with the unbuilt verticals shortcut", () => {
@@ -167,7 +180,7 @@ function makePair() {
     shapes: NSTATES, // compat knob: only the implemented ring
     rot: 'current', // compat knob: the machine's flip map, not the 4-cycles yet
     currentRot: ROT_STATE,
-    home: 0, // compat knob: the machine still homes at column 0
+    home: circuitHome(COLS), // CENTER SPAWN — at target since 2026-08-26
   });
   let n = 0;
   const play = (keys: RefKey[], label: string) => {
@@ -207,10 +220,12 @@ describe('the differential: machine vs reference, every key compared', () => {
     // boot state agrees (register seeded home, ring at 1x1, spawn armed)
     play(['start'], 'boot'); // idempotent on both
 
-    // toys: 1x1 drops, wall refusals, a line + collapse
+    // toys: 1x1 drops, wall refusals, a line + collapse. the register
+    // wakes at the CENTER home (1 at four columns) and re-homes there
+    expect(ref.pos).toBe(circuitHome(COLS));
     dropAt(0, 'first cell');
     dropAt(0, 'second cell stacks');
-    play(['left', 'left'], 'wall refusal pre-spawn'); // at pos 0 already
+    play(['left', 'left'], 'walk to the wall; the second left refuses'); // home 1 -> 0 -> refused
     dropAt(1, 'third');
     dropAt(2, 'fourth');
     dropAt(3, 'completes the bottom line'); // clear + collapse of the stacked cell
@@ -224,25 +239,23 @@ describe('the differential: machine vs reference, every key compared', () => {
     steer(2, 'steer the domino');
     while (ref.tokenRow >= 0) play(['tick'], 'drop the domino');
 
-    // S needs column >= 1: the chooser refuses at pos 0, passes at 1
-    steer(0, 'walk home');
+    // S needs column >= 1: the chooser refuses at pos 0, passes at home
+    steer(0, 'walk to the wall');
     selectShape(3, 'up to the square'); // 2tall -> O
     play(['up'], 'S refused at column 0'); // chooser stalls: state stays O
     expect(ref.shapeIx).toBe(3);
-    steer(1, 'step right for S');
-    selectShape(4, 'S enters at column 1');
+    steer(1, 'back to the home column');
+    selectShape(4, 'S enters at the home column');
     play(['tick', 'left'], 'S spawned; left into its bound refused');
     expect(ref.pos).toBe(1);
     play(['up'], 'S is a rotation singleton today'); // refused on both sides
     while (ref.tokenRow >= 0) play(['tick'], 'drop the S');
 
-    // L: spawn, flip mid-fall, flip back, lock against the S ripple.
-    // the re-home parked the register at 0, OUTSIDE the still-selected
-    // S's range — every reshape refuses there (the chooser branches cover
-    // range(source) INTERSECT range(target)), so steer back in first
-    play(['up'], 'reshape refused while parked outside the S range');
-    expect(ref.shapeIx).toBe(4);
-    steer(1, 'step back into the S range');
+    // L: spawn, flip mid-fall, flip back. before center spawn the re-home
+    // parked the register at 0, outside the S range, and every reshape
+    // stalled there — the CENTER home is inside every range, so the
+    // chooser proceeds straight from the re-home
+    expect(ref.pos).toBe(circuitHome(COLS));
     selectShape(6, 'choose L');
     play(['tick'], 'spawn L');
     play(['up'], 'L -> L flip mid-fall');
@@ -256,7 +269,10 @@ describe('the differential: machine vs reference, every key compared', () => {
     play(['tick', 'up'], 'spawn T, flip to T flip');
     while (ref.tokenRow >= 0) play(['tick'], 'drop the T');
 
-    // ride 2-tall stacks into the top-out and verify the frozen machine
+    // ride 2-tall stacks into the top-out and verify the frozen machine.
+    // the walk to 2-tall passes through I, which only enters at column 0
+    // on the 4-wide well (the documented S-vs-I window conflict)
+    steer(0, 'walk left so the chooser can pass through I');
     selectShape(2, 'back to 2 tall');
     let guard = 12;
     while (!ref.gameOver && guard-- > 0) dropAt(ref.pos, 'stack to the sky');

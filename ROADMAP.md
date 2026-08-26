@@ -850,7 +850,63 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    from either page (verified: the only slides they set are m1.5 and the
    oscillator's; V3M is on a relay machine). the fix is the third line
    sense, which is now the next rung ahead of the mask fan.
+   (B1c and the score's third step have since LANDED — see 0b24fd4 and
+   f8cd499; the it.fails flipped to a real case.)
 
+46. THE REFERENCE MODEL + THE DIFFERENTIAL HARNESS (2026-08-26, user
+   call: "normal tetris" is now the spec). src/tetris/reference.ts is an
+   executable TARGET ruleset — NES-style: 22 ring states (19 tetromino
+   orientations + the 3 toys), TARGET_ROT as true 4-cycles for L/J/T and
+   2-cycles for S/Z/I (every edge mechanically verified to be a real
+   90-degree clockwise rotation of its source, up to translation), center
+   spawn via homeColumn(cols), no wall kicks. the harness
+   (tetris-reference-diff.test.ts) feeds identical keys to the reference
+   and the CIRCUIT and diffs field/token/register/ring/score/game-over
+   after every settled key — a scripted 100-key game and a seeded
+   220-key random game, both green. COMPAT KNOBS mark the distance left
+   to tetris: shapes (13 of 22 built), rot ('current' flips vs the
+   target 4-cycles), home (AT TARGET since this rung). the harness paid
+   for itself immediately: it taught the reference three machine truths
+   (power-on is unarmed; a spawn onto a blocked column merges spawn+lock
+   in one tick; chooser branches cover range(source) INTERSECT
+   range(target)) and then flagged nothing else on the whole random run.
+
+47. CENTER SPAWN LANDED 2026-08-26 (the decision the dealer note left
+   for a human, taken by the human): the register seeds and re-homes at
+   homeColumn(cols) — 1 at four wide, 2 at six. the circuit change is
+   two wires, but BOTH free holes the old home-0 wiring used were
+   spoken for at the center slave (E carries the FANPOS mirror chain,
+   the com is at 4), so the home set CHAINS ONTO THE SEED LINE: POSRST's
+   NO ties to BOOTL's NC throw and both feeds enter the coil net through
+   the seed's one G hole (audited: every idle state dead-ends at an open
+   throw or +). the real cost was the promised test rewrite: ~20
+   scenarios re-derived (the un-steered notch drops now notch the HOME
+   column; walk-to-pos-1 presses deleted; re-home assertions -> HOME),
+   the page driver's steering counts re-derived phase by phase, the
+   random-gameplay models re-home to the center. the chooser stall class
+   died with it: from the center every ring state is reachable at 6 wide
+   (the old home-0 re-home stranded S/Z/L/J/T behind the fit gates).
+
+48. THE PAGE DEALS (2026-08-26): /tetris/ rolls the operator's dice —
+   after every lock (and at boot) the page walks the shape ring toward a
+   random state, one clamped press per frame, every transition still
+   allowed or refused by the CONTACTS (the /relays/ dealer pattern).
+   ?deal=manual turns it off for the driver's step-exact scripts. the
+   RELAY dealer rung stays open with a recorded quality problem
+   (_notes/dealer.md): a tick-clocked ring only steps while no token is
+   alive, so it deals near-adjacent states — it needs a fast private
+   counter or input-clocked stepping, i.e. a real design round, before
+   it replaces the dice.
+
+NEXT (the remaining knobs, in order): B1 vertical S/Z on the landed
+   phase-3 engine (third mask fan PIECET2 + collision term + two ring
+   states), then B2 vertical L/J/T (ROT_PRED — rotation stops being
+   self-inverse, the muxes re-aim per _notes/tall-pieces.md trap #1),
+   then B3 vertical I (a fourth phase), then the rot knob flips to
+   'target' and the diff harness becomes the acceptance gate for real
+   NES rotation. every rung: cross-review the phase machinery BEFORE
+   wiring (the standing rule — every unreviewed first draft this month
+   was refuted).
 
 ## display/input notes
 

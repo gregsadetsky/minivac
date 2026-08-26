@@ -84,7 +84,18 @@ export const TARGET_SHAPES: readonly RefShape[] = [
   // .X.
   { label: 'T flip', rows: [{ off: 1, w: 1 }, { off: 0, w: 3 }] },
   { label: 'I', rows: [{ off: 0, w: 4 }] },
-  // ---- target-only vertical orientations (rungs B1/B2/B3) ----
+  // ---- target-only vertical orientations, IN LANDING ORDER: rung B1
+  // adds the S/Z verticals first, B2 the L/J/T verticals, B3 the I —
+  // and the lockstep test requires the circuit's ring to stay a PREFIX
+  // of this table, so the order here IS the build order ----
+  // .X
+  // XX
+  // X.
+  { label: 'S vert', rows: [{ off: 0, w: 1 }, { off: 0, w: 2 }, { off: 1, w: 1 }] },
+  // X.
+  // XX
+  // .X
+  { label: 'Z vert', rows: [{ off: 1, w: 1 }, { off: 0, w: 2 }, { off: 0, w: 1 }] },
   // .XX
   // .X.
   // .X.
@@ -109,14 +120,6 @@ export const TARGET_SHAPES: readonly RefShape[] = [
   // XX.
   // .X.
   { label: 'T vert L', rows: [{ off: 1, w: 1 }, { off: 0, w: 2 }, { off: 1, w: 1 }] },
-  // .X
-  // XX
-  // X.
-  { label: 'S vert', rows: [{ off: 0, w: 1 }, { off: 0, w: 2 }, { off: 1, w: 1 }] },
-  // X.
-  // XX
-  // .X
-  { label: 'Z vert', rows: [{ off: 1, w: 1 }, { off: 0, w: 2 }, { off: 0, w: 1 }] },
   // ..X.
   // ..X.
   // ..X.
@@ -134,11 +137,11 @@ export const TARGET_NSTATES = TARGET_SHAPES.length; // 22
 export const TARGET_ROT: readonly number[] = (() => {
   const m = Array.from({ length: TARGET_NSTATES }, (_, i) => i);
   m[1] = 2; m[2] = 1; // the toy domino keeps its flip
-  m[4] = 19; m[19] = 4; // S <-> S vert
-  m[5] = 20; m[20] = 5; // Z <-> Z vert
-  m[6] = 13; m[13] = 9; m[9] = 14; m[14] = 6; // L: up -> R -> down -> L -> up
-  m[7] = 15; m[15] = 10; m[10] = 16; m[16] = 7; // J
-  m[8] = 17; m[17] = 11; m[11] = 18; m[18] = 8; // T
+  m[4] = 13; m[13] = 4; // S <-> S vert
+  m[5] = 14; m[14] = 5; // Z <-> Z vert
+  m[6] = 15; m[15] = 9; m[9] = 16; m[16] = 6; // L: up -> R -> down -> L -> up
+  m[7] = 17; m[17] = 10; m[10] = 18; m[18] = 7; // J
+  m[8] = 19; m[19] = 11; m[11] = 20; m[20] = 8; // T
   m[12] = 21; m[21] = 12; // I <-> I vert
   return m;
 })();

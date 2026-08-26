@@ -111,3 +111,33 @@ whoever decides.
 the alternative worth noting: deal only among the shapes legal at the
 current column. rejected — at the home column that is four shapes, and
 a dealer that never deals an S is not a dealer.
+
+## 2026-08-26 — the home column MOVED (center spawn landed), and what
+## actually shipped as "dealing"
+
+the blocker above is gone: homeColumn(cols) is real (1 at four wide, 2 at
+six), POSRST re-homes there, BOOTL seeds there, the whole suite + driver
+were rewritten to the center. so the tick-clocked ring is UNBLOCKED —
+but designing it further surfaced a QUALITY problem worth recording:
+
+- NOTOK is up only while no token is alive: the reset tick, the collapse
+  ticks, and idle pre-spawn ticks. under auto-gravity the spawn follows
+  the reset almost immediately, so a plain lock advances a tick-clocked
+  ring by ~1-2 states, a clearing lock by 1 + 3*rows more. consecutive
+  deals would be NEAR-ADJACENT ring states (1x1 then 2wide then 2tall...)
+  — a strongly patterned deal, not a shuffle. the NES-class trick (free
+  counter sampled on a human-timed event) needs the counter to run FAST
+  relative to the sampling, and a ring that only steps between pieces
+  is slow by construction.
+- fixes all cost real machinery: a private fast counter + a "step the
+  shape ring k times" transfer, or clocking deals from player input
+  presses. neither is the two-relay rung the first sketch hoped for.
+  design it with a clean-context review when it comes up.
+
+WHAT SHIPPED INSTEAD (2026-08-26): the /tetris/ page deals like the
+/relays/ page does — the OPERATOR'S DICE. after every lock (and at boot)
+the page walks the shape ring toward a Math.random() target, one clamped
+press per frame, every transition still allowed/refused by the contacts.
+?deal=manual turns it off (the driver's step-exact scripts use that).
+the machine semantics are untouched, so the reference-model differential
+is unaffected: randomness lives exactly where a human operator would be.
