@@ -922,15 +922,62 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    predecessor becomes its rotation partner and the shared-branch
    invariant holds. full ledger at the end of _notes/tall-pieces.md.
 
-NEXT (the remaining knobs, in order): B1 vertical S/Z on the landed
-   phase-3 engine (third mask fan PIECET2 + collision term + two ring
-   states), then B2 vertical L/J/T (ROT_PRED — rotation stops being
-   self-inverse, the muxes re-aim per _notes/tall-pieces.md trap #1),
-   then B3 vertical I (a fourth phase), then the rot knob flips to
-   'target' and the diff harness becomes the acceptance gate for real
-   NES rotation. every rung: cross-review the phase machinery BEFORE
-   wiring (the standing rule — every unreviewed first draft this month
-   was refuted).
+NEXT — THE ROAD TO NORMAL ROTATION (updated 2026-08-26 after the B1
+   review; the full hole-counted ledger is at the end of
+   _notes/tall-pieces.md and is the wiring authority):
+
+   1. B1 (vertical S/Z) — ONE INTERLOCKED BLOCK, plan a full session:
+      the states cannot land without the selection rewiring or the
+      chooser wedges at I. order inside the block:
+      a. SELECTION_NEXT: the chooser cycle becomes an exported map
+         (... O -> S -> S vert -> Z -> Z vert -> L ... I -> 1x1) wired
+         in the D-feeds; the reference/page/driver stop assuming
+         (i+1)%n. re-check upResourceCounts' shared-branch invariant
+         MECHANICALLY at 4 and 6 columns before wiring.
+      b. states 13/14 + unions, with the corrected bullet: Z vert IS in
+         WIDB AND BCUT (T2's offset-bottom pattern) or its bottom locks
+         empty. splice holes as counted: BCUT via L2M(0).K, STAG via
+         SM(3).G, VMODE via I2TM.G, V3 via V3M.E. the T fan carries the
+         verticals' MID mask automatically (derived tOff/tW views —
+         B1-0's gift); do NOT hand-wire PIECET pairs (coils are 2/2).
+      c. the phase-3 mask diversion: ROW2W, VERT-GATED (coil = + ->
+         ROW2Y's free set 2 -> vert-union contact -> ROW2W.E), so
+         slide-only phase 3 keeps writing the bar and every B1b/B1c
+         receipt stays a plain diff. PLUS the cut-chain split: CUTC5/6
+         become (CUTBD AND ROW2-down), new CUTC7/8 for the colFanT2
+         gates (CUTBD AND ROW2-up) — without the split the closed T
+         gates bridge rails and phase 3 writes a fifth cell.
+      d. the PIECET2 fan with its OWN appended pos bank (FANPOS is 7/8
+         at cols 0-1 — never widen a mid-sequence bank in place).
+      e. the top-row collision term: a LEGBT bank paralleling
+         LEGINVT(j).E (1 free hole per column), entry at COLLIDE.E
+         (the one free hole on that net).
+      f. Z vert's LEFT step tree: a 14-gated bypass + d1 read (without
+         it Zv false-refuses AND can step into stored content); count
+         STPREAD at 4 and 6 first. plus the declared-limit test for a
+         3-tall lock at row 1 (top clips, no game-over — T7).
+      g. ships with TWO page-guarded seams, like increment 3a did: the
+         tok-2 occupancy reads for lateral steering and for rotation
+         into a vertical (B1-5 = MIRCT2/LEGINVT3 closes both later).
+      gates: the whole tetris file + the diff harness with the shapes
+      knob at 15 + both drivers + check; the dense 8-row scenario as
+      the rung's oracle receipt.
+   2. B2 (vertical L/J/T, 6 states): ROT_PRED — rotation stops being
+      self-inverse (tall-pieces trap #1: DELTA_SOURCE must use the
+      predecessor under the 4-cycle, not ROT_STATE).
+   3. B3 (vertical I): a FOURTH phase tick + fourth fan + a third
+      occupancy row; TICKM4's sets are now full — it needs a mirror.
+   4. flip the diff harness's rot knob to 'target': that green run IS
+      normal rotation. delete the page seams as B1-5/B2 close them.
+   5. after the ladder: the relay dealer design round (the tick-clocked
+      ring deals near-adjacent states — needs a fast private counter or
+      input-clocked stepping; the page's dice hold until then), and the
+      wider-well question (the solver floor says 10x20 is out; whether
+      8 or 10 columns at 12 rows stays playable is a measurement).
+
+   standing rule, twice paid for this week: cross-review the phase
+   machinery BEFORE wiring — every unreviewed first draft was refuted,
+   and the review's static trace found two real bugs in main.
 
 ## display/input notes
 
