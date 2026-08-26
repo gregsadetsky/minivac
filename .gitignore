@@ -27,3 +27,7 @@ dist-ssr
 
 # local measurement notes, not for the repo
 .claude-logs
+
+# the real-device measurement notes and photo stay out of the public repo
+_notes/REAL-DEVICE-MEASUREMENTS.md
+_notes/real-minivac-with-measuring-tape.heic
