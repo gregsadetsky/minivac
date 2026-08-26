@@ -73,7 +73,7 @@ describe('phase-3 line sense: an r-2-only completion must clear ONLY row r-2', (
     // BOTH facets of the r-2-only case are pinned here: before P3LG the
     // field read [.,.,.,.,.,0,0,2] (row r-1 wiped); before CLEARPM3B the
     // digits read 1100000000 (SCBOOT never latched, two-hot ring)
-    const hot = [...Array(10)].map((_, d) => rel(L.SCR(d, 2))).reduce((a, b) => a + b, 0);
+    const hot = [...Array(10)].map((_, d) => rel(L.SCR(d, 2))).reduce((a: number, b) => a + b, 0);
     expect(hot, 'the score digit is one-hot').toBe(1);
     expect(rel(L.SCBOOT), 'the boot seed latched away on the phase-3-only clear').toBe(1);
     expect(score(), 'exactly one line scored').toBe(1);
