@@ -1393,3 +1393,65 @@ lock, V3M's union-splice argument).
 items 1 (skeleton), 2, 6 (minus label), 7 (plus two sites it missed)
 stand. item 3 dissolves. item 4 builds, -cols relays +2 wipe traps
 +2 latch relays. item 5: seam at B3, bank as its own rung after.
+
+## B3 LANDED (2026-08-27, overnight) — THE RING IS COMPLETE
+
+state 21, the vertical I. NSTATES == TARGET_NSTATES == 22; the diff
+harness's rot knob is 'target': the lockstep IS normal NES rotation,
+with exactly one declared asterisk (tok3Blind).
+
+what the review said, verified in the wiring:
+- item 3 dissolved as predicted: NO fourth fan. ROW2W stays up through
+  phase 4 and PIECET2's d2 mask writes row r-3 (rows[3]===rows[2],
+  guarded by a load assert).
+- the ROW3 fork at ROW2's NO sides put row3gate/row3break on the NC
+  side — BOTH wipe traps died structurally (LINEDLY3 and CLEARP3's
+  taps are below the fork's NC; LINEDLY4 taps the NO side and is hot
+  ONLY on the phase-4 tick).
+- the quad clear rides LINE3 set 2 (no LINE4 bank), +RSTM4/CLEARPM4/
+  CLEARPM4B/ROW3Y/ROW3Z/SEEDM3 — the fourth seed enters at
+  SEEDM2(t-1).K exactly as counted.
+- the phase-end chain restructure: ROW2X.G -> V4 (stBanks[21]
+  changeover); V4.NC + ROW3X.NO tie into P2CLR.E as ONE wire
+  (exclusive by the throw); P2CLRM's coil at V3M.J's free hole;
+  TICKM4.N transfers, TICKM5 (coil off TICKM4.E) holds.
+- uHIB was right derived (no uHIB2 hand-add); the three left-tree
+  twins + the new top2-left-d2 hop read via STPREAD2 (tail pool);
+  state 21's bank is STPMIR21 (tail) — both frozen formulas untouched.
+
+THE RUNG'S OWN MEASURED DISCOVERY (the third supply-loading class):
+A PLAIN RAIL-COPY COIL IS A STANDING LOAD ON THE STORED CELL'S
+MACHINE. the UP emitter's bank reads parallel their occupancy rails
+permanently; a stored cell's machine sources EVERY coil on every rail
+its token gates close (the cell's com carries the +). a column's cells
+share one machine (column-major), so the diff's scripted T lock — six
+column-2 cells stored — measured 3.414A at B2 (86mA under the 3.5A
+alarm, shipped green unknowingly) and B3's two new into-21 reads
+(topRelays[2] 5->6, top2Relays[2] 4->5, counted) took it to 3.506A.
+fix: into-21's delta reads are GATED on master 21 (UPG21R coils fed
+rail->gate->coil; gates from MMIR7's free set2 + UPG21M mirrors on its
+net) — master 21 is up only while the ring sits at the I, settled at
+the previous transfer, so the refusal semantics are wave-identical and
+the standing load is ZERO. probe after: 3.411A. the unminted bank
+ghosts never wire (MirrorBank is lazy). NOTE FOR EVERY FUTURE RUNG:
+count the rails a new read parallels AND whose machine sources them;
+the 3.414A ceiling on column-2 stacks is now the documented margin.
+
+reachability notes pinned while deriving receipts:
+- rotation 12->21 can NEVER meet stored content in its checks at any
+  width mid-fall-without-steering: the horizontal I covers its own p+2,
+  so it can never be below stored content there. the reads become
+  reachable via rotate-low-then-steer at cols >= 5 (the I can steer at
+  6 wide) — which is why they exist and why the 4-col battery cannot
+  receipt them directly.
+- the tok-3 seam's REACHABLE face at 4 cols is lateral: a right step
+  under an overhang (the battery's receipt, flips inverted when the
+  MIRCT3 rung lands).
+
+receipts: the battery grew to 14 (five-tick lock; THE QUAD — four
+rows at once, score 4, the four-hot elevator walk end-to-end; the
+3-tall-never-raises-ROW3 equivalence; T7-one-deeper: a lock writing
+into row 0 with no game-over; the declared seam). diff harness green
+at rot 'target' + tok3Blind; both drivers green (the page cycle walks
+all 22 and the wrap); mass sweep green; check green with the worker
+heap raised (22 states crossed the old default — infra, not physics).

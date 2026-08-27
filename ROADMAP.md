@@ -1028,6 +1028,26 @@ GAME OVER LANDED 2026-08-20, same session: a lock at row 0 latches
    randomizer; or the 3b-5 oscillator) through a dealing-window relay
    — is an open rung in _notes/dealer.md, review before wiring.
 
+53. B3 LANDED 2026-08-27: THE VERTICAL I — THE RING IS COMPLETE. 22
+   states = every tetromino orientation; the diff harness's rot knob is
+   'target': the machine's rotation IS the NES map, end to end, with
+   ONE declared asterisk (tok3Blind — the tok-3 occupancy seam, its
+   reachable face receipted, the MIRCT3 rung deletes it). the lock is
+   FIVE ticks for the beam (press + three phase writes + reset), the
+   fork fix killed both reviewed wipe traps structurally, and THE QUAD
+   — tetris's namesake — is real: four rows clear at once, the
+   elevator walks a four-hot hole, the score steps four (the battery's
+   end-to-end receipt). the rung's measured discovery, the third
+   supply-loading class: A PLAIN RAIL-COPY COIL IS A STANDING LOAD on
+   the stored cell's machine — the diff's scripted T lock measured
+   3.414A at B2 (86mA under the alarm, shipped green unknowingly) and
+   B3's two new into-21 reads took it to 3.506A; they are GATED on
+   master 21 now (zero standing load, wave-identical refusal, 3.411A
+   after). full story in _notes/tall-pieces.md 'B3 LANDED'.
+   receipts: battery 14/14 (incl. the quad), diff harness at rot
+   'target', tetris regression re-derived to 22, both drivers (the
+   22-cycle + the wrap), capacity/zero-undefined audits, mass sweep.
+
 NEXT — THE ROAD TO NORMAL ROTATION (updated 2026-08-26 after the B1
    review; the full hole-counted ledger is at the end of
    _notes/tall-pieces.md and is the wiring authority):
@@ -1072,10 +1092,11 @@ NEXT — THE ROAD TO NORMAL ROTATION (updated 2026-08-26 after the B1
    2. B2 (vertical L/J/T, 6 states): ROT_PRED — rotation stops being
       self-inverse (tall-pieces trap #1: DELTA_SOURCE must use the
       predecessor under the 4-cycle, not ROT_STATE).
-   3. B3 (vertical I): a FOURTH phase tick + fourth fan + a third
-      occupancy row; TICKM4's sets are now full — it needs a mirror.
-   4. flip the diff harness's rot knob to 'target': that green run IS
-      normal rotation. delete the page seams as B1-5/B2 close them.
+   3. B3 (vertical I): DONE — rung 53 (no fourth fan: rows[3]==rows[2];
+      the tok-3 read stayed a declared seam per the review's call).
+   4. flip the diff harness's rot knob to 'target': DONE — rung 53.
+      the remaining seam knob is tok3Blind; the MIRCT3 rung deletes it
+      (its seam test is already red-inverted in the battery).
    5. after the ladder: D2, the relay dealer crank (motor dial or the
       3b-5 oscillator pulsing the ring clock through a dealing-window
       relay — the page's free-run+sample holds until then; the dice are

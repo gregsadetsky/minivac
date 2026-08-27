@@ -10,7 +10,7 @@
     "typecheck": "tsc -b --noEmit",
     "preview": "vite preview",
     "test": "vitest",
-    "check": "npm run lint && npm run typecheck && npm run test -- --run"
+    "check": "npm run lint && npm run typecheck && NODE_OPTIONS=--max-old-space-size=8192 npm run test -- --run"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
