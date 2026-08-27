@@ -56,7 +56,7 @@ const rows = async () => {
   return Array.from({ length: 12 }, (_, r) => g.slice(PCOLS * r, PCOLS * r + PCOLS).join(''));
 };
 
-await page.goto(`${BASE}/tetris/?deal=manual`);
+await page.goto(`${BASE}/tetris-debug/?deal=manual`);
 await waitIdle('boot', 60000);
 console.log('boot ok:', await status());
 
@@ -351,7 +351,7 @@ for (let i = 0; i < 6; i++) {
   if (!/\(auto\)/.test(sOff)) break;
 }
 if (/\(auto\)/.test(sOff)) throw new Error('auto did not disengage: ' + sOff);
-await page.goto(`${BASE}/tetris/?deal=manual`);
+await page.goto(`${BASE}/tetris-debug/?deal=manual`);
 await waitIdle('post-auto boot', 60000);
 await page.keyboard.press('Enter');
 await waitIdle('post-auto start');
@@ -367,7 +367,7 @@ console.log('post-auto manual play verified: the grid moved on a manual tick');
 // of the machine's rules. The script plays a real game: three pieces
 // steered to fill the bottom row, a line clear with the 2-tall's top
 // cell falling in, and the next spawn after the clear.
-await page.goto(`${BASE}/tetris/?deal=manual`);
+await page.goto(`${BASE}/tetris-debug/?deal=manual`);
 await waitIdle('boot2', 60000);
 const NR = 12, NC = PCOLS;
 const HOME = 2; // the register's center home at 6 columns (homeColumn(6))
@@ -517,7 +517,7 @@ console.log('step-exact game verified: every key, every pixel, incl. the clear; 
 // scenario THROWS until the fix lands — run it and expect the marker.
 let doubleClearOk = false;
 try {
-  await page.goto(`${BASE}/tetris/?deal=manual`);
+  await page.goto(`${BASE}/tetris-debug/?deal=manual`);
   await waitIdle('boot3', 60000);
   model.field = Array.from({ length: NR }, () => Array(NC).fill(false));
   model.piece = null; model.armed = false; model.shapeIx = 0;
@@ -652,7 +652,7 @@ try {
 // its own, or pieces have locked (cells appeared). nondeterministic by
 // design, so the check is behavioral, not step-exact.
 {
-  await page.goto(`${BASE}/tetris/`);
+  await page.goto(`${BASE}/tetris-debug/`);
   const t0 = Date.now();
   let sawFall = false;
   let lastRow = -1;

@@ -7,7 +7,7 @@ const distDir = join(__dirname, '..', 'dist');
 
 async function reorganize() {
   // Move each extra page to its own directory: page.html -> page/index.html
-  for (const page of ['simulator', 'tetris', 'relays', 'wall']) {
+  for (const page of ['simulator', 'tetris', 'tetris-debug', 'relays', 'wall']) {
     const pageDir = join(distDir, page);
     await mkdir(pageDir, { recursive: true });
 
