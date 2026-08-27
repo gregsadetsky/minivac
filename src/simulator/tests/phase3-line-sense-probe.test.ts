@@ -53,11 +53,11 @@ describe('phase-3 line sense: an r-2-only completion must clear ONLY row r-2', (
     // incomplete after the piece's own cell joins it
     ow(5, 0b1111 & ~(1 << HOME));
     ow(6, 0b0100); // the marker at (6,2); HOME is 1, so no overlap
-    // a 3-tall bar: 2-tall via the ring + the V3 slide
-    for (let k = 0; k < 2; k++) {
-      m.pressButton(2, btnMachine);
-      m.releaseButton(2, btnMachine);
-    }
+    // a 3-tall bar: the VMODE slide + the V3 slide, with the ring at its
+    // boot 1x1 — the SLIDE compatibility path (toys-retire took the
+    // 2-tall out of the chooser, but the boot state is exactly where
+    // the legacy slide modes stay meaningful)
+    m.setSlide((L.VMODE % 6) + 1, 'right', Math.floor(L.VMODE / 6));
     m.setSlide((L.V3M % 6) + 1, 'right', Math.floor(L.V3M / 6));
     m.pressButton(6, 1);
     m.releaseButton(6, 1);

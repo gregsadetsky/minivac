@@ -16,6 +16,7 @@ import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator
 import {
   tetrisCircuit,
   SHAPES,
+  SELECTION_CYCLE,
   SELECTION_NEXT,
   shapeRange,
   ringPart,
@@ -27,8 +28,20 @@ setSolverEngine('fast');
 const built = tetrisCircuit(ROWS, COLS);
 const L = built.layout;
 const N_MACHINES = L.machines;
+// THE WHEEL (user call, 2026-08-27: "did you not use a wheel at some
+// point? just let it rotate"): the Minivac 601's motorized rotary dial
+// is the kit's OWN 1961 randomizer — the manual's games say "spin the
+// dial, read the number". power machine 0's motor from the button
+// machine's free section-1 supply so it spins continuously; the dealer
+// below reads its position (wall-clock physics, not Math.random) and
+// cranks the ring there through the contacts.
+built.wires.push(`m${built.btnMachine}.1+/D17`, `m${built.btnMachine}.1-/D18`);
 const sim = new MinivacSimulator(built.wires, false, N_MACHINES);
 sim.initialize();
+// the dial has 16 positions; tetris deals 7 pieces (spawn orientations).
+// 16 = 2x7 + 2: the two extra slots go to the I and the O — documented
+// bias, the price of a 16-tooth wheel dealing a 7-piece game.
+const WHEEL_TABLE = [3, 4, 5, 6, 7, 8, 12, 3, 4, 5, 6, 7, 8, 12, 12, 3];
 
 const IO = {
   tick: { slide: 5, machine: 1 },
@@ -82,7 +95,9 @@ function post(status?: string) {
     shapeIx: shapeAt(),
     pos: posAt(),
     dealing,
+    autoOn,
     gameOver: rel(L.GAMEOVER),
+    motorAngle: sim.motorAngle,
     status,
     wireCur: wireCur.slice(),
   });
@@ -121,41 +136,43 @@ function runTick() {
   step(0);
 }
 
-// the free-run dealer (the /tetris/ design: the crank never chooses)
+// THE WHEEL DEALER: at deal time the motor's CURRENT position — a
+// wall-clock physical value, the dial having spun freely since the
+// last read — names the piece, and the worker cranks the ring to it
+// with real clamped UP presses (every transition still allowed or
+// refused by the contacts). JS is the operator's eyes and hand, the
+// 1961 manual's own procedure; the CHOICE is the wheel's phase. a
+// piece appears in about a second. Enter during the crank serves the
+// moment it lands.
 let dealing = false;
-let serveReq = false;
-let autoServeReq = false;
 function deal() {
   if (busy || dealing || rel(L.GAMEOVER) || tokenRow() >= 0) return;
   dealing = true;
   busy = true;
-  serveReq = false;
-  autoServeReq = false;
-  let steps = 0;
+  sim.tick(); // advance the motor by wall-clock and read the dial
+  const target = WHEEL_TABLE[sim.motorPosition % 16];
+  let guard = 3 * SELECTION_CYCLE.length;
   const step = () =>
     setTimeout(() => {
       if (rel(L.GAMEOVER)) { dealing = false; busy = false; post('game over — reload'); return; }
-      if (serveReq || (autoServeReq && steps >= SHAPES.length)) {
+      const cur = shapeAt();
+      if (cur === target || guard-- <= 0) {
         dealing = false;
-        if (tokenRow() < 0) press(IO.start);
+        if (tokenRow() < 0) press(IO.start); // the wheel chose; serve now
         busy = false;
         post(`dealt: ${SHAPES[shapeAt()]?.label}`);
         drainKeys();
         return;
       }
-      const cur = shapeAt();
       const nIx = SELECTION_NEXT(cur);
       const { min, max } = shapeRange(SHAPES[nIx], COLS);
       const p = posAt();
       const nPos = Math.min(max, Math.max(min, p));
       if (p !== nPos) press(p < nPos ? IO.right : IO.left);
-      else {
-        press(IO.up);
-        if (shapeAt() !== cur) steps++;
-      }
+      else press(IO.up);
       post();
       step();
-    }, 90);
+    }, 30);
   step();
 }
 let autoOn = false;
@@ -165,7 +182,6 @@ function setAuto(on: boolean) {
   if (on && autoTimer === undefined) {
     autoTimer = setInterval(() => {
       if (rel(L.GAMEOVER)) return;
-      if (dealing) { autoServeReq = true; return; }
       if (busy) return;
       runTick();
     }, 900);
@@ -177,7 +193,7 @@ function setAuto(on: boolean) {
 
 function handleKey(key: string) {
   if (key === 'a') { setAuto(!autoOn); return; }
-  if (dealing && (key === 'ArrowDown' || key === ' ' || key === 'Enter')) { serveReq = true; return; }
+  if (dealing && (key === 'ArrowDown' || key === ' ' || key === 'Enter')) return; // the crank serves itself on arrival
   if (busy) {
     if (keyQueue.length < 4) keyQueue.push(key);
     return;
@@ -200,8 +216,14 @@ onmessage = (e: MessageEvent) => {
   if (d.type === 'key') handleKey(d.key as string);
 };
 
+// the dial spins visibly on the canvas: light angle pings between solves
+setInterval(() => {
+  sim.tick();
+  postMessage({ type: 'motor', angle: sim.motorAngle });
+}, 120);
+
 // boot
 busy = false;
-post('ready — the ring spins');
+post('ready');
 deal();
 setAuto(true);

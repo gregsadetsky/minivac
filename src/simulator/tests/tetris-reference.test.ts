@@ -17,6 +17,8 @@ import {
   TARGET_NSTATES,
   TARGET_ROT,
   TARGET_SELECTION_CYCLE,
+  TARGET_SELECTION_ENTRY,
+  TARGET_TOY_STATES,
   TetrisReference,
   homeColumn,
   refShapeRange,
@@ -94,19 +96,33 @@ describe('tetris reference: the target tables', () => {
     // so that holds by construction — verify it mechanically for every
     // edge and width, and that no branch range is empty (an empty range
     // wedges the chooser at the predecessor).
+    // toys-retire: the cycle is the 19 tetromino states (the rho); the
+    // toys are out of the chooser and state 0 keeps a one-way entry
     expect([...TARGET_SELECTION_CYCLE].sort((a, b) => a - b)).toEqual(
-      Array.from({ length: TARGET_NSTATES }, (_, i) => i)
+      Array.from({ length: TARGET_NSTATES }, (_, i) => i).filter((i) => !TARGET_TOY_STATES.includes(i))
     );
+    expect(TARGET_SELECTION_ENTRY).toEqual([0, 3]);
     const prevOf: number[] = [];
     TARGET_SELECTION_CYCLE.forEach((s, k) => {
-      prevOf[TARGET_SELECTION_CYCLE[(k + 1) % TARGET_NSTATES]] = s;
+      prevOf[TARGET_SELECTION_CYCLE[(k + 1) % TARGET_SELECTION_CYCLE.length]] = s;
     });
     for (const cols of [4, 6, 10]) {
-      for (let t = 0; t < TARGET_NSTATES; t++) {
+      for (const t of TARGET_SELECTION_CYCLE) {
+        const r2 = refShapeRange(TARGET_SHAPES[t], cols);
+        if (t === 3) {
+          // the rho's entry+wrap target: TWO selection predecessors (0
+          // at boot, 21 on the wrap), no rotation — the machine's
+          // branch spans range(3) whole and carries no reads
+          // (intoBranchSpec's carve-out). the entry edge's own span:
+          const r0 = refShapeRange(TARGET_SHAPES[0], cols);
+          expect([Math.max(r0.min, r2.min), Math.min(r0.max, r2.max)], `cols ${cols}: entry 0 -> 3 spans range(3) whole`).toEqual([r2.min, r2.max]);
+          const r21 = refShapeRange(TARGET_SHAPES[21], cols);
+          expect(Math.max(r21.min, r2.min), `cols ${cols}: the wrap 21 -> 3 is nonempty`).toBeLessThanOrEqual(Math.min(r21.max, r2.max));
+          continue;
+        }
         // the state that rotates INTO t (unique in a permutation), else the cycle predecessor
         const rotSrc = TARGET_ROT.findIndex((v, s) => v === t && s !== t);
         const src = rotSrc >= 0 ? rotSrc : prevOf[t];
-        const r2 = refShapeRange(TARGET_SHAPES[t], cols);
         const r1 = refShapeRange(TARGET_SHAPES[src], cols);
         const rp = refShapeRange(TARGET_SHAPES[prevOf[t]], cols);
         const lo = Math.max(r1.min, r2.min);

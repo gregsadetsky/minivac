@@ -39,7 +39,7 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, SELECTION_NEXT, ringPart } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, SELECTION_CYCLE, SELECTION_NEXT, ringPart } from './circuits/multivac-mini-tetris';
 import { panelLayout, sectionOrigin, SEC_JACKS, CONTACT_SETS, SEC_W, SEC_H, COIL_BOX } from './relays/panel-layout';
 import { buildWirePaths, type WireStyle, type WirePaths } from './relays/wire-paths';
 import { circuitBlocks, ownerMap } from './relays/blocks';
@@ -696,7 +696,10 @@ function* gDeal(target: number): Step {
 // ring spins between pieces and the player's own press samples it).
 selDeal.innerHTML =
   '<option value="-2">manual</option>' +
-  SHAPES.map((s, i) => `<option value="${i}">${s.label}</option>`).join('');
+  SHAPES.map((s, i) => ({ s, i }))
+    .filter(({ i }) => SELECTION_CYCLE.includes(i))
+    .map(({ s, i }) => `<option value="${i}">${s.label}</option>`)
+    .join(''); // toys-retire: 1x1/2wide/2tall are unreachable from the chooser
 selDeal.value = '-2';
 function* gDealNext(): Step {
   const mode = parseInt(selDeal.value, 10);

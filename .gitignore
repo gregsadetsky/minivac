@@ -31,3 +31,9 @@ dist-ssr
 # the real-device measurement notes and photo stay out of the public repo
 _notes/REAL-DEVICE-MEASUREMENTS.md
 _notes/real-minivac-with-measuring-tape.heic
+
+# internal working notes stay out of the public repo (user call,
+# 2026-08-27): design ledgers, roadmap, agent instructions, status logs
+_notes/
+CLAUDE.md
+ROADMAP.md

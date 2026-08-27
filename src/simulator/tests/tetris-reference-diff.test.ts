@@ -216,34 +216,26 @@ function makePair() {
 }
 
 describe('the differential: machine vs reference, every key compared', () => {
-  it('scripted game: toys, steering refusals, shapes, flips, clears, collapse, top-out (fast)', { timeout: 600000 }, () => {
+  it('scripted game: the rho entry, squares, refusals, rotations, clears, collapse, top-out (fast)', { timeout: 600000 }, () => {
     const { ref, play, steer, dropAt, selectShape } = makePair();
 
-    // boot state agrees (register seeded home, ring at 1x1, spawn armed)
+    // boot state agrees (register seeded home, ring at the boot 1x1, spawn armed)
     play(['start'], 'boot'); // idempotent on both
 
-    // toys: 1x1 drops, wall refusals, a line + collapse. the register
-    // wakes at the CENTER home (1 at four columns) and re-homes there
+    // toys-retire: the FIRST UP is the one-way entry edge — the boot
+    // 1x1 steps to the O and the ring never returns to the toys
     expect(ref.pos).toBe(circuitHome(COLS));
-    dropAt(0, 'first cell');
-    dropAt(0, 'second cell stacks');
+    play(['up'], 'the rho entry: 1x1 -> O');
+    expect(ref.shapeIx).toBe(3);
     play(['left', 'left'], 'walk to the wall; the second left refuses'); // home 1 -> 0 -> refused
-    dropAt(1, 'third');
-    dropAt(2, 'fourth');
-    dropAt(3, 'completes the bottom line'); // clear + collapse of the stacked cell
-    expect(ref.score).toBe(1);
-
-    // the domino pair: 2 wide, flip to 2 tall mid-fall and back
-    selectShape(1, 'choose 2 wide');
-    play(['tick'], 'spawn the domino');
-    play(['up'], 'flip to 2 tall mid-fall');
-    play(['up'], 'flip back to 2 wide');
-    steer(2, 'steer the domino');
-    while (ref.tokenRow >= 0) play(['tick'], 'drop the domino');
+    // two squares complete BOTH bottom rows at four wide: the double
+    // clear and its collapse, on tetrominoes alone
+    dropAt(0, 'square at the wall');
+    dropAt(2, 'square right — rows 6+7 complete together');
+    expect(ref.score).toBe(2);
 
     // S needs column >= 1: the chooser refuses at pos 0, passes at home
     steer(0, 'walk to the wall');
-    selectShape(3, 'up to the square'); // 2tall -> O
     play(['up'], 'S refused at column 0'); // chooser stalls: state stays O
     expect(ref.shapeIx).toBe(3);
     steer(1, 'back to the home column');
@@ -271,13 +263,14 @@ describe('the differential: machine vs reference, every key compared', () => {
     play(['tick', 'up'], 'spawn T, flip to T flip');
     while (ref.tokenRow >= 0) play(['tick'], 'drop the T');
 
-    // ride 2-tall stacks into the top-out and verify the frozen machine.
-    // the walk to 2-tall passes through I, which only enters at column 0
-    // on the 4-wide well (the documented S-vs-I window conflict)
+    // ride BEAMS into the top-out and verify the frozen machine (the
+    // 2-tall toy retired; the I vert stacks four rows per drop). the
+    // walk passes through the horizontal I, which only enters at column
+    // 0 on the 4-wide well — steer first or the chooser refuses forever
     steer(0, 'walk left so the chooser can pass through I');
-    selectShape(2, 'back to 2 tall');
+    selectShape(21, 'the beam');
     let guard = 12;
-    while (!ref.gameOver && guard-- > 0) dropAt(ref.pos, 'stack to the sky');
+    while (!ref.gameOver && guard-- > 0) dropAt(1, 'stack the beams');
     expect(ref.gameOver, 'topped out').toBe(true);
     play(['tick', 'left', 'right', 'up', 'start', 'tick'], 'game over: everything refuses');
   });

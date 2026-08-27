@@ -37,10 +37,13 @@ interface Snapshot {
   shapeIx: number;
   pos: number;
   dealing: boolean;
+  autoOn: boolean;
   gameOver: boolean;
+  motorAngle: number;
   status?: string;
   wireCur: Float32Array;
 }
+let motorAngle = 0; // machine 0's dial — THE WHEEL that deals
 let snap: Snapshot | null = null;
 // the clatter (/tetris/'s real relay samples): each snapshot diffs the
 // armature bits and plays a staggered, capped burst. 'm' mutes.
@@ -54,7 +57,10 @@ function clatter(relays: Uint8Array) {
     for (let m = 0; m < N_MACHINES; m++) {
       const flips = prevRelays[m] ^ relays[m];
       for (let i = 0; i < 6; i++)
-        if ((flips >> i) & 1) ((relays[m] >> i) & 1 ? on++ : off++);
+        if ((flips >> i) & 1) {
+          if ((relays[m] >> i) & 1) on++;
+          else off++;
+        }
     }
   }
   prevRelays = relays.slice();
@@ -68,9 +74,15 @@ function clatter(relays: Uint8Array) {
 }
 const worker = new Worker(new URL('./wall-worker.ts', import.meta.url), { type: 'module' });
 worker.onmessage = (e: MessageEvent) => {
-  const d = e.data as { type: string } & Snapshot;
+  const d = e.data as { type: string; angle?: number } & Snapshot;
+  if (d.type === 'motor') {
+    motorAngle = d.angle as number;
+    needsPaint = true;
+    return;
+  }
   if (d.type !== 'state') return;
   snap = d;
+  motorAngle = d.motorAngle;
   for (let m = 0; m < N_MACHINES; m++) {
     const r = d.relays[m];
     for (let i = 0; i < 6; i++) armTarget[m * 6 + i] = (r >> i) & 1;
@@ -83,27 +95,37 @@ worker.onmessage = (e: MessageEvent) => {
 
 // ---- DOM scaffold ----------------------------------------------------
 const root = document.getElementById('root')!;
-// USER COPY: the modal text below is a first draft meant to be rewritten.
+// USER COPY: modal + footer text are lorem placeholders, to be written.
 root.innerHTML = `
   <canvas id="wall" style="position:fixed;inset:0;width:100vw;height:100vh;display:block;cursor:grab;touch-action:none"></canvas>
   <div id="card" style="position:fixed;top:14px;right:14px;background:rgba(10,12,15,.92);border:1px solid #2a2f38;border-radius:10px;padding:14px;user-select:none">
     <div style="position:relative">
       <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},30px);gap:3px"></div>
-      <div id="pressenter" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;font:900 34px/1.15 ui-monospace,monospace;color:#7fd4ff;text-shadow:0 0 18px rgba(127,212,255,.65),0 2px 6px #000;animation:pe 1.1s ease-in-out infinite">PRESS<br>ENTER</div>
+      <div id="pressenter" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;font:800 24px/1.3 ui-monospace,monospace;color:#7fd4ff;text-shadow:0 0 8px rgba(127,212,255,.35),0 2px 4px #000;animation:pe 1.2s ease-in-out infinite">PRESS<br>ENTER<br>FOR NEW<br>PIECE</div>
     </div>
   </div>
-  <style>@keyframes pe{0%,100%{opacity:1}50%{opacity:.35}}</style>
+  <style>@keyframes pe{0%,100%{opacity:1}50%{opacity:.4}}
+    #footer a{color:#9fc0dd;text-decoration:none} #footer a:hover{text-decoration:underline}
+  </style>
   <div id="footer" style="position:fixed;left:0;right:0;bottom:0;background:rgba(10,12,15,.9);border-top:1px solid #2a2f38;padding:8px 16px;font:12px ui-monospace,monospace;color:#8fa0b5;text-align:center;user-select:none">
-    <span id="footerline">tetris running on real simulated relays — every rule decided by contacts, not code</span>
-    · arrows steer/rotate · ↓ takes the spinning piece · enter serves · a gravity · m sound · drag/wheel to explore
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+    · <a id="circuitlink" href="#">Read the Relay Circuit</a>
+    · <a href="https://minivac.greg.technology/">Main Minivac Simulator Site</a>
+    · <a href="https://github.com/gregsadetsky/minivac/" target="_blank" rel="noopener">GitHub</a>
+    · <a href="mailto:hi@greg.technology">Contact</a>
+  </div>
+  <div id="circuitmodal" style="display:none;position:fixed;inset:0;background:rgba(4,6,9,.78);z-index:20;align-items:center;justify-content:center">
+    <div style="position:relative;width:min(760px,92vw);height:min(80vh,900px);background:#101318;border:1px solid #2a2f38;border-radius:14px;padding:22px;color:#c9d4e3;font:13px ui-monospace,monospace;display:flex;flex-direction:column">
+      <div id="circuitclose" style="position:absolute;top:10px;right:16px;font-size:22px;color:#8fa0b5;cursor:pointer">×</div>
+      <div style="font-weight:800;color:#e8edf4;margin-bottom:10px">The relay circuit</div>
+      <div id="circuittext" style="flex:1;overflow:auto;white-space:pre;background:#0a0c0f;border-radius:8px;padding:12px;line-height:1.4"></div>
+    </div>
   </div>
   <div id="modal" style="position:fixed;inset:0;background:rgba(4,6,9,.72);display:flex;align-items:center;justify-content:center;z-index:10">
-    <div style="max-width:620px;margin:20px;background:#101318;border:1px solid #2a2f38;border-radius:14px;padding:28px 30px;color:#c9d4e3;font:15px/1.55 ui-monospace,monospace">
-      <div style="font-size:26px;font-weight:800;color:#e8edf4;margin-bottom:10px">the multivac wall</div>
-      <p style="margin:0 0 12px">this is tetris, running on a wall of simulated <b>Minivac 601</b> relay computers — a kit from 1961. every rule of the game (falling, steering, rotation, line clears, scoring) is decided by relay contacts, not by code. the amber cables are carrying real current.</p>
-      <p style="margin:0 0 12px">between pieces the shape ring spins; the piece you get is whatever the contacts hold when you press <b>enter</b> — your timing is the randomness, the way 1961 would have done it.</p>
-      <p style="margin:0 0 16px">zoom all the way in. the relays are moving.</p>
-      <div id="modalgo" style="display:inline-block;background:#1c4a7a;color:#e8edf4;border-radius:8px;padding:10px 22px;font-weight:700;cursor:pointer">play</div>
+    <div style="max-width:560px;margin:20px;background:#101318;border:1px solid #2a2f38;border-radius:14px;padding:28px 30px;color:#c9d4e3;font:15px/1.55 ui-monospace,monospace">
+      <div style="font-size:26px;font-weight:800;color:#e8edf4;margin-bottom:10px">Relay Tetris</div>
+      <p style="margin:0 0 16px">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+      <div id="modalgo" style="display:inline-block;background:#1c4a7a;color:#e8edf4;border-radius:8px;padding:10px 22px;font-weight:700;cursor:pointer">Play</div>
     </div>
   </div>
 `;
@@ -114,8 +136,31 @@ function closeModal() {
   modalOpen = false;
   modal.style.display = 'none';
 }
-modal.addEventListener('pointerdown', closeModal);
-document.getElementById('modalgo')!.addEventListener('pointerdown', closeModal);
+// the circuit popup: the entire netlist, scrollable
+const circuitModal = document.getElementById('circuitmodal')!;
+document.getElementById('circuitlink')!.addEventListener('click', (e) => {
+  e.preventDefault();
+  const t = document.getElementById('circuittext')!;
+  if (!t.textContent) {
+    // one light comment per wiring block (the generator's own section
+    // banners, exported as notes) over the raw jack-to-jack wire list
+    const parts: string[] = [`${wires.length} wires across ${N_MACHINES} machines\n`];
+    let ni = 0;
+    for (let i = 0; i < wires.length; i++) {
+      while (ni < built.notes.length && built.notes[ni].at === i) {
+        parts.push(`\n// ${built.notes[ni].label}`);
+        ni++;
+      }
+      parts.push(wires[i]);
+    }
+    t.textContent = parts.join('\n');
+  }
+  circuitModal.style.display = 'flex';
+});
+document.getElementById('circuitclose')!.addEventListener('pointerdown', () => {
+  circuitModal.style.display = 'none';
+});
+document.getElementById('modalgo')!.addEventListener('pointerdown', closeModal); // ONLY the Play button dismisses (user call)
 const canvas = document.getElementById('wall') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const gridEl = document.getElementById('grid')!;
@@ -405,12 +450,11 @@ function endpointPos(tok: string): [number, number, number] | null {
   const loc = jackLocal(+sm[1], sm[2]);
   return loc ? [x + loc[0], y + loc[1], m] : null;
 }
-let unparsed = 0;
 for (let i = 0; i < wires.length; i++) {
   const [a, b] = wires[i].split('/');
   const pa = endpointPos(a);
   const pb = endpointPos(b);
-  if (!pa || !pb) { unparsed++; continue; }
+  if (!pa || !pb) continue; // the motor-drive wires live off-panel by design
   segs.push({ x1: pa[0], y1: pa[1], x2: pb[0], y2: pb[1], mA: pa[2], mB: pb[2] });
   wireIndex.push(i);
 }
@@ -570,18 +614,15 @@ function draw() {
   const vx0 = cam.x - 80, vy0 = cam.y - 80;
   const vx1 = cam.x + sw / s + 80, vy1 = cam.y + sh / s + 80;
   const showDetail = s > 0.12;
-  // the giant line above all the minivacs (user call), real counts
+  // the giant line above all the minivacs (user copy), real counts
   ctx.fillStyle = '#dfe7f2';
   ctx.textAlign = 'center';
-  ctx.font = `900 ${Math.round(TITLE_H / 2.1)}px ui-monospace, monospace`;
-  ctx.fillText('TETRIS', WORLD_W / 2, -TITLE_H + TITLE_H / 2);
-  ctx.font = `700 ${Math.round(TITLE_H / 8)}px ui-monospace, monospace`;
+  ctx.font = `900 ${Math.round(TITLE_H / 2.4)}px ui-monospace, monospace`;
+  ctx.fillText('Relay Tetris', WORLD_W / 2, -TITLE_H * 0.42);
+  ctx.font = `700 ${Math.round(TITLE_H / 10)}px ui-monospace, monospace`;
   ctx.fillStyle = '#9fb2c8';
-  ctx.fillText(
-    `implemented using ${L.relays} relays on ${N_MACHINES} Minivac 601s, a relay computer kit from 1961`,
-    WORLD_W / 2,
-    -TITLE_H + TITLE_H / 2 + TITLE_H / 5.5
-  );
+  ctx.fillText(`implemented using ${L.relays} relays on ${N_MACHINES} simulated Minivac 601s,`, WORLD_W / 2, -TITLE_H * 0.22);
+  ctx.fillText('a relay computer kit from 1961', WORLD_W / 2, -TITLE_H * 0.09);
   ctx.textAlign = 'start';
   for (let m = 0; m < N_MACHINES; m++) {
     const { x, y } = panelXY(m);
@@ -650,6 +691,16 @@ function draw() {
     ctx.arc(x + 1205, y + 160, 10, 0, Math.PI * 2);
     ctx.fillStyle = '#ffd9a8';
     ctx.fill();
+    // machine 0 carries THE WHEEL — the live dial that deals the pieces
+    if (m === 0 && showDetail) {
+      const a0 = ((motorAngle - 90) * Math.PI) / 180;
+      ctx.strokeStyle = '#ffb000';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(x + 1120, y + 590);
+      ctx.lineTo(x + 1120 + Math.cos(a0) * 34, y + 590 + Math.sin(a0) * 34);
+      ctx.stroke();
+    }
   }
   // the cables: the cached bitmap serves only zooms at-or-below its own
   // native resolution (the user found the blurry band between the old
@@ -703,15 +754,17 @@ function paintWell() {
       pixels[r][j].style.background = piece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
-  // the user's #1: it was not clear the game WANTS a key. huge letters
-  // on top of the well whenever the ring is spinning for a piece.
-  pressEnterEl.style.display = snap.dealing && !snap.gameOver ? 'flex' : 'none';
+  // huge letters when the machine is genuinely waiting on the player:
+  // no piece, not mid-crank, gravity off (with gravity on, the wheel
+  // deals and the piece serves itself in about a second)
+  pressEnterEl.style.display =
+    !snap.gameOver && snap.tok < 0 && !snap.dealing && !snap.autoOn ? 'flex' : 'none';
 }
 
 // keys go to the engine room
 document.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
-  if (modalOpen) { closeModal(); return; }
+  if (modalOpen) return; // the modal dismisses only via its Play button
   if (e.key === 'f' || e.key === 'F') { fitAll(); return; }
   if (e.key === 'm' || e.key === 'M') { soundOn = !soundOn; return; }
   const k = e.key === 'A' ? 'a' : e.key;

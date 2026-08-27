@@ -197,18 +197,43 @@ export const ROT_STATE = (i: number) => ROT_MAP[i] ?? i;
 // so every new edge's selection predecessor IS its rotation source and
 // the shared-branch invariant below holds without new machinery. The
 // page, the drivers and the reference read THIS, never (i+1)%NSTATES.
-export const SELECTION_CYCLE: readonly number[] = [0, 1, 2, 3, 4, 13, 5, 14, 6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20, 12, 21];
-if (SELECTION_CYCLE.length !== NSTATES || new Set(SELECTION_CYCLE).size !== NSTATES)
-  throw new Error('SELECTION_CYCLE must be a permutation of the ring');
+// THE TOYS RETIRE (2026-08-27, user call): the chooser cycle is the 19
+// TETROMINO states only. states 0 (1x1), 1 (2 wide) and 2 (2 tall) —
+// the ladder's earliest rungs — are "commented out" of the circuit:
+// their relays stay wired on the wall, but no selection path reaches
+// them. the map is RHO-shaped: state 0 keeps the power-on seed (every
+// legacy slide procedure stays valid at boot) and gets a ONE-WAY entry
+// edge 0 -> 3 on the first UP; the wrap is 21 -> 3. design + the
+// adversarial review (the muxed entry feed, the slave-0 arm wire):
+// _notes/toys-retire.md.
+export const TOY_STATES: readonly number[] = [0, 1, 2];
+export const SELECTION_CYCLE: readonly number[] = [3, 4, 13, 5, 14, 6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20, 12, 21];
+if (
+  new Set(SELECTION_CYCLE).size !== SELECTION_CYCLE.length ||
+  SELECTION_CYCLE.length !== NSTATES - TOY_STATES.length ||
+  SELECTION_CYCLE.some((s) => s < 0 || s >= NSTATES || TOY_STATES.includes(s))
+)
+  throw new Error('SELECTION_CYCLE must cycle every tetromino state exactly once, toys excluded');
 const SEL_NEXT: number[] = [];
 const SEL_PREV: number[] = [];
 SELECTION_CYCLE.forEach((s, k) => {
   const n = SELECTION_CYCLE[(k + 1) % SELECTION_CYCLE.length];
   SEL_NEXT[s] = n;
-  SEL_PREV[n] = s;
+  SEL_PREV[n] = s; // SEL_PREV[3] = 21: the CYCLE edge is canonical
 });
-export const SELECTION_NEXT = (i: number) => SEL_NEXT[i];
-export const SELECTION_PREV = (i: number) => SEL_PREV[i];
+SEL_NEXT[0] = 3; // the entry edge — one-way, no SEL_PREV entry
+// loud on the retired states (the review's minor #6: a silent
+// undefined would just wedge a walker)
+export const SELECTION_NEXT = (i: number) => {
+  const n = SEL_NEXT[i];
+  if (n === undefined) throw new Error(`state ${i} has no selection successor (a retired toy)`);
+  return n;
+};
+export const SELECTION_PREV = (i: number) => {
+  const p = SEL_PREV[i];
+  if (p === undefined) throw new Error(`state ${i} has no selection predecessor (a retired toy, or the boot seed)`);
+  return p;
+};
 // the state whose deltas the target's branch checks: the state that
 // ROTATES INTO t when one exists, else the selection predecessor.
 // B2-1: this is ROT_PRED, not ROT_STATE — identical while every
@@ -220,14 +245,38 @@ const ROT_PRED: number[] = [];
 for (let i = 0; i < NSTATES; i++) if (ROT_STATE(i) !== i) ROT_PRED[ROT_STATE(i)] = i;
 export const DELTA_SOURCE = (t: number) => ROT_PRED[t] ?? SELECTION_PREV(t);
 
+// THE ONE SHARED SPEC for an into-t transition branch (toys-retire —
+// the review's D3/D4 call: the t=3 carve-out must live in ONE place
+// consumed by both upResourceCounts and the emitter, or the pos counts
+// and the wiring drift apart and the pools throw at build).
+//   t=3 (O, the rho's entry+wrap target) serves TWO selection
+//   predecessors — 0 at boot and 21 on the wrap — and NO rotation, so
+//   its branch spans range(3) WHOLE (= range(0) n range(3); clipping
+//   to range(21) would refuse a legal first UP at p = cols-2) and
+//   carries NO reads: selection rides dark rails pre-spawn, and both
+//   feeds into master 3 are NOTOK-gated (the muxes), so the branch
+//   has no mid-fall existence at all.
+export function intoBranchSpec(t: number, cols: number): { src: number; lo: number; hi: number; noReads: boolean } {
+  const r2 = shapeRange(SHAPES[t], cols);
+  if (t === 3) return { src: DELTA_SOURCE(3), lo: r2.min, hi: r2.max, noReads: true };
+  const src = DELTA_SOURCE(t);
+  const r1 = shapeRange(SHAPES[src], cols);
+  return { src, lo: Math.max(r1.min, r2.min), hi: Math.min(r1.max, r2.max), noReads: false };
+}
+
 export function upResourceCounts(cols: number) {
   const span = (o: number, w2: number, p: number) => Array.from({ length: w2 }, (_, k) => p + o + k);
   const posUse = Array(cols).fill(0) as number[];
   // per shape-row deltas: k=0 the bottom, k=1 the mid/top, k=2 the third
   // row (B2-0 — the tok-2 reads; a 2-row shape simply has no k=2 cells)
   const rowUse = [0, 1, 2].map(() => Array(cols).fill(0) as number[]);
-  for (let t = 0; t < NSTATES; t++) {
-    const src = DELTA_SOURCE(t);
+  // toys-retire: branches exist for CYCLE members ONLY — the toys are
+  // skipped EXPLICITLY (the review's minor #7: ROT_PRED[1]/[2] survive
+  // as documentation, so an undefined-based skip would happily emit
+  // dead into-1/into-2 branches and blow the shrunken pools)
+  for (const t of SELECTION_CYCLE) {
+    const spec = intoBranchSpec(t, cols);
+    const src = spec.src;
     // B2 guard (the review's T-B): with rotation 4-cycles, reusing the
     // FORWARD map here ships silently — the ranges coincide — and every
     // into-branch would read the wrong shape's deltas. the source of
@@ -236,21 +285,20 @@ export function upResourceCounts(cols: number) {
       throw new Error(`DELTA_SOURCE(${t}) = ${src} does not rotate into ${t} (ROT_PRED needed)`);
     const s1 = SHAPES[src];
     const s2 = SHAPES[t];
-    const r1 = shapeRange(s1, cols);
     const r2 = shapeRange(s2, cols);
-    // a shared branch must serve BOTH edges: its pos set (range(src) n
-    // range(t)) has to equal the selection edge's (range(prev) n
-    // range(t)) — the reviewer's hand-check said they coincide at 4 and
-    // 6; this assert is the mechanical version
-    const prev = SHAPES[SELECTION_PREV(t)];
-    const rp = shapeRange(prev, cols);
-    const lo = Math.max(r1.min, r2.min);
-    const hi = Math.min(r1.max, r2.max);
-    if (Math.max(rp.min, r2.min) !== lo || Math.min(rp.max, r2.max) !== hi)
-      throw new Error(`shared branch ranges diverge at target ${t}`);
-    for (let p = r1.min; p <= r1.max; p++) {
-      if (p < r2.min || p > r2.max) continue;
+    if (t !== 3) {
+      // a shared branch must serve BOTH edges: its pos set (range(src)
+      // n range(t)) has to equal the selection edge's (range(prev) n
+      // range(t)) — mechanical since B1; t=3's two-predecessor shape is
+      // the documented carve-out in intoBranchSpec
+      const prev = SHAPES[SELECTION_PREV(t)];
+      const rp = shapeRange(prev, cols);
+      if (Math.max(rp.min, r2.min) !== spec.lo || Math.min(rp.max, r2.max) !== spec.hi)
+        throw new Error(`shared branch ranges diverge at target ${t}`);
+    }
+    for (let p = spec.lo; p <= spec.hi; p++) {
       posUse[p]++;
+      if (spec.noReads) continue;
       for (let k = 0; k < s2.rows.length && k < 3; k++) {
         const row2 = s2.rows[k];
         const row1 = s1.rows[k];
@@ -1290,6 +1338,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   rails: string[][]; // data rail j -> its chained groups
   layout: TetrisLayout; // this build's index map (== the exports at rows=8)
   btnMachine: number; // LEFT/RIGHT buttons + WID slide live here (m40 classic)
+  notes: Array<{ at: number; label: string }>; // one-line block labels for readers of the raw netlist (user call, 2026-08-27)
 } {
   const L = tetrisLayout(rows, cols);
   // shadow the default-geometry exports with this build's layout: the
@@ -1326,6 +1375,11 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // the buttons on TWIN's + jacks at 12 rows).
   const btnMachine = L.btnMachine;
   const w: string[] = [];
+  // block labels for the published netlist: note() marks where a wiring
+  // section begins so a reader of the raw wire list gets one light
+  // comment per block (the wall page's "Read the Relay Circuit" modal)
+  const notes: Array<{ at: number; label: string }> = [];
+  const note = (label: string) => notes.push({ at: w.length, label });
 
   // rails on 6-hole M10/M11 matrix groups, allocated one list at a time
   // (allocator state lives per-circuit: a second build must start fresh)
@@ -1344,6 +1398,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     base + Math.ceil(Math.max(0, (rows - 8) * perRow) / 4);
 
   // ---------- the rung-4 register file, decoder path included ----------
+  note('the rung-4 register file, decoder path included');
   w.push(
     'm0.1+/m0.1S', `m0.1T/${comOf(A0)}`, `${comOf(A0)}/${R(A0, 'E')}`,
     `${comOf(A0)}/${R(A0m, 'E')}`, `${R(A0, 'F')}/${minusOf(A0)}`,
@@ -1430,6 +1485,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- the token ring: 8 stages, no wrap, SPAWN feeds master 0 ----------
+  note('the token ring: 8 stages, no wrap, SPAWN feeds master 0');
   // ring clock rail rides the clock relays' own section coms (chain of 4-hole
   // coms, like the rung-2 shift register); the rail is fed by collide.J below
   const ringClkCom = (i: number) => comOf(RING(i, 0));
@@ -1480,6 +1536,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- readback output taps: each cell's K contact onto its rail ----
+  note('readback output taps: each cell\'s K contact onto its rail');
   // (the arm's two FEEDS — hold-breaker NO for the lock readback, collision
   // mirror for the sense — are wired at those relays; there is NO shared
   // readback rail anywhere: every shared variant bridged the write rails)
@@ -1490,6 +1547,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- phase rails ----------
+  note('phase rails');
   // Contacts are bidirectional, so every rail here is reachable ONLY through
   // press-scoped contacts (an early draft's un-scoped fan re-fed rail A
   // backward through a closed column gate — an 8-relay oscillator). The
@@ -1748,6 +1806,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(SPAWN)}/m1.6Y`, `m1.6X/${R(GAMEOVER, 'H')}`, `${R(GAMEOVER, 'J')}/${comOf(SPAWN)}`);
 
   // ---------- vertical pieces (rung 9b): mode relay + TOPW mirror bank ----
+  note('vertical pieces (rung 9b): mode relay + TOPW mirror bank');
   // TOPW(r) is one more parallel coil on slave r's mirror com (its spare 4th
   // hole): it tracks the token row exactly, and its contacts are the phase-2
   // row selectors — TOPW(r) closed routes the top write to row r-1's W
@@ -1759,6 +1818,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- vertical pieces: the phase-2 sequencer ----------
+  note('vertical pieces: the phase-2 sequencer');
   // A vertical lock is THREE ticks: press (bottom write, P2M latches), phase
   // 2 (top write; the reset rail stays dark so the token, LKM and any CLEARP
   // latch survive), reset (as before, one tick late). P2M may never flip
@@ -1810,6 +1870,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(V3M, 'J')}/${R(P2CLR, 'E')}`, `${R(P2CLR, 'F')}/${minusOf(P2CLR)}`);
 
   // ---------- vertical pieces: the phase-2 write ----------
+  note('vertical pieces: the phase-2 write');
   // The top write may NOT re-power the press rails: the token row's mirrorA
   // would re-fire that row's breakers and put its freshly-written content
   // back on the rails — straight into the top row's open gates (the exact
@@ -1883,6 +1944,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- B1b-i: THE FOURTH PHASE, WHICH WRITES NOTHING YET -------
+  note('B1b-i: THE FOURTH PHASE, WHICH WRITES NOTHING YET');
   // A vertical lock is three ticks; a 3-tall one has to be four, and the
   // extra tick is the dangerous part, not the extra row: ROW2 is a
   // changeover sitting in the write-trigger path, and a changeover that
@@ -1936,6 +1998,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(TICKM4)}/${R(TICKM4, 'L')}`, `${R(TICKM4, 'K')}/${R(ROW2X, 'L')}`, `${R(ROW2X, 'K')}/${comOf(ROW2)}`);
 
   // ---------- B1b-ii: the third write row actually gets written -------
+  note('B1b-ii: the third write row actually gets written');
   // ROW2's NO sides feed two more sub-rails and a TOPW2(r) bank that is
   // TOPW(r)'s twin one row further up: same coil net (MIRA(r)'s, so it
   // tracks the token row exactly), contacts routing to row r-2.
@@ -2015,6 +2078,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- B1c: THE THIRD LINE SENSE ----------
+  note('B1c: THE THIRD LINE SENSE');
   // A row the phase-3 write COMPLETES was sensed by nothing: rows r and
   // r-1 cleared on their own latches and the third stayed full forever,
   // scoring 2 for what should be 3. This is the third copy of a shape
@@ -2069,6 +2133,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- B3: THE QUAD LINE SENSE (tetris's namesake move) --------
+  note('B3: THE QUAD LINE SENSE (tetris\'s namesake move)');
   // A row completed by the PHASE-4 write (only the I-vert has one) was
   // sensed by nothing. The fourth chain needs NO LINE4 bank — LINE3's
   // entire second contact set was still unwired (the review's count),
@@ -2110,6 +2175,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- row collapse (rung 10) C1: the elevator chain + seeding ----
+  note('row collapse (rung 10) C1: the elevator chain + seeding');
   // Stage t = "the hole is at row t". The chain is the ring pattern chained
   // in REVERSE (stage t's master samples stage t+1's slave), its clock coms
   // fed from the reset rail: the reset tick that kills the token doubles as
@@ -2155,6 +2221,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- the DOUBLE clear (CLEARP2) ----------
+  note('the DOUBLE clear (CLEARP2)');
   // the top row of a vertical lock can complete too — sensed on the
   // PHASE-2 rails (they carry exactly row r-1's post-write content: the
   // effective top mask through the STAGM changeover plus the stored
@@ -2209,6 +2276,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- row collapse C2: the tick lane + the alpha/beta toggle ----
+  note('row collapse C2: the tick lane + the alpha/beta toggle');
   // While any elevator stage is hot, ticks belong to the collapse: LANE (a
   // two-phase branch slave like LKS and P2S, clocked by TICKM3) re-routes
   // them off the collision branch. Ticks alternate alpha (the move — data
@@ -2265,6 +2333,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${comOf(TG2S)}/${R(TG2S, 'E')}`, `${R(TG2S, 'F')}/${minusOf(TG2S)}`);
 
   // ---------- row collapse C3: the moves ----------
+  note('row collapse C3: the moves');
   // alpha: GATES ONLY on the source row and the hole row. The source's
   // content leaks onto the rails backward through its own closed gates (a
   // live com drives an idle rail — bidirectional contacts, the same leak
@@ -2326,6 +2395,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- the piece register, increment 1: the POS ring ----------
+  note('the piece register, increment 1: the POS ring');
   // Sample-on-press, commit-on-RELEASE. During the press only the target
   // MASTER latches (direction chain -> the one live POSM tap -> master com;
   // the hold chain rides ANYBM2.G); the slaves are UNTOUCHED. The transfer
@@ -2500,6 +2570,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- the piece register, increment 2: lateral legality ----------
+  note('the piece register, increment 2: lateral legality');
   // "Buttons request, contacts decide" — the same doctrine as the fall.
   // Occupancy rails: rail(j) = the cell at (tokenRow, j) is ON. Sources
   // are the cell COM taps (each field com had exactly one spare hole),
@@ -2548,6 +2619,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(WIDM2, 'E')}/${R(WIDM4, 'E')}`, `${R(WIDM4, 'F')}/${minusOf(WIDM4)}`);
 
   // ------- increment 3a: the TOP row's occupancy (tall legality) -------
+  note('increment 3a: the TOP row\'s occupancy (tall legality)');
   // a second read of the SAME cell-com nodes, one row up: MIRCT(r) =
   // "token at r" reading row r-1, its arms tied to the cell coms THROUGH
   // the MIRC(r-1) arm jacks' spare holes (the coms themselves are 4/4).
@@ -2600,6 +2672,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ------- B2-0: the tok-2 occupancy (the third row's legality) -------
+  note('B2-0: the tok-2 occupancy (the third row\'s legality)');
   // the MIRCT idiom one level further: MIRCT2(r) = "token at r" reading
   // row r-2, arms tied to the cell coms THROUGH the MIRCT(r-1) arm
   // jacks' spare holes (each carries exactly the one tie wire from
@@ -2648,6 +2721,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   for (let p = 0; p < cols; p++) w.push(`${R(VMODEM(p), 'F')}/${minusOf(VMODEM(p))}`);
 
   // ---------- the step trees: uniform union-gated (wider-well C) ------
+  note('the step trees: uniform union-gated (wider-well C)');
   // "buttons request, contacts decide" as ever, but the trees are EMITTED
   // now: every check is a rail read gated by a UNION of the states it
   // applies to, wired in series — a dead union's NC passes the sample
@@ -2935,6 +3009,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     }
   }
   // ---------- the fan emitters: B and T fans as offset rails ----------
+  note('the fan emitters: B and T fans as offset rails');
   // the hand's B fan was ALREADY this factorization (base + WIDM + WID3
   // rails with BCUT as the offset-bottom suppression); the T fan becomes
   // its mirror: per offset d, a rail = union of states whose top span
@@ -3130,15 +3205,17 @@ export function tetrisCircuit(rows = 8, cols = 4): {
       return { relay: L.UPG21M(k), arm: 'L', no: 'K' };
     };
     const ends: string[] = [];
-    for (let t = 0; t < NSTATES; t++) {
+    // toys-retire: into-branches for CYCLE members only (explicit — the
+    // retired states must not be emitted even though ROT_PRED keeps
+    // documentation entries for the dead domino flip)
+    for (const t of SELECTION_CYCLE) {
       // MMIR(t) mirrors MASTER t, which is up while the ring sits at
       // t's PREDECESSOR — it gates the transition INTO t (the hand's
       // convention; pairing it with t -> t+1 was an off-by-one that
       // walked on the wrong checks until a range mismatch refused)
-      const s1 = SHAPES[DELTA_SOURCE(t)]; // rotation-pair deltas; selection rides the dark rails
+      const spec = intoBranchSpec(t, cols); // ONE spec shared with upResourceCounts
+      const s1 = SHAPES[spec.src]; // rotation-pair deltas; selection rides the dark rails
       const s2 = SHAPES[t];
-      const r1 = shapeRange(s1, cols);
-      const r2 = shapeRange(s2, cols);
       // B3 closed this ternary's open tail: MMIR6(21) evaluates to
       // CUTC7(0) — the banks are adjacent — so an unmapped state would
       // have wired the into-21 gate onto a cut relay SILENTLY (the
@@ -3153,21 +3230,22 @@ export function tetrisCircuit(rows = 8, cols = 4): {
         : t === 21 ? MMIR7
         : (() => { throw new Error(`no master mirror for ring state ${t}`); })();
       let armChain: string | null = null;
-      for (let p = r1.min; p <= r1.max; p++) {
-        if (p < r2.min || p > r2.max) continue;
+      for (let p = spec.lo; p <= spec.hi; p++) {
         const pc = (upPos[p] as MirrorBank).request('gate');
         w.push(`${armChain ?? `${R(mm, 'G')}`}/${R(pc.relay, pc.arm)}`);
         armChain = R(pc.relay, pc.arm);
         // per shape-row deltas, all THREE rows since B2-0 (the tok-2
-        // reads close what was B1's declared rotation seam)
+        // reads close what was B1's declared rotation seam); the rho's
+        // into-3 branch carries NO reads (intoBranchSpec's carve-out)
         const kinds = ['bot', 'top', 'top2'] as const;
         const deltas: Array<{ kind: 'bot' | 'top' | 'top2'; col: number }> = [];
-        for (let k = 0; k < s2.rows.length && k < 3; k++) {
-          const row1 = s1.rows[k];
-          const cover = new Set(row1 ? span(row1.off, row1.w, p) : []);
-          for (const c of span(s2.rows[k].off, s2.rows[k].w, p))
-            if (!cover.has(c) && c >= 0 && c < cols) deltas.push({ kind: kinds[k], col: c });
-        }
+        if (!spec.noReads)
+          for (let k = 0; k < s2.rows.length && k < 3; k++) {
+            const row1 = s1.rows[k];
+            const cover = new Set(row1 ? span(row1.off, row1.w, p) : []);
+            for (const c of span(s2.rows[k].off, s2.rows[k].w, p))
+              if (!cover.has(c) && c >= 0 && c < cols) deltas.push({ kind: kinds[k], col: c });
+          }
         let cur = R(pc.relay, pc.no);
         for (const d of deltas) {
           if (t === 21) {
@@ -3198,6 +3276,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
 
 
   // ---------- game over: the stack topped out ----------
+  note('game over: the stack topped out');
   // GAMEOVER latches on any LOCK AT ROW 0 (a row-0 clearing lock also
   // tops out — documented simplification) and its NC sits in the START
   // button's arm path above, so no spawn can ever arm again; a power
@@ -3219,6 +3298,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(GAMEOVER)}/${R(GAMEOVER, 'L')}`, `${R(GAMEOVER, 'K')}/${comOf(GAMEOVER)}`);
 
   // ---------- the score ring: a decimal digit, one step per line clear ----
+  note('the score ring: a decimal digit, one step per line clear');
   // The token-ring pattern verbatim with CLEARP as the clock: each clear
   // pulses CLEARP (at most one row clears per lock), the one-hot digit
   // steps 0 -> 1 -> ... -> 9 -> 0. Clock coils pair on their own section
@@ -3335,6 +3415,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${plusOf(SCBOOT)}/${R(SCBOOT, 'L')}`, `${R(SCBOOT, 'N')}/${comOf(SCR(0, 2))}`);
 
     // ---------- staggered pieces (S/Z): the TOP-row mask bank ----------
+    note('staggered pieces (S/Z): the TOP-row mask bank');
   // PIECET(j) mirrors the TOPMASK slides (slides 1-4 on the dedicated
   // button machine — each section's slide is separate hardware from its
   // button). Phase 2's diverted feed (STAGM NO) powers colFanT, and each
@@ -3423,6 +3504,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- the top collision term (3b-2) ----------
+  note('the top collision term (3b-2)');
   // A staggered notch (a TOPMASK column outside the B mask) must REST on
   // stored content instead of burying it: per column, a private +-fed
   // series branch PIECET(j) AND occupied(tokenRow, j) feeds collideNode
@@ -3461,6 +3543,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(STAGM2, 'G')}/${comOf(COLLIDE)}`);
 
   // ---------- the shape ring (3b-3a): the shape becomes machine state ----
+  note('the shape ring (3b-3a): the shape becomes machine state');
   // A 6-state one-hot ring stepped by the UP button — the score-ring
   // pattern verbatim with UPM (the button's mirror) in CLEARPM's role:
   // masters sample the previous state's slave while the clock is low,
@@ -3474,6 +3557,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // 9..11 in the 4c block (SHR3)
   const SH = (i: number, part: number) => ringPart(L, i, part);
   // ---------- rotation: NOTOK and the D-feed muxes ----------
+  note('rotation: NOTOK and the D-feed muxes');
   // UP means two different things and the difference lives in the
   // MASTER SAMPLING, not in the clock network: each master's coil com
   // is fed through its predecessor slave's set2, so re-aiming those
@@ -3563,22 +3647,46 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${comOf(sl)}/${R(sl, 'E')}`, `${R(sl, 'F')}/${minusOf(sl)}`);
     w.push(`${plusOf(c)}/${R(c, 'H')}`, `${plusOf(c)}/${R(c, 'L')}`);
     // the D-feed IS the selection map: the predecessor comes from
-    // SELECTION_CYCLE, not from index order (B1 groundwork)
-    const prevIx = SELECTION_PREV(i);
-    const prev = SH(prevIx, 2);
-    w.push(`${R(c, 'J')}/${R(prev, 'L')}`);
-    if (ROT_STATE(prevIx) === i) {
-      // this slave's rotation partner IS its selection successor (the
-      // domino's 2wide -> 2tall): one wire serves both meanings
-      w.push(`${R(prev, 'K')}/${comOf(a)}`);
-    } else {
+    // SELECTION_CYCLE, not from index order (B1 groundwork).
+    // toys-retire: CYCLE members only — masters 0-2 are never fed at
+    // all; the toys' clocks and slaves stay wired but no selection
+    // path reaches them ("commented out", the user's word for it)
+    if (SEL_PREV[i] !== undefined) {
+      const prevIx = SEL_PREV[i];
+      const prev = SH(prevIx, 2);
+      w.push(`${R(c, 'J')}/${R(prev, 'L')}`);
+      if (ROT_STATE(prevIx) === i) {
+        // this slave's rotation partner IS its selection successor:
+        // one wire serves both meanings
+        w.push(`${R(prev, 'K')}/${comOf(a)}`);
+      } else {
+        const mx = takeNot();
+        w.push(`${R(prev, 'K')}/${R(mx.relay, mx.arm)}`);
+        w.push(`${R(mx.relay, mx.no)}/${comOf(a)}`); // NOTOK up: select
+        if (ROT_STATE(prevIx) !== prevIx)
+          w.push(`${R(mx.relay, mx.nc)}/${comOf(SH(ROT_STATE(prevIx), 1))}`); // down: rotate
+        // (a self-rotating state leaves the NC unwired: mid-fall its
+        // successor master is simply never fed, so UP refuses)
+      }
+    }
+    if (i === 3) {
+      // THE ENTRY EDGE (0 -> 3, one-way): the boot seed leaves the 1x1
+      // for the O on the first UP and the ring never comes back. the
+      // feed is MUXED — the review's D3: SPAWN gates on GAMEOVER only,
+      // so boot -> START -> tick drops a 1x1 WITH the ring at 0; an
+      // unmuxed feed would energize master 3 mid-fall and the
+      // read-free into-3 branch would morph the falling piece with
+      // zero occupancy checks. NC unwired (state 0 has no rotation
+      // meaning — the self-rotating idiom). slave 0's set2 arm rides
+      // clock 3's SECOND NC hole (the review's mandatory wire: the old
+      // into-1 D wire used to feed this arm; clocks 1 and 3 share
+      // segment 0's com and rise in one wave). master 3's com lands at
+      // exactly 4 wires — the COMMON jack's budget, audited.
+      const prev0 = SH(0, 2);
+      w.push(`${R(c, 'J')}/${R(prev0, 'L')}`);
       const mx = takeNot();
-      w.push(`${R(prev, 'K')}/${R(mx.relay, mx.arm)}`);
-      w.push(`${R(mx.relay, mx.no)}/${comOf(a)}`); // NOTOK up: select
-      if (ROT_STATE(prevIx) !== prevIx)
-        w.push(`${R(mx.relay, mx.nc)}/${comOf(SH(ROT_STATE(prevIx), 1))}`); // down: rotate
-      // (a self-rotating state leaves the NC unwired: mid-fall its
-      // successor master is simply never fed, so UP refuses)
+      w.push(`${R(prev0, 'K')}/${R(mx.relay, mx.arm)}`);
+      w.push(`${R(mx.relay, mx.no)}/${comOf(a)}`);
     }
     w.push(`${R(c, 'G')}/${R(a, 'H')}`, `${R(a, 'G')}/${comOf(a)}`); // master holds, clock high
     w.push(`${R(c, 'K')}/${R(a, 'L')}`, `${R(a, 'K')}/${comOf(sl)}`); // slave := master
@@ -3644,6 +3752,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // T(3) = Z & pos1
 
   // ---------- 3b-3b coils: the mode gates and mode-only top reads ------
+  note('3b-3b coils: the mode gates and mode-only top reads');
   // SG mirrors chain off the S state net, ZG off the Z net (their NC/NO
   // contacts are the NOT-S/NOT-Z gates and the LTS/LTZ coil gates wired
   // into the legality section above). LTS/LTZ coils are top-rail reads
@@ -3663,6 +3772,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // Z-gated reads: column 1, column 2, column 3 (two relays for col 3)
 
   // ---------- 3b-3c: UP-transition legality (the last seam) ----------
+  note('3b-3c: UP-transition legality (the last seam)');
   // The clock conducts ONLY through a legal transition's branch: the
   // energized master (one-hot, the current state's successor) names the
   // target state; each transition is one MMIR contact whose output fans
@@ -3689,6 +3799,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // the join: every branch's free-side output chains into the clock com
 
   // ---------- 3b-4a: L1 / J1 / T1 (the upright 3-wide forms) ----------
+  note('3b-4a: L1 / J1 / T1 (the upright 3-wide forms)');
   // state mirrors chain off the new slaves; the TRP rail (= L1|J1|T1)
   // feeds every rail these states share identically
   w.push(`${R(SHR2(6, 2), 'E')}/${R(L1M(0), 'E')}`, `${R(L1M(0), 'E')}/${R(L1M(1), 'E')}`);
@@ -3729,6 +3840,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // the join grows the new tails before entering the clock com
 
   // ---------- 3b-4b coils: the re-classed gates and triple reads ------
+  note('3b-4b coils: the re-classed gates and triple reads');
   // mirror chains for the extra contacts
   w.push(`${R(J1M(1), 'E')}/${R(J1M2, 'E')}`, `${R(J1M2, 'E')}/${R(J1M3, 'E')}`);
   w.push(`${R(T1M(1), 'E')}/${R(T1M2, 'E')}`);
@@ -3744,6 +3856,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
 
   // ---------- 3b-4c: the overhang trio's coils, rails and fans --------
+  note('3b-4c: the overhang trio\'s coils, rails and fans');
   // state mirrors off the new slaves; TT = L2|J2|T2; BCUT = L2|T2
   w.push(`${R(SHR3(9, 2), 'E')}/${R(L2M(0), 'E')}`, `${R(L2M(0), 'E')}/${R(L2M(1), 'E')}`, `${R(L2M(1), 'E')}/${R(L2M(2), 'E')}`);
   w.push(`${R(SHR3(10, 2), 'E')}/${R(J2M, 'E')}`);
@@ -3775,6 +3888,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(MMIR2(8), 'H')}/${R(MMIR3(9), 'H')}`);
   w.push(`${R(MMIR3(9), 'H')}/${R(MMIR3(10), 'H')}`, `${R(MMIR3(10), 'H')}/${R(MMIR3(11), 'H')}`);
   // ---------- 3b-4d: the horizontal I's coils ----------
+  note('3b-4d: the horizontal I\'s coils');
   // two mirrors off the new slave: IM(0) feeds the B fan's offset-3
   // rail, IM(1) is the step-mirror bank's chain tail (the slave's own
   // sets are spent stepping the ring, as everywhere else here)
@@ -3801,6 +3915,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     w.push(`${R(m, 'F')}/${minusOf(m)}`);
 
   // ---------- B1 (2026-08-26): VERTICAL S AND Z ----------
+  note('B1 (2026-08-26): VERTICAL S AND Z');
   // the first three-row states, driving the landed phase-3 engine. the
   // ring/tree/fan EMITTERS grew them automatically from the SHAPES rows
   // (their derived 2-row views expose bottom+MID, exactly what phase 2
@@ -3872,6 +3987,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   }
 
   // ---------- B3: THE FOURTH PHASE TICK (the I-vert's lock is FOUR) ---
+  note('B3: THE FOURTH PHASE TICK (the I-vert\'s lock is FOUR)');
   // the B1b-i pattern one phase deeper, with the review's four
   // refutations folded in. V4 = "the falling shape is four rows": PURE
   // STATE, one changeover off state 21's own bank — LKM2 freezes the
@@ -4023,6 +4139,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   w.push(`${R(LEGBT(cols - 1), 'G')}/${R(COLLIDE, 'E')}`);
 
   // ---------- 3b-5: the self-tick oscillator (see the constants) -------
+  note('3b-5: the self-tick oscillator (see the constants)');
   const om = Math.floor(TOSC / 6);
   const os = (TOSC % 6) + 1;
   w.push(`m${om}.${os}+/m${om}.${os}S`, `m${om}.${os}T/${R(TDRV, 'H')}`); // AUTO gates the feed
@@ -4036,7 +4153,7 @@ export function tetrisCircuit(rows = 8, cols = 4): {
   // slide's S-T closure does (both dead-end open when inactive)
   w.push(`${plusOf(TDRV)}/${R(TDRV, 'L')}`, `${R(TDRV, 'K')}/${R(LKS, 'H')}`);
 
-  return { wires: w, rails: dataRails, layout: L, btnMachine };
+  return { wires: w, rails: dataRails, layout: L, btnMachine, notes };
 }
 
 

@@ -144,9 +144,11 @@ describe('B1: vertical S and Z', () => {
     expect(g.banks(g.L.PIECET2), 'Z vert top at pos 1').toBe(0b0010);
     g.up();
     expect(g.shapeAt(), 'Z vert steps into L').toBe(6);
-    // the rest of the cycle is the pre-B1 walk; ride it around the wrap
-    g.select(0);
-    expect(g.banks(PIECE), 'back at 1x1').toBe(1 << g.posAt());
+    // the rest of the cycle is the pre-B1 walk; ride it to the flat I
+    // (toys-retire: 1x1 left the cycle — the flat I is the state where
+    // every tall/staggered rail is provably dead)
+    g.select(12);
+    expect(g.banks(PIECE), 'the I: four columns from p').toBe(0b1111);
     expect(g.rel(g.L.V3M), 'V3 died with the vertical states').toBe(0);
     expect(g.rel(VMODE)).toBe(0);
   });
@@ -396,12 +398,12 @@ describe('B2: the L/J/T verticals — rotation is a true 4-cycle', () => {
     expect(g.m.getState().alerts).toEqual([]);
   });
 
-  it('the 22-state chooser wraps; the I ROTATES now (the B3 flip)', { timeout: 1800000 }, () => {
+  it('the 19-cycle wraps to the square; the I ROTATES (B3 + toys-retire)', { timeout: 1800000 }, () => {
     const g = rig();
     g.start();
     g.select(20); // T vert L — then through the I, the I-vert and the wrap
-    g.select(0);
-    expect(g.shapeAt()).toBe(0);
+    g.select(3); // the 19-WRAP lands on the square (toys-retire)
+    expect(g.shapeAt()).toBe(3);
     // B3 flipped this receipt: "the I is a singleton until B3" held from
     // 3b-4d through B2 — now UP mid-fall walks 12 -> 21 -> 12 in the
     // contacts (the last rotation edge; NSTATES == TARGET_NSTATES)

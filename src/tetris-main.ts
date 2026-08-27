@@ -25,7 +25,8 @@
  */
 
 import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
-import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, SELECTION_NEXT, ringPart } from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES, shapeRange, ROT_STATE, SELECTION_CYCLE,
+  SELECTION_NEXT, ringPart } from './circuits/multivac-mini-tetris';
 
 // the 'fast' engine: typed-array rewrite of the sparse solver, validated
 // against the dense oracle on 5000 random circuits (zero mismatches, max
@@ -437,7 +438,7 @@ function deal() {
         render();
         return;
       }
-      if (serveReq || (autoServeReq && steps >= SHAPES.length) || stall > SHAPES.length) {
+      if (serveReq || (autoServeReq && steps >= SELECTION_CYCLE.length) || stall > SELECTION_CYCLE.length) {
         dealing = false;
         serve(); // the sampled state spawns on the next tick
         busy = false;

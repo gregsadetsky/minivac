@@ -60,13 +60,12 @@ await page.goto(`${BASE}/tetris/?deal=manual`);
 await waitIdle('boot', 60000);
 console.log('boot ok:', await status());
 
-// cycle shapes: 1x1 -> 2 wide -> 2 tall
+// toys-retire: the FIRST UP is the rho's one-way entry edge — the boot
+// 1x1 steps straight to the O and the ring never returns to the toys
 await page.keyboard.press('ArrowUp');
-await waitIdle('shape1');
-await page.keyboard.press('ArrowUp');
-const s2 = await waitIdle('shape2');
-console.log('shape after 2 ups (want 2 tall):', s2);
-if (!s2.includes('2 tall')) throw new Error('shape cycle did not reach "2 tall"');
+const s2 = await waitIdle('shape1');
+console.log('shape after the entry UP (want 2x2 square):', s2);
+if (!s2.includes('2x2')) throw new Error('the entry edge did not reach the square');
 
 // spawn and hard-run the piece to the floor: 8 ticks max (spawn at 0..7)
 await page.keyboard.press('Enter');
@@ -90,21 +89,18 @@ for (let i = 0; i < 16; i++) {
   const s = await status();
   if (/enter to spawn/.test(s)) break;
 }
-console.log('after vertical drop:', await status());
+console.log('after the square drop:', await status());
 console.log('saw bookkeeping note:', sawBookkeeping);
 const r1 = await rows();
 console.log('field:\n' + r1.join('\n'));
-await page.screenshot({ path: SHOT('vertical-landed') });
-// the register homes at the CENTER (col 2 on the 6-wide well) since the
-// center-spawn rung: col 2 rows 10+11 must be amber, nothing else
-if (r1[11] !== '..O...' || r1[10] !== '..O...') throw new Error('vertical write wrong: ' + JSON.stringify(r1));
+await page.screenshot({ path: SHOT('square-landed') });
+// the register homes at the CENTER (col 2 on the 6-wide well): the
+// square's two-row write is the phase-2 receipt now that the 2-tall toy
+// is retired — cols 2-3, rows 10+11, nothing else
+if (r1[11] !== '..OO..' || r1[10] !== '..OO..') throw new Error('square write wrong: ' + JSON.stringify(r1));
 if (!sawBookkeeping) throw new Error('auto-bookkeeping note never appeared');
 
-// now a 2x2 square: one more ArrowUp (2 tall -> 2x2), two lefts from the
-// center home (pos 0: bottom cols 0-1), drop
-await page.keyboard.press('ArrowUp');
-const s3 = await waitIdle('shape3');
-if (!s3.includes('2x2')) throw new Error('expected 2x2, got: ' + s3);
+// second square at the left wall (pos 0: bottom cols 0-1)
 await page.keyboard.press('ArrowLeft');
 await waitIdle('move');
 await page.keyboard.press('ArrowLeft');
@@ -117,34 +113,13 @@ for (let i = 0; i < 16; i++) {
   if (/enter to spawn/.test(await status())) break;
 }
 const r2 = await rows();
-console.log('field after 2x2:\n' + r2.join('\n'));
-await page.screenshot({ path: SHOT('square-landed') });
-// square at cols 0-1, rows 10+11; col 2 keeps its vertical stack — the
-// same 'OOO...' mask the pre-center-spawn script built col-0-first
-if (r2[11] !== 'OOO...' || r2[10] !== 'OOO...') throw new Error('2x2 write wrong: ' + JSON.stringify(r2));
+console.log('field after the second square:\n' + r2.join('\n'));
+if (r2[11] !== 'OOOO..' || r2[10] !== 'OOOO..') throw new Error('second square wrong: ' + JSON.stringify(r2));
 
-// third (6 wide): a SECOND 2x2 at cols 4-5 first, then complete row 11
-// with a 1x1 at col 3 — the flash must paint while the tick is held, the
-// status must announce the clear, and the COLLAPSE must walk the stacked
-// rows down into the hole (rung 10)
-await page.keyboard.press('ArrowRight');
-await waitIdle('sq2a');
-await page.keyboard.press('ArrowRight');
-await waitIdle('sq2b'); // pos 4: bottom cols 4-5
-await page.keyboard.press('Enter');
-await waitIdle('spawnSq2');
-for (let i = 0; i < 16; i++) {
-  await page.keyboard.press('ArrowDown');
-  await waitIdle('tickSq2');
-  if (/enter to spawn/.test(await status())) break;
-}
-const rSq2 = await rows();
-if (rSq2[11] !== 'OOO.OO' || rSq2[10] !== 'OOO.OO')
-  throw new Error('second square wrong: ' + JSON.stringify(rSq2));
-// the cycle passes the staggered pair AND THEIR VERTICALS (B1: the
-// chooser runs S -> S vert -> Z -> Z vert), then the triples, the
-// flips, the horizontal I and (B3) the I VERT, back to 1x1. the
-// operator clamps re-position the register per shape along the way.
+// THIRD: the chooser cycle receipt — from the square through every
+// tetromino orientation and the 19-WRAP back to the square (the toys
+// are gone from the cycle; the operator clamps re-position the
+// register per shape along the way)
 await page.keyboard.press('ArrowUp');
 const sS = await waitIdle('shapeS');
 if (!/\bS\b/.test(sS)) throw new Error('expected S, got: ' + sS);
@@ -155,14 +130,18 @@ for (const want of [/S vert/, /\bZ\b/, /Z vert/, /\bL\b/, /L vert R/, /L flip/, 
 }
 await page.keyboard.press('ArrowUp');
 const s4 = await waitIdle('shape4');
-if (!s4.includes('1x1')) throw new Error('expected 1x1 after the 22-wrap, got: ' + s4);
-// walk to the wall deterministically (the cycle's clamps left the
-// register at a shape-dependent column), then 3 rights = col 3 exactly
+if (!s4.includes('2x2')) throw new Error('expected the square after the 19-wrap, got: ' + s4);
+
+// FOURTH: the third square at cols 4-5 completes rows 10 AND 11 at one
+// lock — the DOUBLE clear: the flash must paint while the tick is held,
+// the status must announce the clear, and the field must come out EMPTY
+// (nothing was stacked above). walk to the wall deterministically, then
+// 4 rights = pos 4 exactly.
 for (let i = 0; i < 5; i++) {
   await page.keyboard.press('ArrowLeft');
   await waitIdle('rehome');
 }
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 4; i++) {
   await page.keyboard.press('ArrowRight');
   await waitIdle(`move-r${i}`);
 }
@@ -177,10 +156,8 @@ for (let i = 0; i < 20; i++) {
   for (;;) {
     const s = await page.locator('#status').textContent();
     if (/line cleared/.test(s)) sawCleared = true;
-    // the token row paints the mask column PIECE-cyan over the fresh
-    // write, so a full row mid-press reads e.g. 'OOOPOO' — and a full
-    // row 11 is visible ONLY during the clear flash, so sample every
-    // poll (the 'holding' status gate raced the shorter native ticks)
+    // a full row 11 is visible ONLY during the clear flash; the token
+    // row paints PIECE-cyan over the fresh write, so accept O and P
     if (!sawFlash) {
       const rr = await rows();
       if (/^[OP]{6}$/.test(rr[11])) {
@@ -200,76 +177,84 @@ for (let i = 0; i < 20; i++) {
 console.log('clear-phase final status:', finalNote);
 console.log('saw the full-row flash mid-press:', sawFlash, '| cleared note:', sawCleared);
 const r3 = await rows();
-console.log('field after the clear:\n' + r3.join('\n'));
+console.log('field after the double clear:\n' + r3.join('\n'));
 await page.screenshot({ path: SHOT('after-clear') });
 if (!sawCleared) throw new Error('cleared note never seen: ' + finalNote);
 if (!sawFlash) throw new Error('the full-row flash was never painted');
-if (r3[11] !== 'OOO.OO' || r3[10] !== '......') throw new Error('post-collapse field wrong: ' + JSON.stringify(r3));
+if (r3.some((row) => row !== '......')) throw new Error('post-double-clear field not empty: ' + JSON.stringify(r3));
 
-// fourth: the sideways-overlap guard. Landing and locking are one merged
-// tick, so a piece never parks at its rest row — the steerable moments are
-// mid-fall. Build a block at row 6 (a col-2 piece insta-locks there on the
-// fallen stack), then catch a col-3 piece PASSING row 6 and push left into
-// the block: the page must refuse.
-// the register re-homed to the CENTER = col 2: no steering needed
+// FIFTH: the sideways-overlap guard, beam edition. Drop an I VERT at
+// col 2 (a four-cell tower, rows 8-11), then catch a second beam
+// falling in col 3 and push LEFT into the tower: the contacts must
+// refuse (the tok-1/tok-2 reads — B1/B2's banks doing real work).
+const labelOf0 = (st) => {
+  const m2 = st.match(/—\s*([^—]+?)\s*(?:at row \d+|\(enter to spawn\))/);
+  return m2 ? m2[1].trim() : null;
+};
+let pickedIV = null;
+for (let i = 0; i < 22; i++) {
+  pickedIV = labelOf0(await status());
+  if (pickedIV === 'I vert') break;
+  await page.keyboard.press('ArrowUp');
+  await waitIdle('walk to I vert');
+}
+if (pickedIV !== 'I vert') throw new Error('chooser never reached the I vert: ' + (await status()));
+for (let i = 0; i < 5; i++) {
+  await page.keyboard.press('ArrowLeft');
+  await waitIdle('beam wall');
+}
+// pos 0: the beam's column is p+2 = 2
 await page.keyboard.press('Enter');
-await waitIdle('spawn4');
-for (let i = 0; i < 14; i++) {
+await waitIdle('spawn beam 1');
+for (let i = 0; i < 18; i++) {
   await page.keyboard.press('ArrowDown');
-  await waitIdle('tick4');
+  await waitIdle('beam1 tick');
   if (/enter to spawn/.test(await status())) break;
 }
-const mid = await rows();
-if (mid[10] !== '..O...') throw new Error('probe setup wrong (want row10 col2): ' + JSON.stringify(mid));
-await page.keyboard.press('ArrowRight'); // re-homed center: col 3 = 1 right
-await waitIdle('move5');
+const rB = await rows();
+if (rB[11] !== '..O...' || rB[10] !== '..O...' || rB[9] !== '..O...' || rB[8] !== '..O...')
+  throw new Error('beam tower wrong: ' + JSON.stringify(rB));
+// second beam in col 3 (pos 1: one left from the center re-home)
+await page.keyboard.press('ArrowLeft');
+await waitIdle('beam2 pos');
 await page.keyboard.press('Enter');
-await waitIdle('spawn5');
+await waitIdle('spawn beam 2');
 let caught = false;
 for (let i = 0; i < 11; i++) {
   await page.keyboard.press('ArrowDown');
-  await waitIdle('tick5');
+  await waitIdle('beam2 tick');
   if (/at row 10/.test(await status())) {
     caught = true;
     break;
   }
 }
-if (!caught) throw new Error('never caught the piece passing row 6');
+if (!caught) throw new Error('never caught the second beam at row 10');
 const before4 = await rows();
 await page.keyboard.press('ArrowLeft');
 await page.waitForTimeout(400);
 const note4 = await status();
 const after4 = await rows();
-if (!/blocked/.test(note4)) throw new Error('left into the stack was not refused: ' + note4);
+if (!/blocked/.test(note4)) throw new Error('left into the tower was not refused: ' + note4);
 if (JSON.stringify(before4) !== JSON.stringify(after4)) throw new Error('blocked move changed the field');
-console.log('overlap guard verified:', note4);
-
-// finish that drop: the col-3 piece completes row 11 -> clear + collapse
-// walks the col-2 block down. Field afterwards: just '..O.' on the floor.
-let note5 = '';
-for (let i = 0; i < 20; i++) {
+console.log('overlap guard verified (beam vs tower):', note4);
+// finish the drop: two four-tall towers side by side
+for (let i = 0; i < 12; i++) {
   await page.keyboard.press('ArrowDown');
-  note5 = await waitIdle('tick6');
-  if (/line cleared|enter to spawn/.test(note5)) break;
+  await waitIdle('beam2 finish');
+  if (/enter to spawn/.test(await status())) break;
 }
 const r5 = await rows();
-console.log('field after the second clear:\n' + r5.join('\n'));
-if (r5[11] !== '..O...' || r5[10] !== '......') throw new Error('second collapse wrong: ' + JSON.stringify(r5));
+if (r5[11] !== '..OO..' || r5[8] !== '..OO..') throw new Error('twin towers wrong: ' + JSON.stringify(r5));
 
-// FIFTH: the staggered S itself (shapes rung 3b on the page). Cycle
-// 1x1 -> ... -> S (4 ups), spawn at the center home pos 2 (bottom cols
-// 2-3, top cols 1-2), verify the staggered PREVIEW mid-fall, then drop:
-// the bottom pair rests on the '..O...' stack at row 10 and the top pair
-// writes row 9 shifted left.
-for (const want of [/2 wide/, /2 tall/, /2x2/, /\bS\b/]) {
+// FIFTH-b: the staggered S preview mid-fall, then it rests ON the
+// towers: bottom pair on row 7, top pair shifted left on row 6
+for (const want of [/2x2/, /\bS\b/]) {
   await page.keyboard.press('ArrowUp');
   const s = await waitIdle('cycleS');
   if (!want.test(s)) throw new Error(`cycle expected ${want}, got: ${s}`);
 }
 await page.keyboard.press('Enter');
 await waitIdle('spawnS');
-// two ticks in, the token is clear of the top row: the preview must paint
-// bottom '.PP.' with 'PP..' directly above it
 await page.keyboard.press('ArrowDown');
 await waitIdle('tickS1');
 await page.keyboard.press('ArrowDown');
@@ -288,7 +273,7 @@ for (let i = 0; i < 16; i++) {
 const r6 = await rows();
 console.log('field after the S locks:\n' + r6.join('\n'));
 await page.screenshot({ path: SHOT('s-landed') });
-if (r6[11] !== '..O...' || r6[10] !== '..OO..' || r6[9] !== '.OO...')
+if (r6[7] !== '..OO..' || r6[6] !== '.OO...')
   throw new Error('staggered S write wrong: ' + JSON.stringify(r6));
 
 // SIXTH: auto-gravity — a timer cycles the tick slide at operator
@@ -391,13 +376,23 @@ const model = {
   piece: null, // {ix, pos, row}
   armed: false,
   shapeIx: 0,
-  // page-mirrored geometry
-  shapes: [
-    { bOff: 0, bW: 1, tOff: 0, tW: 0 }, { bOff: 0, bW: 2, tOff: 0, tW: 0 },
-    { bOff: 0, bW: 1, tOff: 0, tW: 1 }, { bOff: 0, bW: 2, tOff: 0, tW: 2 },
-  ],
+  // page-mirrored geometry (2-row tetromino states only — the scripts
+  // below never spawn a vertical; toys-retire removed the toy entries)
+  shapes: {
+    3: { bOff: 0, bW: 2, tOff: 0, tW: 2 }, // O
+    4: { bOff: 0, bW: 2, tOff: -1, tW: 2 }, // S
+    5: { bOff: 0, bW: 2, tOff: 1, tW: 2 }, // Z
+    6: { bOff: 0, bW: 3, tOff: 0, tW: 1 }, // L
+    7: { bOff: 0, bW: 3, tOff: 2, tW: 1 }, // J
+    8: { bOff: 0, bW: 3, tOff: 1, tW: 1 }, // T
+    12: { bOff: 0, bW: 4, tOff: 0, tW: 0 }, // I
+  },
 };
-const geo = (ix) => model.shapes[ix];
+const geo = (ix) => {
+  const g = model.shapes[ix];
+  if (!g) throw new Error(`the model has no geometry for state ${ix} — the script spawned something it should not`);
+  return g;
+};
 const cellsOf = (ix, pos, row) => {
   const g = geo(ix);
   const cs = [];
@@ -430,7 +425,7 @@ const modelKey = (key) => {
     }
     // the circuit's SELECTION_CYCLE: the verticals sit next to their
     // rotation partners (B1)
-    const SEL = { 0:1, 1:2, 2:3, 3:4, 4:13, 13:5, 5:14, 14:6, 6:15, 15:9, 9:16, 16:7, 7:17, 17:10, 10:18, 18:8, 8:19, 19:11, 11:20, 20:12, 12:21, 21:0 };
+    const SEL = { 0:3, 3:4, 4:13, 13:5, 5:14, 14:6, 6:15, 15:9, 9:16, 16:7, 7:17, 17:10, 10:18, 18:8, 8:19, 19:11, 11:20, 20:12, 12:21, 21:3 }; // the rho: 0 enters one-way, toys retired
     m.shapeIx = SEL[m.shapeIx];
     return;
   }
@@ -490,23 +485,19 @@ const expectGrid = async (stepLabel) => {
   if (got.join('|') !== want.join('|'))
     throw new Error(`step-exact mismatch at ${stepLabel}:\n got ${got.join('|')}\nwant ${want.join('|')}`);
 };
-// the script (6 wide, CENTER spawn at col 2): 1x1 to col5; 2wide at 3-4,
-// then 1-2; the 2tall steered to col0 completes row 11 -> clears (its
-// top survives at row 10)
+// the script (6 wide, CENTER spawn at col 2, toys retired): walk the
+// rho to L, steer it to the wall (bottom 0-2, stem at (10,0)); walk to
+// J, one right (bottom 3-5, stem at (10,5)) — row 11 completes and the
+// two stems collapse down to 'O....O'
 const script = [
-  'Enter', 'ArrowDown', ...Array(3).fill('ArrowRight'), // home 2 -> col 5
-  ...Array(11).fill('ArrowDown'), // falls + the merged land+lock at (11,5)
-  'ArrowUp', // ring -> 2wide (pre-spawn)
-  'ArrowDown', // spawn
-  'ArrowRight', // pos 3 (bottom 3,4)
-  ...Array(11).fill('ArrowDown'),
-  'ArrowDown', // spawn (still 2wide)
-  'ArrowLeft', // pos 1 (bottom 1,2)
-  ...Array(11).fill('ArrowDown'),
-  'ArrowUp', // -> 2tall
-  'ArrowDown', // spawn at the center
-  'ArrowLeft', 'ArrowLeft', // steer to col0
-  ...Array(11).fill('ArrowDown'), // falls + merged lock -> row 11 full -> clear
+  ...Array(6).fill('ArrowUp'), // 0 -> 3 (the entry) -> 4 -> 13 -> 5 -> 14 -> 6 (L)
+  'Enter', 'ArrowDown', // spawn the L at the center
+  'ArrowLeft', 'ArrowLeft', // pos 0 (bottom 0-2)
+  ...Array(11).fill('ArrowDown'), // falls + merged lock: (11,0..2) + (10,0)
+  ...Array(4).fill('ArrowUp'), // 6 -> 15 -> 9 -> 16 -> 7 (J), pre-spawn
+  'ArrowDown', // spawn the J
+  'ArrowRight', // pos 3 (bottom 3-5, stem col 5)
+  ...Array(11).fill('ArrowDown'), // lock -> row 11 full -> clear + collapse
   'ArrowDown', // next spawn: the game continues after the clear
 ];
 for (let i = 0; i < script.length; i++) {
@@ -531,7 +522,7 @@ try {
   model.field = Array.from({ length: NR }, () => Array(NC).fill(false));
   model.piece = null; model.armed = false; model.shapeIx = 0;
   const dc = [
-    'ArrowUp', 'ArrowUp', 'ArrowUp', // -> O
+    'ArrowUp', // -> O (the rho's entry edge)
     'Enter', 'ArrowDown', 'ArrowLeft', 'ArrowLeft', // spawn at center, steer to 0-1
     ...Array(11).fill('ArrowDown'), // square 1 at 0-1
     'ArrowDown', // spawn 2: the center home IS pos 2 (bottom 2-3)

@@ -208,7 +208,7 @@ export default function LandingPage() {
             borderRadius: '8px',
             margin: '2rem auto',
             width: '1051px',
-            height: '735px',
+            height: '650px',
             boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
             position: 'relative',
             overflow: 'hidden'

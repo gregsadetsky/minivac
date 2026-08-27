@@ -156,8 +156,16 @@ export const TARGET_ROT: readonly number[] = (() => {
 // the pre-payment for rungs B1/B2/B3). The circuit implements a prefix
 // of this as its states land; while it does, the diff harness passes
 // the CIRCUIT's SELECTION_NEXT in as the compat knob.
+// THE TOYS RETIRED (2026-08-27, user call): the cycle is the 19
+// TETROMINO states — 0 (1x1), 1 (2 wide), 2 (2 tall) are out of the
+// chooser. the machine's map is RHO-shaped: state 0 stays the power-on
+// seed with a ONE-WAY entry edge 0 -> 3 (TARGET_SELECTION_ENTRY); the
+// wrap is 21 -> 3. the harness passes the circuit's own map into the
+// reference, so gameplay follows this automatically.
+export const TARGET_TOY_STATES: readonly number[] = [0, 1, 2];
+export const TARGET_SELECTION_ENTRY: readonly [number, number] = [0, 3];
 export const TARGET_SELECTION_CYCLE: readonly number[] = [
-  0, 1, 2, 3, 4, 13, 5, 14, 6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20, 12, 21,
+  3, 4, 13, 5, 14, 6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20, 12, 21,
 ];
 
 // legal register positions for a shape: every row's cells must fit
