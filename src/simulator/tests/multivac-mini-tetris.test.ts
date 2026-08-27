@@ -1731,11 +1731,14 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(topBank(), 'symmetric: the O never feeds the T bank').toBe(0);
 
     // compatibility: the operator slides still work (union semantics) —
-    // hardware and ring feed the same coil nets
+    // hardware and ring feed the same coil nets. the ring sits at O
+    // here (the 19-wrap), which holds WIDB up on its own: the slide ORs
+    // in and dropping it must NOT take the rail down (that is the union
+    // doing its job, not a stuck slide)
     g.m.setSlide(TETRIS_IO.wid.slide, 'right', TETRIS_IO.wid.machine);
     expect(rel(WIDM), 'a raised WID slide ORs with the ring').toBe(1);
     g.m.setSlide(TETRIS_IO.wid.slide, 'left', TETRIS_IO.wid.machine);
-    expect(rel(WIDM)).toBe(0);
+    expect(rel(WIDM), "the ring's O keeps the union up after the slide drops").toBe(1);
     expect(g.m.getState().alerts).toEqual([]);
   });
 
@@ -2133,11 +2136,14 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g.pressBtn(TETRIS_IO.up); // -> S, pre-spawn (home pos 1)
     expect(shapeAt6(g), 'chose the S before spawning').toBe(4);
     g.pressStart();
-    for (let t = 0; t <= 4; t++) g.tick(); // S at pos 1, token 4
-    expect(g.tokenAt()).toEqual([4]);
-    g.pressBtn(TETRIS_IO.up); // S -> S vert on a clear column
+    for (let t = 0; t <= 3; t++) g.tick(); // S at pos 1, token 3 — above the tower
+    expect(g.tokenAt()).toEqual([3]);
+    g.pressBtn(TETRIS_IO.up); // S -> S vert on clear rows (the S's own
+    // bottom would MERGE-LOCK on the tower at token 4: rotate first)
     expect(shapeAt6(g), 'stood the S up mid-fall').toBe(13);
-    g.tick(); // token 5, beside the tower
+    g.tick(); // token 4 — the narrow bottom (col 1) falls past the tower
+    g.tick(); // token 5, beside the tower: (tok, p+1) = (5,2) is stored
+    expect(g.tokenAt()).toEqual([5]);
     g.pressBtn(TETRIS_IO.up);
     expect(shapeAt6(g), 'lying flat onto the tower: refused').toBe(13);
     expect(g.posAt(), 'the register held through the refusal').toBe(1);
@@ -2613,12 +2619,10 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       const homeHot = [...Array(COLS6)].map((_, j) => (j === homeColumn(COLS6) ? '1' : '0')).join('');
       expect(poss2(), `one-hot register after the drop at ${p}`).toBe(homeHot);
     };
-    drop2(2, 0); // 2tall at 0
-    drop2(3, 1); // 2x2 at 1-2
-    drop2(3, 4); // 2x2 at 4-5
-    drop2(0, 3); // the 1x1 completes row 7
+    drop2(6, 0); // L at 0: bottom 0-2, stem at (6,0)
+    drop2(7, 3); // J at 3: bottom 3-5, stem at (6,5) — row 7 completes
     const row2 = (r: number) => [...Array(COLS6)].map((_, j) => rel2(L.CELL(r, j))).join('');
-    expect(row2(7), 'row 7 cleared and row 6 fell in').toBe('111011');
+    expect(row2(7), 'row 7 cleared and the two stems fell in').toBe('100001');
     expect(row2(6), 'row 6 emptied by the collapse').toBe('000000');
     expect(m2.getState().alerts).toEqual([]);
   });
@@ -2861,11 +2865,9 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     };
     // a STAGGERED piece, so the lock actually exercises phase 2's top
     // write — the very path ROW2 now sits in
-    press(2); // 2 wide
+    press(2); // the entry edge: boot -> O
     press(3); // left off the center home to pos 1 (S's minimum column)
-    press(2); // 2 tall
-    press(2); // 2x2 square
-    press(2); // S
+    press(2); // O -> S
     watch();
     m.pressButton(6, 1);
     m.releaseButton(6, 1);
@@ -3174,10 +3176,8 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       };
       for (const [row, v] of pre) write(row, v);
       if (v3) sim.setSlide((b.layout.V3M % 6) + 1, 'right', Math.floor(b.layout.V3M / 6));
-      for (let k = 0; k < 2; k++) {
-        sim.pressButton(2, b.btnMachine);
-        sim.releaseButton(2, b.btnMachine);
-      }
+      // toys-retire: the VMODE slide is the tall bit (2-tall left the chooser)
+      sim.setSlide((b.layout.VMODE % 6) + 1, 'right', Math.floor(b.layout.VMODE / 6));
       sim.pressButton(6, 1);
       sim.releaseButton(6, 1);
       for (let t = 0; t < 50; t++) {
