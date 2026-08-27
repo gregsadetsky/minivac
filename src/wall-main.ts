@@ -112,8 +112,7 @@ root.innerHTML = `
     #footer a{color:#9fc0dd;text-decoration:none} #footer a:hover{text-decoration:underline}
   </style>
   <div id="footer" style="position:fixed;left:0;right:0;bottom:0;background:rgba(10,12,15,.9);border-top:1px solid #2a2f38;padding:8px 16px;font:12px ui-monospace,monospace;color:#8fa0b5;text-align:center;user-select:none">
-    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-    · <a id="circuitlink" href="#">Read the Relay Circuit</a>
+    <a id="circuitlink" href="#">Read the Relay Circuit</a>
     · <a href="https://minivac.greg.technology/">Main Minivac Simulator Site</a>
     · <a href="https://github.com/gregsadetsky/minivac/" target="_blank" rel="noopener">GitHub</a>
     · <a href="mailto:hi@greg.technology">Contact</a>
@@ -627,11 +626,10 @@ function draw() {
   ctx.fillStyle = '#dfe7f2';
   ctx.textAlign = 'center';
   ctx.font = `900 ${Math.round(TITLE_H / 2.4)}px ui-monospace, monospace`;
-  ctx.fillText('Relay Tetris', WORLD_W / 2, -TITLE_H * 0.42);
+  ctx.fillText('Relay Tetris', WORLD_W / 2, -TITLE_H * 0.29);
   ctx.font = `700 ${Math.round(TITLE_H / 10)}px ui-monospace, monospace`;
   ctx.fillStyle = '#9fb2c8';
-  ctx.fillText(`implemented using ${L.relays} relays on ${N_MACHINES} simulated Minivac 601s,`, WORLD_W / 2, -TITLE_H * 0.22);
-  // ctx.fillText('a relay computer kit from 1961', WORLD_W / 2, -TITLE_H * 0.09);
+  ctx.fillText(`implemented using ${L.relays} relays on ${N_MACHINES} simulated Minivac 601s`, WORLD_W / 2, -TITLE_H * 0.09);
   ctx.textAlign = 'start';
   for (let m = 0; m < N_MACHINES; m++) {
     const { x, y } = panelXY(m);
