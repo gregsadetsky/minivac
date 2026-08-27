@@ -105,27 +105,27 @@ root.innerHTML = `
   <div id="card" style="position:fixed;top:14px;right:14px;background:rgba(10,12,15,.92);border:1px solid #2a2f38;border-radius:10px;padding:14px;user-select:none">
     <div style="position:relative">
       <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},30px);gap:3px"></div>
-      <div id="pressenter" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;font:800 26px/1.3 ui-monospace,monospace;color:#7fd4ff;text-shadow:0 0 8px rgba(127,212,255,.35),0 2px 4px #000;animation:pe 1.2s ease-in-out infinite">PRESS<br>ENTER</div>
+      <div id="pressenter" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;font:700 26px/1.3 'Courier Prime',Courier,monospace;color:#7fd4ff;text-shadow:0 0 8px rgba(127,212,255,.35),0 2px 4px #000;animation:pe 1.2s ease-in-out infinite">PRESS<br>ENTER</div>
     </div>
   </div>
   <style>@keyframes pe{0%,100%{opacity:1}50%{opacity:.4}}
     #footer a{color:#9fc0dd;text-decoration:none} #footer a:hover{text-decoration:underline}
   </style>
-  <div id="footer" style="position:fixed;left:0;right:0;bottom:0;background:rgba(10,12,15,.9);border-top:1px solid #2a2f38;padding:8px 16px;font:12px ui-monospace,monospace;color:#8fa0b5;text-align:center;user-select:none">
+  <div id="footer" style="position:fixed;left:0;right:0;bottom:0;background:rgba(10,12,15,.9);border-top:1px solid #2a2f38;padding:8px 16px;font:13px 'Courier Prime',Courier,monospace;color:#8fa0b5;text-align:center;user-select:none">
     <a id="circuitlink" href="#">Read the Relay Circuit</a>
     · <a href="https://minivac.greg.technology/">Main Minivac Simulator Site</a>
     · <a href="https://github.com/gregsadetsky/minivac/" target="_blank" rel="noopener">GitHub</a>
     · <a href="mailto:hi@greg.technology">Contact</a>
   </div>
   <div id="circuitmodal" style="display:none;position:fixed;inset:0;background:rgba(4,6,9,.78);z-index:20;align-items:center;justify-content:center">
-    <div style="position:relative;width:min(760px,92vw);height:min(80vh,900px);background:#101318;border:1px solid #2a2f38;border-radius:14px;padding:22px;color:#c9d4e3;font:13px ui-monospace,monospace;display:flex;flex-direction:column">
+    <div style="position:relative;width:min(760px,92vw);height:min(80vh,900px);background:#101318;border:1px solid #2a2f38;border-radius:14px;padding:22px;color:#c9d4e3;font:13px 'Courier Prime',Courier,monospace;display:flex;flex-direction:column">
       <div id="circuitclose" style="position:absolute;top:10px;right:16px;font-size:22px;color:#8fa0b5;cursor:pointer">×</div>
       <div style="font-weight:800;color:#e8edf4;margin-bottom:10px">The relay circuit</div>
       <div id="circuittext" style="flex:1;overflow:auto;white-space:pre;background:#0a0c0f;border-radius:8px;padding:12px;line-height:1.4"></div>
     </div>
   </div>
   <div id="modal" style="position:fixed;inset:0;background:rgba(4,6,9,.72);display:flex;align-items:center;justify-content:center;z-index:10">
-    <div style="max-width:560px;margin:20px;background:#101318;border:1px solid #2a2f38;padding:28px 30px;color:#c9d4e3;font:15px/1.55 ui-monospace,monospace">
+    <div style="max-width:560px;margin:20px;background:#101318;border:1px solid #2a2f38;padding:28px 30px;color:#c9d4e3;font:15px/1.6 'Courier Prime',Courier,monospace">
       <div style="font-size:26px;font-weight:800;color:#e8edf4;margin-bottom:10px">Relay Tetris</div>
       <p style="margin:0 0 12px">If you had ~$230k in today's dollars but in 1961, and decided to spend it all on buying 248 Minivac 601s, a relay computer from back then that Claude Shannon created, and also if you invented Tetris 25 years before it was actually invented, you could have made Tetris from relays!</p>
       <p style="margin:0 0 12px">Since we're not in 1961, and as 248 Minivacs are hard to come about, I made an online simulator of what that would be. Gameplay is painful, but it's not not Tetris. And yes, all of the relays are electrically simulated. There's no "code" to speak of. There's a link to the circuit in the footer. It's crazy. Also, fun fact, consider that the New York City subway is mostly controlled by relays...!!</p>
@@ -625,9 +625,9 @@ function draw() {
   // the giant line above all the minivacs (user copy), real counts
   ctx.fillStyle = '#dfe7f2';
   ctx.textAlign = 'center';
-  ctx.font = `900 ${Math.round(TITLE_H / 2.4)}px ui-monospace, monospace`;
+  ctx.font = `700 ${Math.round(TITLE_H / 2.4)}px Oswald, 'Arial Narrow', sans-serif`;
   ctx.fillText('Relay Tetris', WORLD_W / 2, -TITLE_H * 0.29);
-  ctx.font = `700 ${Math.round(TITLE_H / 10)}px ui-monospace, monospace`;
+  ctx.font = `700 ${Math.round(TITLE_H / 10)}px 'Courier Prime', Courier, monospace`;
   ctx.fillStyle = '#9fb2c8';
   ctx.fillText(`implemented using ${L.relays} relays on ${N_MACHINES} simulated Minivac 601s`, WORLD_W / 2, -TITLE_H * 0.09);
   ctx.textAlign = 'start';
@@ -765,7 +765,7 @@ function paintWell() {
   // the next piece, a grey 'NEW PIECE SOON'; when the machine is
   // genuinely waiting on the player (no piece, gravity off), the cyan
   // 'PRESS ENTER'. hidden under the load modal and after game over.
-  if (!modalOpen && !snap.gameOver && snap.dealing) {
+  if (!modalOpen && !snap.gameOver && (snap.dealing || (snap.tok < 0 && snap.autoOn))) {
     pressEnterEl.innerHTML = 'NEW<br>PIECE<br>SOON';
     pressEnterEl.style.color = '#9aa3ad';
     pressEnterEl.style.textShadow = '0 2px 4px #000';
@@ -815,3 +815,5 @@ fitAll();
 renderWireLayer();
 draw();
 requestAnimationFrame(frame);
+// the canvas draws before webfonts arrive: repaint the title when they do
+document.fonts?.ready.then(() => { needsPaint = true; });
