@@ -2142,37 +2142,52 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // bottom would MERGE-LOCK on the tower at token 4: rotate first)
     expect(shapeAt6(g), 'stood the S up mid-fall').toBe(13);
     g.tick(); // token 4 — the narrow bottom (col 1) falls past the tower
-    g.tick(); // token 5, beside the tower: (tok, p+1) = (5,2) is stored
+    // (5,2) pins this piece COMPLETELY (probed): the descent's two-wide
+    // MID row enters it, so ARRIVING at token 5 is already the merged
+    // rest — there is no mid-fall moment beside the tower at all, and
+    // UP/steps there are refused by the lock FREEZE, not the trees. the
+    // reachable occupancy-refusal receipts live in the second probe
+    // below and in multivac-vertical-pieces. here the receipt is the
+    // REST itself: the lock writes around the tower, nothing disturbed.
+    g.tick(); // token 5 = the merged rest on the tower cell
     expect(g.tokenAt()).toEqual([5]);
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt6(g), 'lying flat onto the tower: refused').toBe(13);
-    expect(g.posAt(), 'the register held through the refusal').toBe(1);
-    g.tick(); // token 6: the row beside is clear now
-    g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt6(g), 'a row later the same UP conducts').toBe(4);
+    expect(shapeAt6(g), 'mid-lock the shape is frozen').toBe(13);
+    g.tick(); // phase 2
+    g.tick(); // phase 3
+    g.tick(); // reset (STOP here: one more tick would spawn the next piece)
+    expect(g.row(5), 'bottom beside the tower').toBe(0b0110);
+    expect(g.row(4), 'the mid pair above').toBe(0b0110);
+    expect(g.row(3), 'the top single').toBe(0b0100);
     expect(g.m.getState().alerts).toEqual([]);
 
-    // S -> S vert UNDER an overhang: growing the third row needs
-    // (tok-2, p+1); an overhang exactly two above refuses, and one
-    // column over the same turn conducts
+    // S vert -> S with an overhang at the TOP delta (tok-1, p-1): col 0
+    // is the one column the narrow fall never sweeps, so this refusal
+    // IS reachable — and 'a row later' exists, because the overhang
+    // never stops the descent. (the S -> S vert direction has NO
+    // reachable refusal at all: every delta cell sits inside the S's
+    // own footprint — the L-family note's unreachable class, probed.)
     g = makeGame();
-    g.operatorWrite(3, 0b0100); // the overhang cell at (3,2)
+    g.operatorWrite(4, 0b0001); // the overhang cell at (4,0)
     g.pressBtn(TETRIS_IO.up); // -> O
     g.pressBtn(TETRIS_IO.up); // -> S at the home pos 1
     g.pressStart();
-    for (let t = 0; t <= 5; t++) g.tick(); // token 5, under the overhang
+    for (let t = 0; t <= 3; t++) g.tick(); // token 3, above the overhang
+    expect(g.tokenAt()).toEqual([3]);
+    g.pressBtn(TETRIS_IO.up); // stand it up on clear rows
+    expect(shapeAt6(g)).toBe(13);
+    g.tick();
+    g.tick(); // token 5: lying flat would take (4,0) — the overhang
     expect(g.tokenAt()).toEqual([5]);
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt6(g), 'growing tall under the overhang: refused').toBe(4);
-    g.pressBtn(TETRIS_IO.right); // step out from under it
-    expect(g.posAt()).toBe(2);
+    expect(shapeAt6(g), 'lying flat under the overhang: refused').toBe(13);
+    g.tick(); // token 6: the top delta cleared the overhang row
     g.pressBtn(TETRIS_IO.up);
-    expect(shapeAt6(g), 'out from under it the UP conducts').toBe(13);
-    for (let t = 0; t < 6; t++) g.tick(); // rest + the four-tick lock + reset
-    expect(g.row(7), 'S vert bottom').toBe(0b0100);
-    expect(g.row(6), 'S vert mid').toBe(0b1100);
-    expect(g.row(5), 'S vert top').toBe(0b1000);
-    expect(g.row(3), 'the overhang kept').toBe(0b0100);
+    expect(shapeAt6(g), 'a row later the same UP conducts').toBe(4);
+    for (let t = 0; t < 4; t++) g.tick(); // rest at the floor + lock + reset
+    expect(g.row(7), 'S bottom').toBe(0b0110);
+    expect(g.row(6), 'S top, shifted left').toBe(0b0011);
+    expect(g.row(4), 'the overhang kept').toBe(0b0001);
     expect(g.m.getState().alerts).toEqual([]);
 
     // the chooser-only edges (2tall->O, O->S, S->Z) can no longer be
@@ -2198,7 +2213,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(5, 0b0001); // the stack at (5,0)
     // the CENTER home pos 1 carries the chooser past S
-    for (let k = 0; k < 10; k++) g.pressBtn(TETRIS_IO.up); // L2, pre-spawn
+    for (let k = 0; k < 8; k++) g.pressBtn(TETRIS_IO.up); // L2, pre-spawn (8 since the rho)
     expect(shapeAt6(g), 'chose the L flip before spawning').toBe(9);
     g.pressBtn(TETRIS_IO.left); // back to pos 0
     g.pressStart();
@@ -2211,7 +2226,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
 
     // the same turn, same columns, on a clear field: it conducts
     g = makeGame();
-    for (let k = 0; k < 10; k++) g.pressBtn(TETRIS_IO.up); // L2 (home transits the verticals too)
+    for (let k = 0; k < 8; k++) g.pressBtn(TETRIS_IO.up); // L2 (home transits the verticals too)
     g.pressBtn(TETRIS_IO.left); // pos 0
     g.pressStart();
     for (let t = 0; t <= 3; t++) g.tick(); // still falling, nothing stored
