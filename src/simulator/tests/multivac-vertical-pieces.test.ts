@@ -461,7 +461,7 @@ describe('B3: the vertical I — the last state', () => {
     const g = rig();
     g.start();
     // operator-fill rows 4..7 at columns {0,1,3} — column 2 stays open
-    const addr: Array<[string, string, string]> = [
+    const addr: Array<['left' | 'right', 'left' | 'right', 'left' | 'right']> = [
       ['left', 'left', 'right'], // row 4
       ['right', 'left', 'right'], // row 5
       ['left', 'right', 'right'], // row 6
@@ -503,7 +503,7 @@ describe('B3: the vertical I — the last state', () => {
     // clip the fourth write exactly like TOPW2's row-1 clip.
     const g = rig();
     g.start();
-    const addr: Array<[string, string, string]> = [
+    const addr: Array<['left' | 'right', 'left' | 'right', 'left' | 'right']> = [
       ['left', 'left', 'right'], // row 4
       ['right', 'left', 'right'], // row 5
       ['left', 'right', 'right'], // row 6

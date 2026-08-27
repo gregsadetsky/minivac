@@ -1721,8 +1721,15 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     expect(rails(), 'I: wide, not tall, not staggered').toEqual([1, 0, 0]);
     expect(botBank(), 'I bottom: four columns from p').toBe(0b1111);
     expect(topBank(), 'a flat piece never feeds the T bank').toBe(0);
-    up(); // I -> 1x1: the wrap (the I's bottom already covers col p, so
-    // this edge carries no delta check at all — the one the T2 wrap had)
+    // B3: the I steps into the I VERT before the wrap — the last state.
+    // one column at p+2 through all four rows: WID3 tap alone, base
+    // cut, tall/staggered rails up, the T and T2 fans both at p+2.
+    up(); // I -> I vert
+    expect(shapeAt(), 'the I stands up').toBe(21);
+    expect(rails(), 'I vert: not wide-tapped, tall, staggered').toEqual([0, 1, 1]);
+    expect(botBank(), 'I vert bottom: the offset single at p+2').toBe(0b0100);
+    expect(topBank(), 'I vert mid at p+2').toBe(0b0100);
+    up(); // I vert -> 1x1: the 22-wrap (uncovers (tok, p) — checked)
     expect(shapeAt()).toBe(0);
     expect(rails()).toEqual([0, 0, 0]);
     expect(topBank()).toBe(0);
@@ -2276,8 +2283,8 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       stepChooser();
       cycle.push(shapeAt());
     }
-    expect(cycle, 'the pre-spawn chooser cycles all twenty-one (the rotation cycles concatenated)').toEqual([
-      1, 2, 3, 4, 13, 5, 14, 6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20, 12, 0,
+    expect(cycle, 'the pre-spawn chooser cycles all twenty-two (the rotation cycles concatenated)').toEqual([
+      1, 2, 3, 4, 13, 5, 14, 6, 15, 9, 16, 7, 17, 10, 18, 8, 19, 11, 20, 12, 21, 0,
     ]);
 
     // MID-FALL the same button rotates: L1 <-> L2, both directions
@@ -2626,7 +2633,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
   // class the geometry-derived unions produce on their own. Its rotation
   // partner is the VERTICAL I, which wants a four-row write engine, so
   // until that exists the I is a singleton and UP refuses it mid-fall.
-  it('the horizontal I: four wide, its own bound, a rotation singleton (fast)', { timeout: 1800000 }, () => {
+  it('the horizontal I: four wide, its own bound, and the beam stands up (fast)', { timeout: 1800000 }, () => {
     setSolverEngine('fast');
     const COLS = 6;
     const { wires, layout: L, btnMachine } = tetrisCircuit(12, COLS);
@@ -2695,12 +2702,18 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     press(4);
     expect(pos(), 'RIGHT refused at max = cols - 4').toBe(2);
 
-    // rotation: no partner state, so no branch, so no clock (the same
-    // refusal the square gives, arrived at the same way)
+    // rotation (B3 flipped this receipt): the I has its partner now —
+    // mid-fall UP stands the beam up at p+2 and a second UP lays it
+    // back down, at SIX columns (the wide-geometry pass of the last
+    // rotation edge; the 4-col pass lives in the vertical battery)
     tick();
-    const before = shape();
     press(2);
-    expect(shape(), 'mid-fall UP refuses: the I is a rotation singleton').toBe(before);
+    expect(shape(), 'the I stands up (B3)').toBe(21);
+    expect(bmask(), 'the beam: one column at p+2').toBe('000010');
+    expect(tmask(), 'and its mid rides the T fan').toBe('000010');
+    press(2);
+    expect(shape(), 'and lies back down').toBe(12);
+    expect(bmask()).toBe('001111');
 
     let t = 0;
     while (tok() >= 0 && t++ < 40) tick();

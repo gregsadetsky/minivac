@@ -19,6 +19,7 @@ export default defineConfig({
         simulator: resolve(__dirname, 'simulator.html'),
         tetris: resolve(__dirname, 'tetris.html'),
         relays: resolve(__dirname, 'relays.html'),
+        wall: resolve(__dirname, 'wall.html'),
       },
     },
   },

@@ -694,6 +694,10 @@ export interface TetrisLayout {
   ROW3Y: number; ROW3Z: number;
   /** the fourth collapse seed: t = 4..rows-1 */
   SEEDM3: (t: number) => number;
+  /** into-21's gated delta reads (master-21-gated — zero standing load;
+   *  the measured 3.51A bill) and their gate mirrors */
+  UPG21M: (k: number) => number; UPG21M_CAP: number;
+  UPG21R: (k: number) => number; UPG21R_CAP: number;
   SCR: (i: number, part: number) => number; SCBOOT: number;
   PIECET: (j: number) => number; CUTC5: number; CUTC6: number; STAGM: number; CUTB1: number; CUTB2: number; CUTB3: number; CUTB4: number; CUTBD: number;
   LEGB: (j: number) => number; STAGM2: number;
@@ -976,6 +980,14 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   const topw3Base = take(Math.max(0, rows - 3)); // TOPW3(r), r = 3..rows-1
   const quadBase = take(8); // LINEDLY4, CPSET4, CLEARP4, RSTM4, CLEARPM4, CLEARPM4B, ROW3Y, ROW3Z
   const seedm3Base = take(Math.max(0, rows - 4)); // SEEDM3(t), t = 4..rows-1
+  // into-21's delta reads are GATED singletons, not bank reads — THE
+  // MEASURED BILL: plain rail-copy coils are energized whenever their
+  // rail is hot, and the two new col-(p+2) reads pushed the stored
+  // column's machine from 3.414A (the B2 ceiling on the diff's scripted
+  // T lock — 86mA under the alarm) to 3.506A. gated on master 21 (up
+  // only while the ring sits at the I) they carry ZERO standing load.
+  const upg21mBase = take(Math.max(0, cols - 3)); // gate mirrors (MMIR7's net)
+  const upg21rBase = take(2 * Math.max(0, cols - 3)); // the gated read coils
   return {
     rows,
     cols,
@@ -1105,6 +1117,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
     RSTM4: quadBase + 3, CLEARPM4: quadBase + 4, CLEARPM4B: quadBase + 5,
     ROW3Y: quadBase + 6, ROW3Z: quadBase + 7,
     SEEDM3: t => seedm3Base + (t - 4),
+    UPG21M: k => upg21mBase + k, UPG21M_CAP: Math.max(0, cols - 3),
+    UPG21R: k => upg21rBase + k, UPG21R_CAP: 2 * Math.max(0, cols - 3),
     MIRBX: (r, k) => mirbXBase + mirbExtra * r + k, MIRBX_CAP: mirbExtra * (rows - 1),
     MIRCX: (r, k) => mircXBase + mirbExtra * r + k, MIRCX_CAP: mirbExtra * (rows - 1),
     MIRCTX: (r, k) => mirctXBase + mirbExtra * (r - 1) + k, MIRCTX_CAP: mirbExtra * (rows - 2),
@@ -1259,6 +1273,8 @@ export function tetrisLayout(rows: number, cols = 4): TetrisLayout {
   for (let r = 3; r <= 7; r++) claim('TOPW3', L8.TOPW3(r));
   claim('quad clear', L8.LINEDLY4, L8.CPSET4, L8.CLEARP4, L8.RSTM4, L8.CLEARPM4, L8.CLEARPM4B, L8.ROW3Y, L8.ROW3Z);
   for (let t = 4; t <= 7; t++) claim('SEEDM3', L8.SEEDM3(t));
+  for (let k = 0; k < L8.UPG21M_CAP; k++) claim('UPG21M', L8.UPG21M(k));
+  for (let k = 0; k < L8.UPG21R_CAP; k++) claim('UPG21R', L8.UPG21R(k));
   for (let k = 0; k < L8.MIRBX_CAP; k++) claim('MIRBX', L8.MIRBX(0, 0) + k);
   for (let k = 0; k < L8.MIRCX_CAP; k++) claim('MIRCX', L8.MIRCX(0, 0) + k);
   for (let k = 0; k < L8.MIRCTX_CAP; k++) claim('MIRCTX', L8.MIRCTX(1, 0) + k);
@@ -3085,6 +3101,34 @@ export function tetrisCircuit(rows = 8, cols = 4): {
     const topBank = Array.from({ length: cols }, (_, c) => mkReads('top', c, upC.topRelays[c]));
     // B2-0: the third row's delta reads (the tok-2 rails)
     const top2Bank = Array.from({ length: cols }, (_, c) => mkReads('top2', c, upC.top2Relays[c]));
+    // B3, THE MEASURED BILL: bank reads are PLAIN rail copies, energized
+    // whenever their rail is hot — and into-21's two new reads sit on
+    // the stored column's rails, whose current all comes from ONE
+    // machine (a column's cells share a supply). on the diff's scripted
+    // T lock that machine measured 3.414A at B2 (86mA under the alarm)
+    // and 3.506A with the two plain coils — so into-21's reads are
+    // GATED on master 21 instead (up only while the ring sits at the I,
+    // long-settled before any UP conducts): zero standing load, same
+    // refusal. gate sets: MMIR7's free second set, then UPG21M mirrors
+    // on MMIR7's own coil net. the banks above simply never mint the
+    // ghost relays (upResourceCounts still counts them — capacity
+    // slack, not load).
+    let upg21Gate = 0;
+    let upg21Read = 0;
+    const upg21GateSet = () => {
+      const n = upg21Gate++;
+      if (n === 0) return { relay: MMIR7, arm: 'L', no: 'K' };
+      const k = Math.floor((n - 1) / 2);
+      if (k >= L.UPG21M_CAP) throw new Error('UPG21M gate mirrors exhausted');
+      if ((n - 1) % 2 === 0) {
+        w.push(
+          `${k === 0 ? R(MMIR7, 'E') : R(L.UPG21M(k - 1), 'E')}/${R(L.UPG21M(k), 'E')}`,
+          `${R(L.UPG21M(k), 'F')}/${minusOf(L.UPG21M(k))}`
+        );
+        return { relay: L.UPG21M(k), arm: 'H', no: 'G' };
+      }
+      return { relay: L.UPG21M(k), arm: 'L', no: 'K' };
+    };
     const ends: string[] = [];
     for (let t = 0; t < NSTATES; t++) {
       // MMIR(t) mirrors MASTER t, which is up while the ring sits at
@@ -3126,6 +3170,20 @@ export function tetrisCircuit(rows = 8, cols = 4): {
         }
         let cur = R(pc.relay, pc.no);
         for (const d of deltas) {
+          if (t === 21) {
+            // gated singleton reads (see the bill above); the I-vert's
+            // deltas are top/top2 only — its bottom is covered by the
+            // horizontal I's span
+            if (d.kind === 'bot') throw new Error('into-21 grew a bottom delta — recount the bill');
+            if (upg21Read >= L.UPG21R_CAP) throw new Error('UPG21R read relays exhausted');
+            const rr = L.UPG21R(upg21Read++);
+            const gs = upg21GateSet();
+            w.push(`${(d.kind === 'top' ? legTTap : legT2Tap)(d.col)}/${R(gs.relay, gs.arm)}`);
+            w.push(`${R(gs.relay, gs.no)}/${R(rr, 'E')}`, `${R(rr, 'F')}/${minusOf(rr)}`);
+            w.push(`${cur}/${R(rr, 'H')}`);
+            cur = R(rr, 'J');
+            continue;
+          }
           const rb = (d.kind === 'bot' ? botBank : d.kind === 'top' ? topBank : top2Bank)[d.col] as MirrorBank;
           const rc = rb.request('gate');
           w.push(`${cur}/${R(rc.relay, rc.arm)}`);
