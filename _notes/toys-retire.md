@@ -78,3 +78,52 @@ the first UP leaves 0 for 3 and the ring can never come back.
    name the supply audits to re-run.
 5. the boot UX: from 0 the FIRST spin press enters at 3 — confirm the
    chooser clamp math never strands the register (range(3) at 4/6/10).
+
+## REVIEW VERDICT (clean-context adversarial review #5, 2026-08-27)
+
+NO-GO as drafted; GO with three free fixes. the full report is worth
+keeping verbatim in the reviewer's transcript; the operative parts:
+
+1. **D3 REFUTED THE DIRECT 0-FEED — the rung's real flaw.** "no token
+   can exist with the ring at 0" is false by the ledger's own boot
+   bullet: SPAWN gates on GAMEOVER only, so boot -> START -> tick
+   drops a 1x1 with the ring at 0 and NOTOK down. an unmuxed
+   slave0.K -> com3 feed would energize master 3 MID-FALL, and the
+   read-free into-3 branch would step the ring 0 -> 3: the falling
+   1x1 morphs into an O with zero occupancy checks (the buried-cell
+   class). the seeded random diff game is the mechanical detector —
+   it stays UNMODIFIED. fix: the 0-feed rides a takeNot() mux like
+   every other edge, NC unwired. 8/12 mux sets (7 rho + entry; the
+   old i=0 and i=1 muxes die). with the mux, no-reads is safe: both
+   feeds NOTOK-gated, master 3 only up pre-spawn, dark rails.
+2. **the unledgered MANDATORY wire:** slave 0's set2 ARM is fed today
+   by clock 1's J — the into-1 D wire the plan deletes. left unfed,
+   the first UP refuses forever (the machine wedges at state 0).
+   feed it from clock 3's J second hole (its first goes to
+   slave21.L); clocks 1 and 3 share segment 0 and rise together.
+3. master 12's com is 4/4 by a SWAP (the dead i=0 mux NC leaves, the
+   i=3 mux NC arrives) — both must land in one wiring session.
+4. into-3's span = range(3) WHOLE (not range(21) n range(3) — at 4
+   cols that loses p=2 and refuses a legal O entry); the carve-out
+   must be ONE shared spec consumed by both the emitter and
+   upResourceCounts.
+5. missed consumers: wall-worker (third dealer: SELECTION walk +
+   revolution count), verify-relays-page's hard 22-count,
+   verify-tetris-page's SECOND site (the hardcoded SEL table at :433,
+   besides the chooser-phase presses), tetris-reference.test's
+   prevOf/%22 loop (crashes on undefined) + the same t=3 carve-out.
+6. pools shrink 12 relays at 4 cols / 19 at 6 (UPPOS+UPREAD 72->60 /
+   142->123): the re-host class in the SHRINK direction — audits +
+   the manual column-2 supply probe (the 3.414A ceiling) re-measure
+   by hand; the clock segment arm loads too. STPMIR does NOT shrink
+   (frozen formulas; the toys' step trees stay wired-but-dark).
+7. minors: SELECTION_NEXT must THROW on 1/2 or the "loud" claim is
+   false; the emitter must skip t in {0,1,2} EXPLICITLY (ROT_PRED[1]
+   and [2] survive, so an undefined-based skip would emit dead
+   branches and blow the shrunken pools); "the 1<->2 mux dies" was
+   mislabeled — 1->2 is a direct shared wire; the muxes that die are
+   i=0's and i=1's.
+CONFIRMED elsewhere: the 4-wire com budget on master 3, one-hot feed
+legality with all backfeeds walked, LKM2/SHBOOT non-interaction,
+power-cycle identity, the dead clocks/masters (coil current only),
+the clamp math at 4/6/10, the pool arithmetic.
