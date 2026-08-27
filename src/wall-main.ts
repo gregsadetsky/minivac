@@ -8,27 +8,24 @@
  * panel's look: near-black face, teal frame and stripes, silver relay
  * covers with MOVING armatures, amber lights) on one pannable,
  * zoomable canvas — with the REAL netlist's wires drawn jack-to-jack
- * and colored by their LIVE current (sim.getWireCurrents). Fully
- * react-less per the UI perf invariants: one canvas, no per-frame
- * state, repaints only when the sim changed / a camera gesture is
- * active / an armature is mid-flip. The game itself is the tetris
- * machine on autoplay (the free-run dealer + gravity), with the same
- * keyboard controls as /tetris/; the well renders in a corner card.
+ * and colored by their LIVE current. React-less per the UI perf
+ * invariants: one canvas, repaints only when state arrived / a
+ * gesture is active / an armature is mid-flip.
+ *
+ * THE SIM LIVES IN A WORKER (wall-worker.ts). The user's trace
+ * receipt: the sparse solver owned 24.5s of a 26s main-thread trace
+ * (dc + rowMaxAbs; draw() was 0.04s) — the spin dealer solves the
+ * 176-machine circuit continuously and navigation starved behind
+ * 3-second timer bursts. This thread now only draws and forwards
+ * keys; the netlist is rebuilt here (pure generation, no sim) for the
+ * wire/panel geometry.
  *
  * LOD by zoom: far = panel tiles + relay dots; mid = full panel
  * chrome, armatures animating; near = jack field + the wires, current
  * lighting them up. The v1 exists to be LOOKED AT and redirected —
- * layout/mobile decisions are deliberately unfinished (the user's
- * call to make with the thing on screen).
+ * layout/mobile decisions are deliberately the user's.
  */
-import { MinivacSimulator } from './simulator/minivac-simulator';
-import {
-  tetrisCircuit,
-  SHAPES,
-  SELECTION_NEXT,
-  shapeRange,
-  ringPart,
-} from './circuits/multivac-mini-tetris';
+import { tetrisCircuit, SHAPES } from './circuits/multivac-mini-tetris';
 
 const ROWS = 8;
 const COLS = 4;
@@ -37,13 +34,41 @@ const L = built.layout;
 const wires = built.wires;
 const N_MACHINES = L.machines;
 
+// ---- the worker (the engine room) --------------------------------------
+interface Snapshot {
+  relays: Uint8Array;
+  lights: Uint8Array;
+  buttons: Uint8Array;
+  cells: Uint8Array;
+  tok: number;
+  shapeIx: number;
+  pos: number;
+  dealing: boolean;
+  gameOver: boolean;
+  status?: string;
+  wireCur: Float32Array;
+}
+let snap: Snapshot | null = null;
+const worker = new Worker(new URL('./wall-worker.ts', import.meta.url), { type: 'module' });
+worker.onmessage = (e: MessageEvent) => {
+  const d = e.data as { type: string } & Snapshot;
+  if (d.type !== 'state') return;
+  snap = d;
+  for (let m = 0; m < N_MACHINES; m++) {
+    const r = d.relays[m];
+    for (let i = 0; i < 6; i++) armTarget[m * 6 + i] = (r >> i) & 1;
+  }
+  paintWell();
+  needsPaint = true;
+};
+
 // ---- DOM scaffold ----------------------------------------------------
 const root = document.getElementById('root')!;
 root.innerHTML = `
   <canvas id="wall" style="position:fixed;inset:0;width:100vw;height:100vh;display:block;cursor:grab;touch-action:none"></canvas>
   <div id="card" style="position:fixed;top:12px;right:12px;background:rgba(10,12,15,.88);border:1px solid #2a2f38;border-radius:8px;padding:10px;font:12px ui-monospace,monospace;color:#c9d4e3;user-select:none">
     <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},16px);gap:2px;margin-bottom:8px"></div>
-    <div id="status" style="max-width:${COLS * 18 + 60}px;line-height:1.35">building…</div>
+    <div id="status" style="max-width:${COLS * 18 + 60}px;line-height:1.35">wiring ${N_MACHINES} machines…</div>
     <div style="margin-top:6px;color:#5f6b7a">arrows steer/rotate · ↓ tick/take · enter serve<br>a gravity · drag pan · wheel zoom · f fit</div>
   </div>
   <div id="hud" style="position:fixed;left:12px;bottom:10px;font:11px ui-monospace,monospace;color:#5f6b7a;user-select:none"></div>
@@ -75,7 +100,6 @@ const panelXY = (m: number) => ({
   y: Math.floor(m / GRID_COLS) * (PH + GAP),
 });
 const secCX = (sec: number) => 40 + (sec - 1) * 92 + 30; // section center x, 1-based
-// per-section jack template (local coords)
 function jackLocal(sec: number, jack: string): [number, number] | null {
   const cx = secCX(sec);
   switch (jack) {
@@ -100,12 +124,13 @@ function jackLocal(sec: number, jack: string): [number, number] | null {
 }
 const matrixLocal = (which: 'M10' | 'M11', slot: number): [number, number] => [
   (which === 'M10' ? PW * 0.28 : PW * 0.72) + ((slot % 6) - 2.5) * 16,
-  308 + Math.floor(slot / 6) * 0, // one row strip
+  308,
 ];
 
 // ---- wires: parse the netlist once ------------------------------------
 interface Seg { x1: number; y1: number; x2: number; y2: number; }
 const segs: Seg[] = [];
+const wireIndex: number[] = [];
 const matrixSlots = new Map<string, number>();
 function endpointPos(tok: string): [number, number] | null {
   let m = 0;
@@ -126,18 +151,19 @@ function endpointPos(tok: string): [number, number] | null {
   return loc ? [x + loc[0], y + loc[1]] : null;
 }
 let unparsed = 0;
-for (const wire of wires) {
-  const [a, b] = wire.split('/');
+for (let i = 0; i < wires.length; i++) {
+  const [a, b] = wires[i].split('/');
   const pa = endpointPos(a);
   const pb = endpointPos(b);
   if (!pa || !pb) { unparsed++; continue; }
   segs.push({ x1: pa[0], y1: pa[1], x2: pb[0], y2: pb[1] });
+  wireIndex.push(i);
 }
 
 // ---- camera ------------------------------------------------------------
 const WORLD_W = GRID_COLS * (PW + GAP);
 const WORLD_H = GRID_ROWS * (PH + GAP);
-const cam = { x: 0, y: 0, s: 0.1 }; // world -> screen: (wx - x) * s
+const cam = { x: 0, y: 0, s: 0.1 };
 let needsPaint = true;
 function fitAll() {
   const sw = canvas.clientWidth, sh = canvas.clientHeight;
@@ -155,7 +181,6 @@ function resize() {
 }
 window.addEventListener('resize', () => { resize(); });
 
-// pan/zoom: pointer drag + wheel (pinch = 2 pointers)
 const pointers = new Map<number, { x: number; y: number }>();
 let pinchD = 0;
 canvas.addEventListener('pointerdown', (e) => {
@@ -212,21 +237,9 @@ canvas.addEventListener('wheel', (e) => {
   get: () => ({ ...cam, worldW: WORLD_W, worldH: WORLD_H }),
 };
 
-// ---- live state --------------------------------------------------------
-let sim!: MinivacSimulator;
-const armDisp = new Float32Array(N_MACHINES * 6); // eased armature 0..1
+// ---- armature animation state ------------------------------------------
+const armDisp = new Float32Array(N_MACHINES * 6);
 const armTarget = new Uint8Array(N_MACHINES * 6);
-let wireCur: Float32Array | null = null;
-let solvedOnce = false;
-function pullState() {
-  for (let m = 0; m < N_MACHINES; m++) {
-    const st = sim.getMachineState(m);
-    for (let i = 0; i < 6; i++) armTarget[m * 6 + i] = st.relays[i] ? 1 : 0;
-  }
-  wireCur = sim.getWireCurrents(wireCur ?? undefined);
-  solvedOnce = true;
-  needsPaint = true;
-}
 
 // ---- drawing -----------------------------------------------------------
 const TEAL = '#84B6C7';
@@ -243,60 +256,35 @@ function draw() {
   const vx1 = cam.x + sw / s + 50, vy1 = cam.y + sh / s + 50;
   const showChrome = s > 0.16;
   const showJacks = s > 0.5;
-  // wires under the panels' faces but over the void
-  if (showJacks && solvedOnce) {
-    ctx.lineWidth = 1.4;
-    for (let si = 0; si < segs.length; si++) {
-      const g = segs[si];
-      const lo = Math.min(g.x1, g.x2), hi = Math.max(g.x1, g.x2);
-      if (hi < vx0 || lo > vx1) continue;
-      const ly = Math.min(g.y1, g.y2), hy = Math.max(g.y1, g.y2);
-      if (hy < vy0 || ly > vy1) continue;
-      const cur = wireCur ? Math.abs(wireCur[wireIndex[si]]) : 0;
-      const t = Math.min(1, cur / 220);
-      ctx.strokeStyle = t < 0.005
-        ? 'rgba(150,165,190,0.10)'
-        : `rgba(${Math.round(190 + 65 * t)},${Math.round(160 + 16 * t)},${Math.round(40)},${0.18 + 0.72 * t})`;
-      ctx.beginPath();
-      const mx = (g.x1 + g.x2) / 2;
-      const my = (g.y1 + g.y2) / 2 + Math.min(120, Math.hypot(g.x2 - g.x1, g.y2 - g.y1) * 0.12);
-      ctx.moveTo(g.x1, g.y1);
-      ctx.quadraticCurveTo(mx, my, g.x2, g.y2);
-      ctx.stroke();
-    }
-  }
   for (let m = 0; m < N_MACHINES; m++) {
     const { x, y } = panelXY(m);
     if (x + PW < vx0 || x > vx1 || y + PH < vy0 || y > vy1) continue;
-    const st = solvedOnce ? sim.getMachineState(m) : null;
+    const rbits = snap ? snap.relays[m] : 0;
     if (!showChrome) {
-      // far: tile + relay dots
       ctx.fillStyle = FACE;
       ctx.fillRect(x, y, PW, PH);
       ctx.strokeStyle = TEAL;
       ctx.lineWidth = 8;
       ctx.strokeRect(x + 4, y + 4, PW - 8, PH - 8);
       for (let i = 0; i < 6; i++) {
-        ctx.fillStyle = st && st.relays[i] ? '#ffb000' : '#2a2f38';
+        ctx.fillStyle = (rbits >> i) & 1 ? '#ffb000' : '#2a2f38';
         ctx.fillRect(x + secCX(i + 1) - 16, y + PH / 2 - 22, 32, 44);
       }
       continue;
     }
-    // panel chrome
     ctx.fillStyle = FACE;
     ctx.fillRect(x, y, PW, PH);
     ctx.strokeStyle = TEAL;
     ctx.lineWidth = 6;
     ctx.strokeRect(x + 3, y + 3, PW - 6, PH - 6);
     ctx.fillStyle = TEAL;
-    ctx.fillRect(x + 6, y + 62, PW - 12, 16); // power stripe
+    ctx.fillRect(x + 6, y + 62, PW - 12, 16);
     ctx.fillStyle = '#e8edf4';
     ctx.font = 'bold 13px ui-monospace, monospace';
     ctx.fillText(`MINIVAC 601 · m${m}`, x + 14, y + 20);
     for (let sec = 1; sec <= 6; sec++) {
       const cx = x + secCX(sec);
-      // light
-      const lit = st?.lights[sec - 1];
+      const lit = snap ? (snap.lights[m] >> (sec - 1)) & 1 : 0;
       ctx.beginPath();
       ctx.arc(cx, y + 42, 8, 0, Math.PI * 2);
       ctx.fillStyle = lit ? '#ffcf9a' : '#1a1414';
@@ -312,7 +300,6 @@ function draw() {
       ctx.beginPath();
       ctx.arc(cx, y + 42, 8, 0, Math.PI * 2);
       ctx.stroke();
-      // relay: silver cover + armature
       const a = armDisp[m * 6 + (sec - 1)];
       const rx = cx - 22, ry = y + 90;
       const grad = ctx.createLinearGradient(rx, 0, rx + 44, 0);
@@ -324,22 +311,14 @@ function draw() {
       ctx.roundRect(rx, ry, 44, 62, 5);
       ctx.fill();
       ctx.fillStyle = '#0d0f13';
-      ctx.fillRect(rx + 6, ry + 40, 32, 16); // the window
-      // armature: a lever seated (energized) or sprung
+      ctx.fillRect(rx + 6, ry + 40, 32, 16);
       ctx.strokeStyle = a > 0.5 ? '#ffb000' : '#8a8d95';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(rx + 8, ry + 54);
       ctx.lineTo(rx + 36, ry + 54 - 10 * (1 - a) - 1);
       ctx.stroke();
-      // indicator lamp
-      const ind = st?.relayIndicatorLights[sec - 1];
-      ctx.beginPath();
-      ctx.arc(cx + 30, ry + 8, 4, 0, Math.PI * 2);
-      ctx.fillStyle = ind ? '#ff6a4a' : '#241a1a';
-      ctx.fill();
-      // button cap
-      const btn = st?.buttons[sec - 1];
+      const btn = snap ? (snap.buttons[m] >> (sec - 1)) & 1 : 0;
       ctx.beginPath();
       ctx.arc(cx, y + 248, 7, 0, Math.PI * 2);
       ctx.fillStyle = btn ? '#c33' : '#801f1f';
@@ -366,7 +345,6 @@ function draw() {
       }
     }
     if (showJacks) {
-      // matrix strips
       ctx.fillStyle = '#10141a';
       ctx.fillRect(x + PW * 0.28 - 52, y + 300, 104, 16);
       ctx.fillRect(x + PW * 0.72 - 52, y + 300, 104, 16);
@@ -381,162 +359,67 @@ function draw() {
       }
     }
   }
-  ctx.restore();
-  hud.textContent = `${N_MACHINES} machines · ${segs.length} wires drawn (${unparsed} endpoints off-template) · zoom ${cam.s.toFixed(2)}`;
-}
-// wire index lookup (segs order == parse order over the wire list minus skips)
-const wireIndex: number[] = [];
-{
-  let k = 0;
-  matrixSlots.clear();
-  for (let i = 0; i < wires.length; i++) {
-    const [a, b] = wires[i].split('/');
-    if (endpointPos(a) && endpointPos(b)) wireIndex[k++] = i;
+  // cables ON TOP of the panels — they plug into the jacks
+  if (showJacks && snap) {
+    ctx.lineWidth = 1.4;
+    for (let si = 0; si < segs.length; si++) {
+      const g = segs[si];
+      const lo = Math.min(g.x1, g.x2), hi = Math.max(g.x1, g.x2);
+      if (hi < vx0 || lo > vx1) continue;
+      const ly = Math.min(g.y1, g.y2), hy = Math.max(g.y1, g.y2);
+      if (hy < vy0 || ly > vy1) continue;
+      const cur = Math.abs(snap.wireCur[wireIndex[si]]);
+      const t = Math.min(1, cur / 220);
+      ctx.strokeStyle = t < 0.005
+        ? 'rgba(150,165,190,0.10)'
+        : `rgba(${Math.round(190 + 65 * t)},${Math.round(160 + 16 * t)},40,${0.18 + 0.72 * t})`;
+      ctx.beginPath();
+      const mx = (g.x1 + g.x2) / 2;
+      const my = (g.y1 + g.y2) / 2 + Math.min(120, Math.hypot(g.x2 - g.x1, g.y2 - g.y1) * 0.12);
+      ctx.moveTo(g.x1, g.y1);
+      ctx.quadraticCurveTo(mx, my, g.x2, g.y2);
+      ctx.stroke();
+    }
   }
+  ctx.restore();
+  hud.textContent = `${N_MACHINES} machines · ${segs.length} wires (${unparsed} off-template) · zoom ${cam.s.toFixed(2)} · sim in a worker`;
 }
 
-// ---- the game (the /tetris/ machine on autoplay) -----------------------
-const IO = {
-  tick: { slide: 5, machine: 1 },
-  start: { button: 6, machine: 1 },
-  left: { button: 3, machine: built.btnMachine },
-  right: { button: 4, machine: built.btnMachine },
-  up: { button: 2, machine: built.btnMachine },
-};
-const rel = (n: number) => sim.getMachineState(Math.floor(n / 6)).relays[n % 6];
-const tokenRow = () => {
-  for (let i = 0; i < ROWS; i++) if (rel(L.RING(i, 2))) return i;
-  return -1;
-};
-const shapeAt = () => {
-  for (let i = 0; i < SHAPES.length; i++) if (rel(ringPart(L, i, 2))) return i;
-  return -1;
-};
-const posAt = () => {
-  for (let j = 0; j < COLS; j++) if (rel(L.POSS(j))) return j;
-  return -1;
-};
-const rowMask = (k: number) => {
-  const srows = SHAPES[shapeAt()]?.rows;
-  const p = posAt();
-  const row = srows?.[k];
-  if (p < 0 || !row) return 0;
-  const sh = p + row.off;
-  if (sh < 0 || sh + row.w > COLS) return 0;
-  return ((1 << row.w) - 1) << sh;
-};
-function paintWell(note?: string) {
-  const tok = tokenRow();
-  const masks = [0, 1, 2, 3].map((k) => rowMask(k));
+// ---- the well card -------------------------------------------------------
+function paintWell() {
+  if (!snap) return;
+  const { tok, shapeIx, pos, cells } = snap;
+  const srows = SHAPES[shapeIx]?.rows;
+  const masks = [0, 1, 2, 3].map((k) => {
+    const row = srows?.[k];
+    if (pos < 0 || !row) return 0;
+    const sh = pos + row.off;
+    if (sh < 0 || sh + row.w > COLS) return 0;
+    return ((1 << row.w) - 1) << sh;
+  });
   for (let r = 0; r < ROWS; r++) {
     for (let j = 0; j < COLS; j++) {
-      const on = rel(L.CELL(r, j));
+      const on = cells[r * COLS + j] === 1;
       let piece = false;
       for (let k = 0; k < 4; k++) if (tok - k === r && ((masks[k] >> j) & 1) === 1 && tok >= k) piece = true;
       pixels[r][j].style.background = piece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
-  const label = SHAPES[shapeAt()]?.label ?? '…';
-  statusEl.textContent = note ?? `${label}${tok >= 0 ? ` at row ${tok}` : dealing ? ' — the ring spins' : ''}`;
-  pullState();
+  const label = SHAPES[shapeIx]?.label ?? '…';
+  statusEl.textContent =
+    snap.status ?? `${label}${tok >= 0 ? ` at row ${tok}` : snap.dealing ? ' — the ring spins' : ''}`;
 }
-let busy = true;
-function press(b: { button: number; machine: number }) {
-  sim.pressButton(b.button, b.machine);
-  sim.releaseButton(b.button, b.machine);
-}
-function runTick() {
-  if (busy) return;
-  busy = true;
-  const step = (n: number) => {
-    sim.setSlide(IO.tick.slide, 'right', IO.tick.machine);
-    paintWell();
-    setTimeout(() => {
-      sim.setSlide(IO.tick.slide, 'left', IO.tick.machine);
-      paintWell();
-      if ((rel(L.LKS) || rel(L.LANE)) && n < 3 * ROWS + 6) setTimeout(() => step(n + 1), 16);
-      else {
-        busy = false;
-        deal();
-      }
-    }, 60);
-  };
-  step(0);
-}
-// the free-run dealer (the /tetris/ design: JS cranks, YOUR press samples)
-let dealing = false;
-let serveReq = false;
-let autoServeReq = false;
-function deal() {
-  if (busy || dealing || rel(L.GAMEOVER) || tokenRow() >= 0) return;
-  dealing = true;
-  busy = true;
-  serveReq = false;
-  autoServeReq = false;
-  let steps = 0;
-  const step = () =>
-    setTimeout(() => {
-      if (rel(L.GAMEOVER)) { dealing = false; busy = false; paintWell('game over — reload'); return; }
-      if (serveReq || (autoServeReq && steps >= SHAPES.length)) {
-        dealing = false;
-        if (tokenRow() < 0) press(IO.start);
-        busy = false;
-        paintWell(`dealt: ${SHAPES[shapeAt()]?.label}`);
-        return;
-      }
-      const cur = shapeAt();
-      const nIx = SELECTION_NEXT(cur);
-      const { min, max } = shapeRange(SHAPES[nIx], COLS);
-      const p = posAt();
-      const nPos = Math.min(max, Math.max(min, p));
-      if (p !== nPos) press(p < nPos ? IO.right : IO.left);
-      else {
-        press(IO.up);
-        if (shapeAt() !== cur) steps++;
-      }
-      paintWell();
-      step();
-    }, 16);
-  step();
-}
-let autoOn = false;
-let autoTimer: ReturnType<typeof setInterval> | undefined;
-function setAuto(on: boolean) {
-  autoOn = on;
-  if (on && autoTimer === undefined) {
-    autoTimer = setInterval(() => {
-      if (rel(L.GAMEOVER)) return;
-      if (dealing) { autoServeReq = true; return; }
-      if (busy) return;
-      runTick();
-    }, 900);
-  } else if (!on && autoTimer !== undefined) {
-    clearInterval(autoTimer);
-    autoTimer = undefined;
-  }
-}
+
+// keys go to the engine room
 document.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
   if (e.key === 'f' || e.key === 'F') { fitAll(); return; }
-  if (e.key === 'a' || e.key === 'A') { setAuto(!autoOn); return; }
-  if (dealing && (e.key === 'ArrowDown' || e.key === ' ' || e.key === 'Enter')) { serveReq = true; return; }
-  if (busy) return;
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    const p = posAt();
-    if (p < 0) return;
-    press(e.key === 'ArrowRight' ? IO.right : IO.left);
-    paintWell();
-  } else if (e.key === 'ArrowUp') {
-    press(IO.up);
-    paintWell();
-  } else if (e.key === 'ArrowDown' || e.key === ' ') {
-    runTick();
-  } else if (e.key === 'Enter') {
-    if (tokenRow() < 0 && !rel(L.GAMEOVER)) { press(IO.start); paintWell(); }
-  }
+  const k = e.key === 'A' ? 'a' : e.key;
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter', 'a'].includes(k))
+    worker.postMessage({ type: 'key', key: k });
 });
 
-// ---- animation loop ----------------------------------------------------
+// ---- animation loop ------------------------------------------------------
 let lastT = performance.now();
 function frame(t: number) {
   const dt = Math.min(50, t - lastT);
@@ -557,18 +440,7 @@ function frame(t: number) {
   requestAnimationFrame(frame);
 }
 
-// ---- boot ---------------------------------------------------------------
 resize();
 fitAll();
 draw();
-statusEl.textContent = `wiring ${N_MACHINES} machines…`;
-setTimeout(() => {
-  sim = new MinivacSimulator(wires, false, N_MACHINES);
-  sim.initialize();
-  busy = false;
-  pullState();
-  paintWell('ready — the ring spins');
-  deal();
-  setAuto(true);
-  requestAnimationFrame(frame);
-}, 30);
+requestAnimationFrame(frame);
