@@ -83,12 +83,39 @@ worker.onmessage = (e: MessageEvent) => {
 
 // ---- DOM scaffold ----------------------------------------------------
 const root = document.getElementById('root')!;
+// USER COPY: the modal text below is a first draft meant to be rewritten.
 root.innerHTML = `
   <canvas id="wall" style="position:fixed;inset:0;width:100vw;height:100vh;display:block;cursor:grab;touch-action:none"></canvas>
   <div id="card" style="position:fixed;top:14px;right:14px;background:rgba(10,12,15,.92);border:1px solid #2a2f38;border-radius:10px;padding:14px;user-select:none">
-    <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},30px);gap:3px"></div>
+    <div style="position:relative">
+      <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},30px);gap:3px"></div>
+      <div id="pressenter" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;font:900 34px/1.15 ui-monospace,monospace;color:#7fd4ff;text-shadow:0 0 18px rgba(127,212,255,.65),0 2px 6px #000;animation:pe 1.1s ease-in-out infinite">PRESS<br>ENTER</div>
+    </div>
+  </div>
+  <style>@keyframes pe{0%,100%{opacity:1}50%{opacity:.35}}</style>
+  <div id="footer" style="position:fixed;left:0;right:0;bottom:0;background:rgba(10,12,15,.9);border-top:1px solid #2a2f38;padding:8px 16px;font:12px ui-monospace,monospace;color:#8fa0b5;text-align:center;user-select:none">
+    <span id="footerline">tetris running on real simulated relays — every rule decided by contacts, not code</span>
+    · arrows steer/rotate · ↓ takes the spinning piece · enter serves · a gravity · m sound · drag/wheel to explore
+  </div>
+  <div id="modal" style="position:fixed;inset:0;background:rgba(4,6,9,.72);display:flex;align-items:center;justify-content:center;z-index:10">
+    <div style="max-width:620px;margin:20px;background:#101318;border:1px solid #2a2f38;border-radius:14px;padding:28px 30px;color:#c9d4e3;font:15px/1.55 ui-monospace,monospace">
+      <div style="font-size:26px;font-weight:800;color:#e8edf4;margin-bottom:10px">the multivac wall</div>
+      <p style="margin:0 0 12px">this is tetris, running on a wall of simulated <b>Minivac 601</b> relay computers — a kit from 1961. every rule of the game (falling, steering, rotation, line clears, scoring) is decided by relay contacts, not by code. the amber cables are carrying real current.</p>
+      <p style="margin:0 0 12px">between pieces the shape ring spins; the piece you get is whatever the contacts hold when you press <b>enter</b> — your timing is the randomness, the way 1961 would have done it.</p>
+      <p style="margin:0 0 16px">zoom all the way in. the relays are moving.</p>
+      <div id="modalgo" style="display:inline-block;background:#1c4a7a;color:#e8edf4;border-radius:8px;padding:10px 22px;font-weight:700;cursor:pointer">play</div>
+    </div>
   </div>
 `;
+const modal = document.getElementById('modal')!;
+const pressEnterEl = document.getElementById('pressenter')!;
+let modalOpen = true;
+function closeModal() {
+  modalOpen = false;
+  modal.style.display = 'none';
+}
+modal.addEventListener('pointerdown', closeModal);
+document.getElementById('modalgo')!.addEventListener('pointerdown', closeModal);
 const canvas = document.getElementById('wall') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const gridEl = document.getElementById('grid')!;
@@ -455,11 +482,12 @@ function scheduleWireLayer() {
 // ---- camera ------------------------------------------------------------
 const cam = { x: 0, y: 0, s: 0.1 };
 let needsPaint = true;
+const TITLE_H = 2000; // world-space band above the wall for the giant title
 function fitAll() {
   const sw = canvas.clientWidth, sh = canvas.clientHeight;
-  cam.s = Math.min(sw / WORLD_W, sh / WORLD_H) * 0.96;
+  cam.s = Math.min(sw / WORLD_W, sh / (WORLD_H + TITLE_H)) * 0.96;
   cam.x = (WORLD_W - sw / cam.s) / 2;
-  cam.y = (WORLD_H - sh / cam.s) / 2;
+  cam.y = (WORLD_H + TITLE_H - sh / cam.s) / 2 - TITLE_H;
   needsPaint = true;
 }
 function resize() {
@@ -542,6 +570,19 @@ function draw() {
   const vx0 = cam.x - 80, vy0 = cam.y - 80;
   const vx1 = cam.x + sw / s + 80, vy1 = cam.y + sh / s + 80;
   const showDetail = s > 0.12;
+  // the giant line above all the minivacs (user call), real counts
+  ctx.fillStyle = '#dfe7f2';
+  ctx.textAlign = 'center';
+  ctx.font = `900 ${Math.round(TITLE_H / 2.1)}px ui-monospace, monospace`;
+  ctx.fillText('TETRIS', WORLD_W / 2, -TITLE_H + TITLE_H / 2);
+  ctx.font = `700 ${Math.round(TITLE_H / 8)}px ui-monospace, monospace`;
+  ctx.fillStyle = '#9fb2c8';
+  ctx.fillText(
+    `implemented using ${L.relays} relays on ${N_MACHINES} Minivac 601s, a relay computer kit from 1961`,
+    WORLD_W / 2,
+    -TITLE_H + TITLE_H / 2 + TITLE_H / 5.5
+  );
+  ctx.textAlign = 'start';
   for (let m = 0; m < N_MACHINES; m++) {
     const { x, y } = panelXY(m);
     if (x + PW < vx0 || x > vx1 || y + PH < vy0 || y > vy1) continue;
@@ -662,11 +703,15 @@ function paintWell() {
       pixels[r][j].style.background = piece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
+  // the user's #1: it was not clear the game WANTS a key. huge letters
+  // on top of the well whenever the ring is spinning for a piece.
+  pressEnterEl.style.display = snap.dealing && !snap.gameOver ? 'flex' : 'none';
 }
 
 // keys go to the engine room
 document.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
+  if (modalOpen) { closeModal(); return; }
   if (e.key === 'f' || e.key === 'F') { fitAll(); return; }
   if (e.key === 'm' || e.key === 'M') { soundOn = !soundOn; return; }
   const k = e.key === 'A' ? 'a' : e.key;
