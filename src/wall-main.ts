@@ -625,7 +625,7 @@ function draw() {
   // the giant line above all the minivacs (user copy), real counts
   ctx.fillStyle = '#dfe7f2';
   ctx.textAlign = 'center';
-  ctx.font = `700 ${Math.round(TITLE_H / 2.4)}px Oswald, 'Arial Narrow', sans-serif`;
+  ctx.font = `800 ${Math.round(TITLE_H / 2.4)}px ui-sans-serif, system-ui, sans-serif`;
   ctx.fillText('Relay Tetris', WORLD_W / 2, -TITLE_H * 0.29);
   ctx.font = `700 ${Math.round(TITLE_H / 10)}px 'Courier Prime', Courier, monospace`;
   ctx.fillStyle = '#9fb2c8';
