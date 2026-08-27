@@ -65,7 +65,7 @@ const posAt = () => {
 };
 
 let wireCur: Float32Array | undefined;
-function post(status?: string) {
+function post(status?: string, light = false) {
   const relays = new Uint8Array(N_MACHINES);
   const lights = new Uint8Array(N_MACHINES);
   const buttons = new Uint8Array(N_MACHINES);
@@ -84,9 +84,10 @@ function post(status?: string) {
   const cells = new Uint8Array(ROWS * COLS);
   for (let r = 0; r < ROWS; r++)
     for (let j = 0; j < COLS; j++) cells[r * COLS + j] = rel(L.CELL(r, j)) ? 1 : 0;
-  wireCur = sim.getWireCurrents(wireCur);
+  if (!light) wireCur = sim.getWireCurrents(wireCur);
   postMessage({
     type: 'state',
+    light,
     relays,
     lights,
     buttons,
@@ -99,7 +100,7 @@ function post(status?: string) {
     gameOver: rel(L.GAMEOVER),
     motorAngle: sim.motorAngle,
     status,
-    wireCur: wireCur.slice(),
+    wireCur: light ? undefined : wireCur?.slice(),
   });
 }
 function press(b: { button: number; machine: number }) {
@@ -162,6 +163,10 @@ function deal() {
         busy = false;
         post(`dealt: ${SHAPES[shapeAt()]?.label}`);
         drainKeys();
+        // spawn NOW instead of waiting up to 900ms for the gravity
+        // timer (the user's trace: this wait read as 'the wheel is
+        // slow' — the wheel was instant, the spawn tick was not)
+        if (autoOn && !busy) runTick();
         return;
       }
       const nIx = SELECTION_NEXT(cur);
@@ -170,9 +175,9 @@ function deal() {
       const nPos = Math.min(max, Math.max(min, p));
       if (p !== nPos) press(p < nPos ? IO.right : IO.left);
       else press(IO.up);
-      post();
+      post(undefined, true); // light: the crank's ring show without the wire-layer rebuild
       step();
-    }, 30);
+    }, 0);
   step();
 }
 let autoOn = false;

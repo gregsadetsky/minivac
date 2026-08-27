@@ -29,6 +29,7 @@ const N_MACHINES = L.machines;
 
 // ---- the worker (the engine room) --------------------------------------
 interface Snapshot {
+  light?: boolean;
   relays: Uint8Array;
   lights: Uint8Array;
   buttons: Uint8Array;
@@ -41,7 +42,7 @@ interface Snapshot {
   gameOver: boolean;
   motorAngle: number;
   status?: string;
-  wireCur: Float32Array;
+  wireCur?: Float32Array;
 }
 let motorAngle = 0; // machine 0's dial — THE WHEEL that deals
 let snap: Snapshot | null = null;
@@ -81,6 +82,9 @@ worker.onmessage = (e: MessageEvent) => {
     return;
   }
   if (d.type !== 'state') return;
+  // light snapshots (the deal crank) omit wire currents: keep the last
+  // glow instead of rebuilding the wire layer on every crank press
+  if (d.light && snap) d.wireCur = snap.wireCur;
   snap = d;
   motorAngle = d.motorAngle;
   for (let m = 0; m < N_MACHINES; m++) {
@@ -89,7 +93,7 @@ worker.onmessage = (e: MessageEvent) => {
   }
   clatter(d.relays);
   paintWell();
-  scheduleWireLayer();
+  if (!d.light) scheduleWireLayer();
   needsPaint = true;
 };
 
@@ -717,7 +721,7 @@ function draw() {
       if (hi < vx0 - GAP || lo > vx1 + GAP) continue;
       const ly = Math.min(g.y1, g.y2), hy = Math.max(g.y1, g.y2) + GAP;
       if (hy < vy0 - GAP || ly > vy1 + GAP) continue;
-      const c = Math.abs(snap.wireCur[wireIndex[si]]);
+      const c = snap.wireCur ? Math.abs(snap.wireCur[wireIndex[si]]) : 0;
       const t = Math.min(1, c / 220);
       if (t < 0.005) {
         ctx.strokeStyle = 'rgba(158,170,192,0.26)';
