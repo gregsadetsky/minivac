@@ -33,6 +33,7 @@ import {
   ROT_STATE,
   TETRIS_IO,
   SELECTION_NEXT,
+  ringPart,
   homeColumn as circuitHome,
 } from '../../circuits/multivac-mini-tetris';
 import {
@@ -293,6 +294,97 @@ describe('the differential: machine vs reference, every key compared', () => {
       n++;
     }
     // the run must have PLAYED, not stalled at the top
+    expect(ref.linesCleared + ref.snapshot().field.filter((r) => r !== 0).length).toBeGreaterThan(0);
+  });
+
+  it('seeded random game at 12x6 — the wall geometry (fast)', { timeout: 1800000 }, () => {
+    // the user's live report (2026-08-27, /wall/): "a line was counted
+    // even though it was not a full line". the wall plays 12x6; this
+    // harness only ever diffed 8x4, so score/clear divergences at the
+    // deployed geometry had NO mechanical detector. this is that
+    // detector: the same seeded random diff, on the wall's machine.
+    // NOTE the rig derives IO from ITS OWN build — TETRIS_IO's
+    // pos/shape relays are default-geometry (the relays page's
+    // m124-vs-m178 lesson).
+    setSolverEngine('fast');
+    const R12 = 12, C6 = 6;
+    const built = tetrisCircuit(R12, C6);
+    const L = built.layout;
+    const m = new MinivacSimulator(built.wires, false, L.machines);
+    m.initialize();
+    const rel = (n: number) => m.getMachineState(Math.floor(n / 6)).relays[n % 6];
+    const snapshot = () => ({
+      field: Array.from({ length: R12 }, (_, r) => {
+        let mask = 0;
+        for (let j = 0; j < C6; j++) if (rel(L.CELL(r, j))) mask |= 1 << j;
+        return mask;
+      }),
+      tokenRow: (() => {
+        for (let i = 0; i < R12; i++) if (rel(L.RING(i, 2))) return i;
+        return -1;
+      })(),
+      pos: (() => {
+        for (let j = 0; j < C6; j++) if (rel(L.POSS(j))) return j;
+        return -1;
+      })(),
+      shapeIx: (() => {
+        for (let i = 0; i < NSTATES; i++) if (rel(ringPart(L, i, 2))) return i;
+        return -1;
+      })(),
+      score: (() => {
+        for (let d = 0; d < 10; d++) if (rel(L.SCR(d, 2))) return d;
+        return -1;
+      })(),
+      gameOver: rel(L.GAMEOVER),
+    });
+    const pressBtn = (b: { button: number; machine: number }) => {
+      m.pressButton(b.button, b.machine);
+      m.releaseButton(b.button, b.machine);
+      expect(m.getState().alerts).toEqual([]);
+    };
+    const key = (k: RefKey) => {
+      if (k === 'tick') {
+        m.setSlide(5, 'right', 1);
+        m.setSlide(5, 'left', 1);
+        expect(m.getState().alerts).toEqual([]);
+        let guard = 3 * R12 + 12;
+        while ((rel(L.LKS) || rel(L.LANE)) && guard-- > 0) {
+          m.setSlide(5, 'right', 1);
+          m.setSlide(5, 'left', 1);
+          expect(m.getState().alerts).toEqual([]);
+        }
+        expect(guard, 'the bookkeeping loop drained').toBeGreaterThan(0);
+      } else if (k === 'start') pressBtn({ button: 6, machine: 1 });
+      else if (k === 'left') pressBtn({ button: 3, machine: built.btnMachine });
+      else if (k === 'right') pressBtn({ button: 4, machine: built.btnMachine });
+      else pressBtn({ button: 2, machine: built.btnMachine });
+    };
+    const ref = new TetrisReference({
+      rows: R12,
+      cols: C6,
+      shapes: NSTATES,
+      rot: 'target',
+      selectionNext: SELECTION_NEXT,
+      home: circuitHome(C6),
+      tok3Blind: true,
+    });
+    let s2 = 0x20260827;
+    const rand = () => {
+      s2 |= 0; s2 = (s2 + 0x6d2b79f5) | 0;
+      let t = Math.imul(s2 ^ (s2 >>> 15), 1 | s2);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const KEYS: RefKey[] = ['tick', 'tick', 'tick', 'tick', 'left', 'right', 'up'];
+    let n = 0;
+    const play = (k: RefKey) => {
+      key(k);
+      ref.key(k);
+      n++;
+      expect(snapshot(), `12x6 random #${n} (${k}) diverged`).toEqual(ref.snapshot());
+    };
+    play('start');
+    while (!ref.gameOver && n < 160) play(KEYS[Math.floor(rand() * KEYS.length)]);
     expect(ref.linesCleared + ref.snapshot().field.filter((r) => r !== 0).length).toBeGreaterThan(0);
   });
 });

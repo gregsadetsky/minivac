@@ -128,7 +128,9 @@ root.innerHTML = `
   <div id="modal" style="position:fixed;inset:0;background:rgba(4,6,9,.72);display:flex;align-items:center;justify-content:center;z-index:10">
     <div style="max-width:560px;margin:20px;background:#101318;border:1px solid #2a2f38;border-radius:14px;padding:28px 30px;color:#c9d4e3;font:15px/1.55 ui-monospace,monospace">
       <div style="font-size:26px;font-weight:800;color:#e8edf4;margin-bottom:10px">Relay Tetris</div>
-      <p style="margin:0 0 16px">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+      <p style="margin:0 0 12px">If you had ~$230k in today's dollars but in 1961, and decided to spend it all on buying 248 Minivac 601s, a relay computer from back then that Claude Shannon created, and also if you invented Tetris 25 years before it was actually invented, you could have made Tetris using relays!</p>
+      <p style="margin:0 0 12px">Since we're not in 1961, and as 248 Minivacs are hard to come about, I made an online simulator of what that would be. Gameplay is painful, but it's not not Tetris. And yes, relays are electrically simulated. You can see the circuit (linked from the footer). It's crazy. Also, fun fact, consider that the New York City subway is mostly controlled by relays..!</p>
+      <p style="margin:0 0 16px">If you want to simulate a single Minivacs and peruse its beautiful manuals, see the main Simulator site linked in the footer. It's a lot more fun, I think. But still - Enjoy!</p>
       <div id="modalgo" style="display:inline-block;background:#1c4a7a;color:#e8edf4;border-radius:8px;padding:10px 22px;font-weight:700;cursor:pointer">Play</div>
     </div>
   </div>

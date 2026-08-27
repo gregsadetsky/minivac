@@ -1860,7 +1860,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(4, 0b0001); // the tower at (4,0); pos-1 fall path clear
     // the CENTER home is pos 1: in range for every entry on the cycle
-    for (let k = 0; k < 6; k++) g.pressBtn(TETRIS_IO.up); // -> Z at pos 1 (through S vert since B1)
+    for (let k = 0; k < 4; k++) g.pressBtn(TETRIS_IO.up); // -> Z at pos 1 (the entry, then S and S vert)
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5, beside the tower
     expect(g.tokenAt()).toEqual([5]);
@@ -1883,7 +1883,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     g = makeGame();
     g.operatorWrite(4, 0b1000); // the tower at (4,3); pos-0 fall path clear
     // the CENTER home is pos 1 for the cycle...
-    for (let k = 0; k < 6; k++) g.pressBtn(TETRIS_IO.up); // -> Z (through S vert since B1)
+    for (let k = 0; k < 4; k++) g.pressBtn(TETRIS_IO.up); // -> Z (the entry, then S and S vert)
     g.pressBtn(TETRIS_IO.left); // ...then home to 0 for the drop
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5 (top {1,2} clears col 3)
@@ -1986,7 +1986,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // L1 right: the triple's ENTERING bottom column is col 3
     let g = makeGame();
     g.operatorWrite(5, 0b1000); // the tower at (5,3)
-    walkTo(g, 8); // L1 at pos 1 (through the B1 verticals)
+    walkTo(g, 6); // L1 at pos 1 (through the B1 verticals)
     g.pressBtn(TETRIS_IO.left); // home to 0 (free pre-spawn)
     expect(g.posAt()).toBe(0);
     g.pressStart();
@@ -2007,7 +2007,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // J1 right: the stem lands one row up at col 3
     g = makeGame();
     g.operatorWrite(4, 0b1000); // the floater at (4,3)
-    walkTo(g, 12); // J1 at pos 1 (the B2 cycle interleaves the verticals)
+    walkTo(g, 10); // J1 at pos 1 (the B2 cycle interleaves the verticals)
     g.pressBtn(TETRIS_IO.left);
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5: stem target (4,3)
@@ -2027,7 +2027,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // L1 left: the stem target reads through the re-gated point-1 check
     g = makeGame();
     g.operatorWrite(4, 0b0001); // the tower at (4,0)
-    walkTo(g, 8); // L1 at pos 1 (falls in cols 1-3, clear of the tower)
+    walkTo(g, 6); // L1 at pos 1 (falls in cols 1-3, clear of the tower)
     g.pressStart();
     for (let t = 0; t <= 5; t++) g.tick(); // token 5: stem target (4,0)
     g.pressBtn(TETRIS_IO.left);
@@ -2378,7 +2378,7 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
     // rows 6 and 7 hold cols 2-3: a 2x2 square at cols 0-1 completes BOTH
     g.operatorWrite(7, 0b1100);
     g.operatorWrite(6, 0b1100);
-    for (let k = 0; k < 3; k++) g.pressBtn(TETRIS_IO.up); // 1x1 -> ... -> 2x2
+    g.pressBtn(TETRIS_IO.up); // the entry edge: boot -> 2x2
     g.pressBtn(TETRIS_IO.left); // off the CENTER home: the square drops at 0-1
     g.pressStart();
     for (let t = 0; t < 10 && g.tokenAt().length === 0; t++) g.tick();
@@ -2412,7 +2412,8 @@ describe('Multivac: mini-tetris (85 machines at the classic 8 rows)', () => {
       return -1;
     };
     g.operatorWrite(6, 0b1111 & ~(1 << HOME));
-    for (let k = 0; k < 2; k++) g.pressBtn(TETRIS_IO.up); // 1x1 -> 2wide -> 2tall
+    // toys-retire: the VMODE slide is the tall bit (2-tall left the chooser)
+    g.m.setSlide((VMODE % 6) + 1, 'right', Math.floor(VMODE / 6));
     g.pressStart();
     for (let t = 0; t < 10 && g.tokenAt().length === 0; t++) g.tick();
     for (let t = 0; t < 40; t++) {
