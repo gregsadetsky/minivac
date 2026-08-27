@@ -42,6 +42,30 @@ interface Snapshot {
   wireCur: Float32Array;
 }
 let snap: Snapshot | null = null;
+// the clatter (/tetris/'s real relay samples): each snapshot diffs the
+// armature bits and plays a staggered, capped burst. 'm' mutes.
+const clickOn = new Audio('/relay-on.mp3');
+const clickOff = new Audio('/relay-off.mp3');
+let soundOn = true;
+let prevRelays: Uint8Array | null = null;
+function clatter(relays: Uint8Array) {
+  let on = 0, off = 0;
+  if (prevRelays) {
+    for (let m = 0; m < N_MACHINES; m++) {
+      const flips = prevRelays[m] ^ relays[m];
+      for (let i = 0; i < 6; i++)
+        if ((flips >> i) & 1) ((relays[m] >> i) & 1 ? on++ : off++);
+    }
+  }
+  prevRelays = relays.slice();
+  if (!soundOn) return;
+  const bursts = Math.min(7, on + off);
+  for (let k = 0; k < bursts; k++) {
+    const a = (k < Math.min(4, on) ? clickOn : clickOff).cloneNode() as HTMLAudioElement;
+    a.volume = 0.18 + Math.random() * 0.22;
+    setTimeout(() => { a.play().catch(() => {}); }, Math.random() * 110);
+  }
+}
 const worker = new Worker(new URL('./wall-worker.ts', import.meta.url), { type: 'module' });
 worker.onmessage = (e: MessageEvent) => {
   const d = e.data as { type: string } & Snapshot;
@@ -51,6 +75,7 @@ worker.onmessage = (e: MessageEvent) => {
     const r = d.relays[m];
     for (let i = 0; i < 6; i++) armTarget[m * 6 + i] = (r >> i) & 1;
   }
+  clatter(d.relays);
   paintWell();
   scheduleWireLayer();
   needsPaint = true;
@@ -60,24 +85,19 @@ worker.onmessage = (e: MessageEvent) => {
 const root = document.getElementById('root')!;
 root.innerHTML = `
   <canvas id="wall" style="position:fixed;inset:0;width:100vw;height:100vh;display:block;cursor:grab;touch-action:none"></canvas>
-  <div id="card" style="position:fixed;top:12px;right:12px;background:rgba(10,12,15,.9);border:1px solid #2a2f38;border-radius:8px;padding:10px;font:12px ui-monospace,monospace;color:#c9d4e3;user-select:none">
-    <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},14px);gap:2px;margin-bottom:8px"></div>
-    <div id="status" style="max-width:${COLS * 16 + 80}px;line-height:1.35">wiring ${N_MACHINES} machines…</div>
-    <div style="margin-top:6px;color:#5f6b7a">arrows steer/rotate · ↓ tick/take<br>enter serve · a gravity<br>drag pan · wheel zoom · f fit</div>
+  <div id="card" style="position:fixed;top:14px;right:14px;background:rgba(10,12,15,.92);border:1px solid #2a2f38;border-radius:10px;padding:14px;user-select:none">
+    <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},30px);gap:3px"></div>
   </div>
-  <div id="hud" style="position:fixed;left:12px;bottom:10px;font:11px ui-monospace,monospace;color:#5f6b7a;user-select:none"></div>
 `;
 const canvas = document.getElementById('wall') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
-const statusEl = document.getElementById('status')!;
-const hud = document.getElementById('hud')!;
 const gridEl = document.getElementById('grid')!;
 const pixels: HTMLDivElement[][] = [];
 for (let r = 0; r < ROWS; r++) {
   pixels.push([]);
   for (let j = 0; j < COLS; j++) {
     const d = document.createElement('div');
-    d.style.cssText = 'width:14px;height:14px;border-radius:2px;background:#1b2027';
+    d.style.cssText = 'width:30px;height:30px;border-radius:3px;background:#1b2027';
     gridEl.appendChild(d);
     pixels[r].push(d);
   }
@@ -137,8 +157,8 @@ function jackLocal(sec: number, jack: string): [number, number] | null {
   }
 }
 const matrixLocal = (which: 'M10' | 'M11', slot: number): [number, number] => [
-  975 + (slot % 6) * 24,
-  which === 'M10' ? 352 : 378,
+  (which === 'M10' ? 972 : 1172) + (slot % 2) * 20,
+  160 + Math.floor((slot % 6) / 2) * 30,
 ];
 const GRID_COLS = Math.ceil(Math.sqrt(N_MACHINES * ((PH + GAP) / (PW + GAP)) * 2.6));
 const GRID_ROWS = Math.ceil(N_MACHINES / GRID_COLS);
@@ -205,23 +225,23 @@ template.height = PH * TSCALE;
       label(ch, cx + dx, RY.cef - 12, 10, '#c9d4e3');
       hole(cx + dx, RY.cef);
     }
-    // relay cover (static body; the armature window is painted live)
-    const rx = cx - 30, ry = RY.relayTop;
-    const grad = t.createLinearGradient(rx, 0, rx + 60, 0);
-    grad.addColorStop(0, '#3a3d45');
-    grad.addColorStop(0.12, '#8a8d95');
-    grad.addColorStop(0.5, '#f4f2ea');
-    grad.addColorStop(0.88, '#8a8d95');
-    grad.addColorStop(1, '#3a3d45');
+    // relay, open frame like Relay.tsx: a vertical silver COIL CYLINDER
+    // and a dark armature bar beside it (the bar is dynamic — draw())
+    const ry = RY.relayTop;
+    t.fillStyle = '#101216';
+    t.beginPath();
+    t.roundRect(cx - 34, ry, 68, RY.relayH, 5);
+    t.fill();
+    const coilX = cx - 28;
+    const grad = t.createLinearGradient(coilX, 0, coilX + 28, 0);
+    for (const [st, col] of [[0, '#1a1d24'], [0.05, '#4a4d55'], [0.12, '#8a8d95'], [0.2, '#e8e4dc'], [0.35, '#f8f5ed'], [0.5, '#ffffff'], [0.65, '#f8f5ed'], [0.8, '#e8e4dc'], [0.88, '#8a8d95'], [0.95, '#4a4d55'], [1, '#1a1d24']] as const) grad.addColorStop(st as number, col as string);
     t.fillStyle = grad;
     t.beginPath();
-    t.roundRect(rx, ry, 60, RY.relayH, 7);
+    t.roundRect(coilX, ry + 10, 28, RY.relayH - 22, 4);
     t.fill();
-    t.strokeStyle = '#22252b';
-    t.lineWidth = 1.5;
-    t.stroke();
-    t.fillStyle = '#0b0d10';
-    t.fillRect(rx + 7, ry + 58, 46, 28); // the window
+    // the white tape highlight
+    t.fillStyle = 'rgba(255,255,255,0.35)';
+    t.fillRect(coilX + 11, ry + 26, 5, RY.relayH - 52)
     // indicator bezel
     t.beginPath();
     t.arc(cx + 38, RY.indicators, 6, 0, Math.PI * 2);
@@ -270,15 +290,29 @@ template.height = PH * TSCALE;
   // right block: title, matrix, power, motor dial
   label('MINIVAC 601', (RX + PW) / 2 - 5, 52, 26);
   label('DIGITAL COMPUTER KIT', (RX + PW) / 2 - 5, 74, 10, '#c9d4e3');
-  for (let gy = 0; gy < 6; gy++)
-    for (let gx = 0; gx < 6; gx++) hole(975 + gx * 24, 140 + gy * 30, 4);
-  label('MATRIX', 968, 340, 12, '#fff', 'left');
-  label('M10', 950, 356, 9, '#c9d4e3', 'left');
-  label('M11', 950, 382, 9, '#c9d4e3', 'left');
-  for (let k = 0; k < 6; k++) {
-    hole(...matrixLocal('M10', k), 4);
-    hole(...matrixLocal('M11', k), 4);
+  // the MATRIX, per MatrixConnector: a tic-tac-toe 3x3 of four-hole
+  // connectors numbered clockwise (1,2,3 / 8,9,4 / 7,6,5), flanked by
+  // the two vertical six-hole strips '10' (M10) and '11' (M11)
+  t.strokeStyle = '#737373';
+  t.lineWidth = 2;
+  for (const gx of [1057, 1112]) { t.beginPath(); t.moveTo(gx, 128); t.lineTo(gx, 292); t.stroke(); }
+  for (const gy of [182, 237]) { t.beginPath(); t.moveTo(1004, gy); t.lineTo(1166, gy); t.stroke(); }
+  const MTX_NUMS = [1, 2, 3, 8, 9, 4, 7, 6, 5];
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const gx = 1030 + c * 55, gy = 155 + r * 55;
+      for (const [dx, dy] of [[-11, -12], [11, -12], [-11, 12], [11, 12]] as const) hole(gx + dx, gy + dy, 4.5);
+      t.strokeStyle = '#737373';
+      t.lineWidth = 1.5;
+      for (const dy of [-12, 12]) { t.beginPath(); t.moveTo(gx - 7, gy + dy); t.lineTo(gx + 7, gy + dy); t.stroke(); }
+      label(String(MTX_NUMS[r * 3 + c]), gx, gy + 4, 10, '#c9d4e3');
+    }
   }
+  for (const [lbl, bx] of [['10', 972], ['11', 1172]] as const) {
+    for (let k = 0; k < 6; k++) hole(bx + (k % 2) * 20, 160 + Math.floor(k / 2) * 30, 4.5);
+    label(lbl, bx + 10, 258, 10, '#c9d4e3');
+  }
+  label('MATRIX', 968, 340, 12, '#fff', 'left');
   // power section
   t.beginPath();
   t.arc(1205, 160, 12, 0, Math.PI * 2);
@@ -358,28 +392,16 @@ for (let i = 0; i < wires.length; i++) {
 // same-panel wires droop directly; cross-machine wires drop into the
 // alley below their panel, run the corridors like a cable tray, and
 // rise to the target jack. per-wire jitter spreads the bundles.
+// direct point-to-point cables (v3, user call — the v2 trays that ran
+// 'around' the minivacs are gone), a real droop, per-wire jitter so
+// parallel runs read as separate cables
 const jit = (si: number, k: number) => ((((si + 1) * 2654435761 + k * 40503) >>> 0) % 1000) / 1000;
-function wirePts(si: number, g: Seg): Array<[number, number]> {
-  if (g.mA === g.mB) return [[g.x1, g.y1], [g.x2, g.y2]];
-  const rowA = Math.floor(g.mA / GRID_COLS);
-  const rowB = Math.floor(g.mB / GRID_COLS);
-  const trayA = rowA * (PH + GAP) + PH + GAP * (0.22 + 0.56 * jit(si, 1));
-  const trayB = rowB * (PH + GAP) + PH + GAP * (0.22 + 0.56 * jit(si, 2));
-  if (rowA === rowB) return [[g.x1, g.y1], [g.x1, trayA], [g.x2, trayA], [g.x2, g.y2]];
-  // vertical run in the column gap nearest the target, jittered
-  const gapX = Math.max(-GAP / 2, Math.round(g.x2 / (PW + GAP)) * (PW + GAP) - GAP * (0.15 + 0.7 * jit(si, 3)));
-  return [[g.x1, g.y1], [g.x1, trayA], [gapX, trayA], [gapX, trayB], [g.x2, trayB], [g.x2, g.y2]];
-}
 function strokeWire(c: CanvasRenderingContext2D, si: number, g: Seg, yoff: number) {
-  const pts = wirePts(si, g);
+  const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
+  const sag = Math.min(240, 22 + len * (0.1 + 0.08 * jit(si, 1)));
   c.beginPath();
-  c.moveTo(pts[0][0], pts[0][1] + yoff);
-  for (let k = 1; k < pts.length; k++) {
-    const [ax, ay] = pts[k - 1];
-    const [bx, by] = pts[k];
-    const sag = Math.min(46, Math.hypot(bx - ax, by - ay) * 0.07) * (ay === by ? 1 : 0.2);
-    c.quadraticCurveTo((ax + bx) / 2, (ay + by) / 2 + sag + yoff, bx, by + yoff);
-  }
+  c.moveTo(g.x1, g.y1 + yoff);
+  c.quadraticCurveTo((g.x1 + g.x2) / 2, (g.y1 + g.y2) / 2 + sag + yoff, g.x2, g.y2 + yoff);
   c.stroke();
 }
 
@@ -388,6 +410,7 @@ const WORLD_W = GRID_COLS * (PW + GAP);
 const WORLD_H = GRID_ROWS * (PH + GAP);
 const wireLayer = document.createElement('canvas');
 const WLS = Math.min(1, 5000 / WORLD_W); // layer scale: ~5k px wide
+const VEC_MIN = Math.max(0.2, WLS * 1.3); // past this, cables draw as vectors
 wireLayer.width = Math.ceil(WORLD_W * WLS);
 wireLayer.height = Math.ceil(WORLD_H * WLS);
 const wctx = wireLayer.getContext('2d')!;
@@ -405,7 +428,7 @@ function renderWireLayer() {
     const t = Math.min(1, c / 220);
     if (t < 0.005) {
       // idle cable: one faint stroke, no shadow — the wall must stay legible
-      wctx.strokeStyle = 'rgba(150,162,185,0.10)';
+      wctx.strokeStyle = 'rgba(158,170,192,0.24)';
       wctx.lineWidth = 2.6;
       strokeWire(wc, si, g, 0);
     } else {
@@ -545,16 +568,24 @@ function draw() {
           ctx.fill();
         }
       }
-      // armature in the cover window
+      // the armature bar slides TOWARD the coil when energized
+      // (Relay.tsx: left 55px -> 48px), eased by armDisp
       const a = armDisp[m * 6 + (sec - 1)];
-      const wx = cx - 23, wy = y + RY.relayTop + 58;
       if (showDetail) {
-        ctx.strokeStyle = a > 0.5 ? '#ffb000' : '#9a9da5';
-        ctx.lineWidth = 4;
+        const ry2 = y + RY.relayTop;
+        if (a > 0.3) {
+          ctx.fillStyle = `rgba(255,176,0,${0.16 * a})`;
+          ctx.fillRect(cx - 34, ry2, 68, RY.relayH);
+        }
+        const bx = cx + 6 + 12 * (1 - a);
+        const bg = ctx.createLinearGradient(bx, 0, bx + 9, 0);
+        bg.addColorStop(0, '#4a4d55');
+        bg.addColorStop(0.5, '#2a2d35');
+        bg.addColorStop(1, '#1a1d24');
+        ctx.fillStyle = bg;
         ctx.beginPath();
-        ctx.moveTo(wx, wy + 22);
-        ctx.lineTo(wx + 42, wy + 22 - 14 * (1 - a) - 2);
-        ctx.stroke();
+        ctx.roundRect(bx, ry2 + 10, 9, RY.relayH - 22, 2);
+        ctx.fill();
         // indicator lamp follows the coil
         if (a > 0.5) {
           ctx.beginPath();
@@ -565,7 +596,7 @@ function draw() {
       } else if (a > 0.5) {
         // far away, an energized relay still reads as an amber block
         ctx.fillStyle = '#ffb000';
-        ctx.fillRect(cx - 30, y + RY.relayTop, 60, RY.relayH);
+        ctx.fillRect(cx - 34, y + RY.relayTop, 68, RY.relayH);
       }
       // button cap
       ctx.beginPath();
@@ -579,8 +610,11 @@ function draw() {
     ctx.fillStyle = '#ffd9a8';
     ctx.fill();
   }
-  // the cables: blitted layer at every zoom, vector-crisp up close
-  if (s <= 0.8) {
+  // the cables: the cached bitmap serves only zooms at-or-below its own
+  // native resolution (the user found the blurry band between the old
+  // 0.8 threshold and the layer's ~0.19 render scale); everything
+  // closer is vector-crisp
+  if (s <= VEC_MIN) {
     ctx.drawImage(wireLayer, 0, 0, wireLayer.width, wireLayer.height, 0, 0, WORLD_W, WORLD_H);
   } else if (snap) {
     for (let si = 0; si < segs.length; si++) {
@@ -592,7 +626,7 @@ function draw() {
       const c = Math.abs(snap.wireCur[wireIndex[si]]);
       const t = Math.min(1, c / 220);
       if (t < 0.005) {
-        ctx.strokeStyle = 'rgba(150,162,185,0.13)';
+        ctx.strokeStyle = 'rgba(158,170,192,0.26)';
         ctx.lineWidth = 2.2;
         strokeWire(ctx, si, g, 0);
       } else {
@@ -606,7 +640,6 @@ function draw() {
     }
   }
   ctx.restore();
-  hud.textContent = `${N_MACHINES} machines (12x6, the /tetris/ machine) · ${segs.length} wires (${unparsed} off-template) · zoom ${cam.s.toFixed(2)} · fast engine in a worker`;
 }
 
 // ---- the well card -------------------------------------------------------
@@ -629,15 +662,13 @@ function paintWell() {
       pixels[r][j].style.background = piece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
-  const label = SHAPES[shapeIx]?.label ?? '…';
-  statusEl.textContent =
-    snap.status ?? `${label}${tok >= 0 ? ` at row ${tok}` : snap.dealing ? ' — the ring spins' : ''}`;
 }
 
 // keys go to the engine room
 document.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) e.preventDefault();
   if (e.key === 'f' || e.key === 'F') { fitAll(); return; }
+  if (e.key === 'm' || e.key === 'M') { soundOn = !soundOn; return; }
   const k = e.key === 'A' ? 'a' : e.key;
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter', 'a'].includes(k))
     worker.postMessage({ type: 'key', key: k });
