@@ -1,15 +1,18 @@
 /**
- * THE WALL'S ENGINE ROOM (web worker). The user's trace receipt
- * (2026-08-27): the sparse solver owned 24.5s of a 26s trace ON THE
- * MAIN THREAD (dc 13.7s + rowMaxAbs 10.8s; draw() was 0.04s) — the
- * spin dealer solves the whole 176-machine circuit continuously, so
- * pointer events starved behind 3-second timer bursts. The sim and
- * the whole game loop live HERE now; the page only draws and sends
- * keys. Snapshots go out after every solve step: relay/light/button
- * bitmasks per machine, the well cells, and the wire currents the
- * canvas colors the cables with.
+ * THE WALL'S ENGINE ROOM (web worker). Two measured lessons live here:
+ * - the user's first trace: the solver on the MAIN thread starved
+ *   navigation (3.2s timer bursts) -> the sim lives in this worker.
+ * - the user's second trace pair: /wall/ was ~10x slower PER SOLVE
+ *   than /tetris/ — because /tetris/ runs setSolverEngine('fast') (the
+ *   typed-array engine; rowMaxAbs ~0) and the wall ran the default
+ *   Map-based 'sparse' (rowMaxAbs = 10.7s of the trace). the wall now
+ *   runs 'fast', and the SAME geometry as /tetris/ (12x6): it is the
+ *   same machine, not a smaller cousin.
+ * KEYS QUEUE (<=4) while a solve chain runs and drain at settle —
+ * dropping them made the wall "unplayable" (the user's word; /tetris/
+ * has queued since the 6-column bring-up).
  */
-import { MinivacSimulator } from './simulator/minivac-simulator';
+import { MinivacSimulator, setSolverEngine } from './simulator/minivac-simulator';
 import {
   tetrisCircuit,
   SHAPES,
@@ -18,8 +21,9 @@ import {
   ringPart,
 } from './circuits/multivac-mini-tetris';
 
-const ROWS = 8;
-const COLS = 4;
+const ROWS = 12;
+const COLS = 6;
+setSolverEngine('fast');
 const built = tetrisCircuit(ROWS, COLS);
 const L = built.layout;
 const N_MACHINES = L.machines;
@@ -88,6 +92,14 @@ function press(b: { button: number; machine: number }) {
   sim.releaseButton(b.button, b.machine);
 }
 
+// keys queue while the machine is mid-chain, exactly like /tetris/
+const keyQueue: string[] = [];
+function drainKeys() {
+  if (busy || keyQueue.length === 0) return;
+  if (rel(L.GAMEOVER)) { keyQueue.length = 0; return; }
+  handleKey(keyQueue.shift() as string);
+}
+
 let busy = true;
 function runTick() {
   if (busy) return;
@@ -101,16 +113,15 @@ function runTick() {
       if ((rel(L.LKS) || rel(L.LANE)) && n < 3 * ROWS + 6) setTimeout(() => step(n + 1), 16);
       else {
         busy = false;
+        drainKeys();
         deal();
       }
-    }, 60);
+    }, 50);
   };
   step(0);
 }
 
-// the free-run dealer (the /tetris/ design: the crank never chooses).
-// SPIN PACE: ~8 presses/s — the 16ms aspiration was solve-bound anyway
-// and burned a core; the show reads better at a visible cadence.
+// the free-run dealer (the /tetris/ design: the crank never chooses)
 let dealing = false;
 let serveReq = false;
 let autoServeReq = false;
@@ -129,6 +140,7 @@ function deal() {
         if (tokenRow() < 0) press(IO.start);
         busy = false;
         post(`dealt: ${SHAPES[shapeAt()]?.label}`);
+        drainKeys();
         return;
       }
       const cur = shapeAt();
@@ -143,7 +155,7 @@ function deal() {
       }
       post();
       step();
-    }, 120);
+    }, 90);
   step();
 }
 let autoOn = false;
@@ -163,13 +175,13 @@ function setAuto(on: boolean) {
   }
 }
 
-onmessage = (e: MessageEvent) => {
-  const d = e.data as { type: string; key?: string };
-  if (d.type !== 'key') return;
-  const key = d.key as string;
+function handleKey(key: string) {
   if (key === 'a') { setAuto(!autoOn); return; }
   if (dealing && (key === 'ArrowDown' || key === ' ' || key === 'Enter')) { serveReq = true; return; }
-  if (busy) return;
+  if (busy) {
+    if (keyQueue.length < 4) keyQueue.push(key);
+    return;
+  }
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
     if (posAt() < 0) return;
     press(key === 'ArrowRight' ? IO.right : IO.left);
@@ -182,6 +194,10 @@ onmessage = (e: MessageEvent) => {
   } else if (key === 'Enter') {
     if (tokenRow() < 0 && !rel(L.GAMEOVER)) { press(IO.start); post(); }
   }
+}
+onmessage = (e: MessageEvent) => {
+  const d = e.data as { type: string; key?: string };
+  if (d.type === 'key') handleKey(d.key as string);
 };
 
 // boot
