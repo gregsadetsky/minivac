@@ -2,8 +2,12 @@
 
 ![Minivac 601 Simulator — the panel with a live circuit wired](public/og-minivac.jpg)
 
-A web Simulator for the [Minivac 601](https://en.wikipedia.org/wiki/Minivac_601), an early electronics kit created by Claude Shannon.
+A web simulator for the [Minivac 601](https://en.wikipedia.org/wiki/Minivac_601), an early electronics kit created by Claude Shannon.
+
+[See the simulator here!](https://minivac.greg.technology/)
+
+Also, [play Tetris here](https://minivac.greg.technology/tetris/) - implemented exclusively using simulated Minivacs!
 
 ### Credits
 
-The underlying electrical circuit simulator is Willy McAllister's [circuit-sandbox](https://github.com/willymcallister/circuit-sandbox). Thanks a lot!
+Underlying electrical circuit simulator: [circuit-sandbox](https://github.com/willymcallister/circuit-sandbox) by Willy McAllister.
