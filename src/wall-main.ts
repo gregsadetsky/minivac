@@ -101,7 +101,7 @@ root.innerHTML = `
   <div id="card" style="position:fixed;top:14px;right:14px;background:rgba(10,12,15,.92);border:1px solid #2a2f38;border-radius:10px;padding:14px;user-select:none">
     <div style="position:relative">
       <div id="grid" style="display:grid;grid-template-columns:repeat(${COLS},30px);gap:3px"></div>
-      <div id="pressenter" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;font:800 24px/1.3 ui-monospace,monospace;color:#7fd4ff;text-shadow:0 0 8px rgba(127,212,255,.35),0 2px 4px #000;animation:pe 1.2s ease-in-out infinite">PRESS<br>ENTER<br>FOR NEW<br>PIECE</div>
+      <div id="pressenter" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;font:800 26px/1.3 ui-monospace,monospace;color:#7fd4ff;text-shadow:0 0 8px rgba(127,212,255,.35),0 2px 4px #000;animation:pe 1.2s ease-in-out infinite">PRESS<br>ENTER</div>
     </div>
   </div>
   <style>@keyframes pe{0%,100%{opacity:1}50%{opacity:.4}}
@@ -135,6 +135,8 @@ let modalOpen = true;
 function closeModal() {
   modalOpen = false;
   modal.style.display = 'none';
+  worker.postMessage({ type: 'go' }); // the game starts HERE, not at boot
+  needsPaint = true;
 }
 // the circuit popup: the entire netlist, scrollable
 const circuitModal = document.getElementById('circuitmodal')!;
@@ -754,11 +756,21 @@ function paintWell() {
       pixels[r][j].style.background = piece ? '#7fd4ff' : on ? '#ffb000' : '#1b2027';
     }
   }
-  // huge letters when the machine is genuinely waiting on the player:
-  // no piece, not mid-crank, gravity off (with gravity on, the wheel
-  // deals and the piece serves itself in about a second)
-  pressEnterEl.style.display =
-    !snap.gameOver && snap.tok < 0 && !snap.dealing && !snap.autoOn ? 'flex' : 'none';
+  // two overlay states (user call): while the wheel-and-crank computes
+  // the next piece, a grey 'NEW PIECE SOON'; when the machine is
+  // genuinely waiting on the player (no piece, gravity off), the cyan
+  // 'PRESS ENTER'. hidden under the load modal and after game over.
+  if (!modalOpen && !snap.gameOver && snap.dealing) {
+    pressEnterEl.innerHTML = 'NEW<br>PIECE<br>SOON';
+    pressEnterEl.style.color = '#9aa3ad';
+    pressEnterEl.style.textShadow = '0 2px 4px #000';
+    pressEnterEl.style.display = 'flex';
+  } else if (!modalOpen && !snap.gameOver && snap.tok < 0 && !snap.autoOn) {
+    pressEnterEl.innerHTML = 'PRESS<br>ENTER';
+    pressEnterEl.style.color = '#7fd4ff';
+    pressEnterEl.style.textShadow = '0 0 8px rgba(127,212,255,.35), 0 2px 4px #000';
+    pressEnterEl.style.display = 'flex';
+  } else pressEnterEl.style.display = 'none';
 }
 
 // keys go to the engine room

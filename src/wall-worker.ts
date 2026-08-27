@@ -213,7 +213,11 @@ function handleKey(key: string) {
 }
 onmessage = (e: MessageEvent) => {
   const d = e.data as { type: string; key?: string };
-  if (d.type === 'key') handleKey(d.key as string);
+  if (d.type === 'go') go();
+  else if (d.type === 'key') {
+    if (!started) go(); // a key is as good as Play
+    handleKey(d.key as string);
+  }
 };
 
 // the dial spins visibly on the canvas: light angle pings between solves
@@ -222,8 +226,15 @@ setInterval(() => {
   postMessage({ type: 'motor', angle: sim.motorAngle });
 }, 120);
 
-// boot
+// boot: the wall renders and the wheel spins, but the GAME holds until
+// the page's Play button sends 'go' (the user's call: fully paused
+// under the load modal)
 busy = false;
 post('ready');
-deal();
-setAuto(true);
+let started = false;
+function go() {
+  if (started) return;
+  started = true;
+  deal();
+  setAuto(true);
+}
