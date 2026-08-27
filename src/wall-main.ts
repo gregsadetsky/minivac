@@ -453,6 +453,17 @@ function endpointPos(tok: string): [number, number, number] | null {
     const [lx, ly] = matrixLocal(rest, slot % 6);
     return [x + lx, y + ly, m];
   }
+  // the MOTOR terminals (D16 arm, D17-D19 drive) live on the motor
+  // block; the dial contacts D0-D15 sit on the dial's hole ring. the
+  // wheel's power cables must DRAW — the user caught it spinning with
+  // no visible connections.
+  const dm = rest.match(/^D(\d+)$/);
+  if (dm) {
+    const n = +dm[1];
+    if (n >= 16 && n <= 19) return [x + 970, y + 450 + (n - 16) * 40, m];
+    const a = (n / 16) * Math.PI * 2 - Math.PI / 2;
+    return [x + 1120 + Math.cos(a) * 118, y + 590 + Math.sin(a) * 118, m];
+  }
   const sm = rest.match(/^([1-6])(\+|-|com|cap|[EFGHJKLNSTXY])$/);
   if (!sm) return null;
   const loc = jackLocal(+sm[1], sm[2]);
