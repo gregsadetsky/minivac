@@ -110,6 +110,21 @@ root.innerHTML = `
   </div>
   <style>@keyframes pe{0%,100%{opacity:1}50%{opacity:.4}}
     #footer a{color:#9fc0dd;text-decoration:none} #footer a:hover{text-decoration:underline}
+    /* the phone pass (user: the modal made mobile unusable — it was
+       taller than the screen with no scroll). the game still plays
+       itself on a phone: the wheel deals, gravity runs; pinch zooms
+       and one-finger pans the canvas. */
+    @media (max-width: 700px) {
+      #modalbox { margin: 10px; padding: 16px 18px; font-size: 13px; line-height: 1.5; }
+      #modalbox > div:first-child { font-size: 20px !important; }
+      #card { top: 8px; right: 8px; padding: 8px; border-radius: 8px; }
+      #grid { grid-template-columns: repeat(${COLS}, 16px) !important; gap: 2px !important; }
+      #grid > div { width: 16px !important; height: 16px !important; }
+      #pressenter { font-size: 14px !important; }
+      #footer { font-size: 10px; padding: 5px 6px; }
+      /* the Okay stays reachable while the copy scrolls behind it */
+      #modalgo { position: sticky; bottom: 0; box-shadow: 0 0 0 8px #101318; }
+    }
   </style>
   <div id="footer" style="position:fixed;left:0;right:0;bottom:0;background:rgba(10,12,15,.9);border-top:1px solid #2a2f38;padding:8px 16px;font:13px 'Courier Prime',Courier,monospace;color:#8fa0b5;text-align:center;user-select:none">
     <a id="circuitlink" href="#">Read the Relay Circuit</a>
@@ -124,8 +139,8 @@ root.innerHTML = `
       <div id="circuittext" style="flex:1;overflow:auto;white-space:pre;background:#0a0c0f;border-radius:8px;padding:12px;line-height:1.4"></div>
     </div>
   </div>
-  <div id="modal" style="position:fixed;inset:0;background:rgba(4,6,9,.72);display:flex;align-items:center;justify-content:center;z-index:10">
-    <div style="max-width:560px;margin:20px;background:#101318;border:1px solid #2a2f38;padding:28px 30px;color:#c9d4e3;font:15px/1.6 'Courier Prime',Courier,monospace">
+  <div id="modal" style="position:fixed;inset:0;background:rgba(4,6,9,.72);display:flex;align-items:center;justify-content:center;z-index:10;overflow-y:auto">
+    <div id="modalbox" style="max-width:560px;max-height:92vh;overflow-y:auto;margin:20px;background:#101318;border:1px solid #2a2f38;padding:28px 30px;color:#c9d4e3;font:15px/1.6 'Courier Prime',Courier,monospace">
       <div style="font:800 26px ui-sans-serif,system-ui,sans-serif;color:#e8edf4;margin-bottom:10px">Relay Tetris</div>
       <p style="margin:0 0 12px">If you had ~$230k in today's dollars but in 1961, and decided to spend it all on buying 248 Minivac 601s, a relay computer from back then that Claude Shannon created, and also if you invented Tetris 25 years before it was actually invented, you could have made Tetris out of 1465 relays!</p>
       <p style="margin:0 0 12px">Since we're not in 1961, and as 248 Minivacs are hard to come about, I made an online simulator of what that would be. Gameplay is painful, but it's not not Tetris. And yes, all of the relays are electrically simulated. There's no "code" to speak of. See the link to the circuit in the footer. It's crazy. Also, fun fact, consider that the New York City subway is mostly controlled by relays...!!</p>
