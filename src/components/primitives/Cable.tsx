@@ -1,3 +1,20 @@
+/**
+ * Find the hole underneath a viewport point, even when this cable's
+ * clickable stroke sits on top of it. document.elementsFromPoint returns
+ * the whole hit-test stack, so existing wires are skipped and the hole
+ * under the cursor is found (issue #10).
+ */
+function holeAtPoint(x: number, y: number): HTMLElement | null {
+  const stack = document.elementsFromPoint(x, y);
+  for (const el of stack) {
+    if (el instanceof Element) {
+      const hole = el.closest('[data-hole-id]');
+      if (hole) return hole as HTMLElement;
+    }
+  }
+  return null;
+}
+
 interface CableProps {
   startX: number;
   startY: number;
@@ -125,6 +142,26 @@ export default function Cable({
           strokeLinecap="round"
           className="cursor-pointer"
           style={{ pointerEvents: 'stroke' }}
+          onPointerDown={(e) => {
+            // The press landed on this wire's stroke, but a hole sits
+            // underneath: forward the press to the hole so a new wire
+            // can START there instead of the stroke swallowing it.
+            const hole = holeAtPoint(e.clientX, e.clientY);
+            if (!hole) return;
+            e.stopPropagation();
+            hole.dispatchEvent(
+              new PointerEvent('pointerdown', {
+                clientX: e.clientX,
+                clientY: e.clientY,
+                button: e.button,
+                buttons: e.buttons,
+                bubbles: true,
+                cancelable: true,
+                pointerId: e.pointerId,
+                pointerType: e.pointerType,
+              })
+            );
+          }}
           onClick={onClick}
           onMouseEnter={(e) => {
             const svg = e.currentTarget.parentElement;
